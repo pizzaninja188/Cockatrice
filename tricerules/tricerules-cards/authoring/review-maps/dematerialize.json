@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "d2fbad7d-d05a-4321-9aff-a93bd102a3f4",
+  "spans": [
+    {
+      "face_id": "dematerialize",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "dematerialize",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/flashback_cost"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::ReturnToOwnersHand",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "CardFace::flashback_cost",
+      "typed_path": "/faces/0/flashback_cost"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q73_batch_a::q73_flashback_control_cards_apply_their_printed_bodies_from_hand_and_graveyard",
+      "covers": "actual Dematerialize applies its printed body from hand and again from flashback, then exiles"
+    },
+    {
+      "test": "mechanic_registry::q73_batch_a::q73_flashback_control_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of dematerialize"
+    },
+    {
+      "test": "mechanic_registry::q73_batch_a::q73_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for dematerialize"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

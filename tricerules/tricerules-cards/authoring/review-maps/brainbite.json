@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "fef94125-aa8d-4147-a609-1e990961bde2",
+  "spans": [
+    {
+      "face_id": "brainbite",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "brainbite",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::ChooseHandCards",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q59_batch_a::q59_hand_discard_target_scope_and_empty_hand_draw",
+      "covers": "opponent-only rejection, nonempty discard-then-draw, and the empty-hand draw"
+    },
+    {
+      "test": "mechanic_registry::q59_batch_a::q59_hand_discard_map_definitions",
+      "covers": "discard then draw wiring"
+    },
+    {
+      "test": "mechanic_registry::q59_batch_a::q59_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

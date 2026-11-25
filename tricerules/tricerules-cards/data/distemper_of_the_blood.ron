@@ -1,0 +1,25 @@
+// Oracle 4d3e7cde-a4ed-428f-bd37-c6dda2104221; source/rulings checked 2026-11-24 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1a/601.2c (target at cast), 611.2a/514.2 (until end of turn), 613.4c (layer 7c),
+// 613.1f/702.19 (trample), 608.2b (stale target) and 702.35a-d (madness). Pinned 2022-12-08
+// rulings: madness ignores the card type's timing rules and a discarded card counts as
+// discarded. Copy of Sylvan Might's pump-plus-trample target and Fiery Temper's Madness static.
+(
+  id: "distemper_of_the_blood",
+  name: "Distemper of the Blood",
+  face_id: "distemper_of_the_blood",
+  mana_cost: "{1}{R}",
+  types: ["Sorcery"],
+  spell_effect: [
+    PumpTarget(power: 2, toughness: 2, subject: Chosen((kind: Creature))),
+    GrantKeywords(subject: Chosen((kind: Creature)), keywords: [Trample]),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0, 1])])),
+  static_abilities: [
+    (
+      ability_id: "madness",
+      presentation: OracleLines([2]),
+      definition: Madness(cost: "{R}"),
+    ),
+  ],
+)

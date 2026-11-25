@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "b01d24d5-79d0-401f-99f5-da036628dd39",
+  "spans": [
+    {
+      "face_id": "call_to_glory",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::UntapAll",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpAll",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "CreatureScopeFilter::subtype",
+      "typed_path": "/faces/0/spell_effect/1/PumpAll/filter/matching/required_subtypes"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q81_untap_team_rider::q81_untap_rider_canary_simplest_call_to_glory_untaps_and_pumps_only_samurai",
+      "covers": "canary: the changeling Samurai is pumped and the non-Samurai is not"
+    },
+    {
+      "test": "scenario q81_untap_team_rider::q81_untap_rider_cards_untap_only_your_creatures",
+      "covers": "actual call_to_glory untaps each creature its controller controls and leaves opponents' creatures tapped"
+    },
+    {
+      "test": "mechanic_registry::q81_untap_team_rider::q81_untap_rider_map_definitions",
+      "covers": "reviewed identity and complete typed shape of call_to_glory"
+    },
+    {
+      "test": "mechanic_registry::q81_untap_team_rider::q81_untap_rider_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for call_to_glory"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

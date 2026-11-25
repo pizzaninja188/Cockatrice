@@ -1,0 +1,65 @@
+{
+  "format_version": 1,
+  "oracle_id": "92c824da-2351-43bd-9fa0-d09709ad8205",
+  "spans": [
+    {
+      "face_id": "basris_acolyte",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "basris_acolyte",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Lifelink",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Chosen",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/PutCounters/subject"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q65_batch_a::q65_counters_canary_hardest_basris_acolyte_two_distinct_other_creatures",
+      "covers": "actual Basri's Acolyte counters two distinct other controlled creatures, rejects itself, opponents and duplicates"
+    },
+    {
+      "test": "scenario q65_batch_a::q65_counters_partial_stale_targets_still_counter_the_remaining_creature",
+      "covers": "actual Basri's Acolyte still counters the remaining legal target after one target leaves"
+    },
+    {
+      "test": "mechanic_registry::q65_batch_a::q65_etb_counter_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of basris_acolyte"
+    },
+    {
+      "test": "mechanic_registry::q65_batch_a::q65_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for basris_acolyte"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

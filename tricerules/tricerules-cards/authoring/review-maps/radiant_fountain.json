@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "6db442e5-fbcc-4456-a4c5-bea1aee3fc8e",
+  "spans": [
+    {
+      "face_id": "radiant_fountain",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "radiant_fountain",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "ManaAmount",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/ProduceMana/options"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q70_batch_a::q70_lands_canary_simplest_radiant_fountain_gains_and_taps_for_colorless",
+      "covers": "actual Radiant Fountain gains exactly two on entry and taps for colorless mana"
+    },
+    {
+      "test": "scenario q70_batch_a::q70_lands_mana_abilities_require_an_untapped_controller_source",
+      "covers": "the actual mana ability requires the controller and an untapped source"
+    },
+    {
+      "test": "scenario q70_batch_a::q70_lands_do_not_trigger_from_the_graveyard",
+      "covers": "the actual card gains no life from the graveyard"
+    },
+    {
+      "test": "mechanic_registry::q70_batch_a::q70_batch_a_cohorts_map_definitions",
+      "covers": "reviewed identity, printed characteristics and typed definition of radiant_fountain"
+    },
+    {
+      "test": "mechanic_registry::q70_batch_a::q70_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for radiant_fountain"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

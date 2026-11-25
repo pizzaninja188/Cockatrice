@@ -1,0 +1,19 @@
+// Oracle 0230de18-8d15-4cfa-9d42-7ccddd9f9570; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.6a (counter), 113.6g (an ability that says it can't be countered functions on the stack),
+// 701.8 (destroy) and 701.8c/701.19 (a regeneration effect replaces a destruction event; this spell
+// does not prevent regeneration). It has no targets, so 608.2b does not apply. No pinned ruling. Copy of the
+// reviewed long_goodbye uncounterable static plus day_of_judgment's sweep.
+(
+  id: "supreme_verdict",
+  name: "Supreme Verdict",
+  face_id: "supreme_verdict",
+  mana_cost: "{1}{W}{W}{U}",
+  types: ["Sorcery"],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: SpellCannotBeCountered,
+  )],
+  spell_effect: [DestroyAll()],
+)

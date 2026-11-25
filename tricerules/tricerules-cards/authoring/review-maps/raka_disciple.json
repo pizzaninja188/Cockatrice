@@ -1,0 +1,84 @@
+{
+  "format_version": 1,
+  "oracle_id": "88c5a681-4095-4e37-9149-002bcbaf4c0b",
+  "spans": [
+    {
+      "face_id": "raka_disciple",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "raka_disciple",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::PreventNextDamage",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetFilter.any target",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/PreventNextDamage/target"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/1/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/1/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Chosen",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0/GrantKeywords/subject"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q68_batch_a::q68_disciple_raka_shield_absorbs_one_and_expires",
+      "covers": "actual Raka Disciple {W} shield pays, taps, absorbs exactly one damage and expires"
+    },
+    {
+      "test": "scenario q68_batch_a::q68_disciple_prevention_stale_target_creates_no_shield",
+      "covers": "actual Raka Disciple shield fizzles when its target leaves before resolution"
+    },
+    {
+      "test": "scenario q68_batch_a::q68_disciples_grant_flying_shrink_and_pump_with_printed_values",
+      "covers": "actual Raka Disciple flying grant"
+    },
+    {
+      "test": "scenario q68_batch_a::q68_disciples_reject_the_other_color_without_spending_or_tapping",
+      "covers": "wrong-color activation is rejected without spending or tapping"
+    },
+    {
+      "test": "mechanic_registry::q68_batch_a::q68_batch_a_cohorts_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q68_batch_a::q68_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

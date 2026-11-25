@@ -1,0 +1,69 @@
+{
+  "format_version": 1,
+  "oracle_id": "c8e9bec0-43e5-4e84-9e0e-5f3db362f1e4",
+  "spans": [
+    {
+      "face_id": "burning_oil",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    },
+    {
+      "face_id": "burning_oil",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/flashback_cost"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetKind::Creature",
+      "typed_path": "/faces/0/targeting/groups/0"
+    },
+    {
+      "symbol": "CombatRole::AttackingOrBlocking",
+      "typed_path": "/faces/0/targeting/groups/0"
+    },
+    {
+      "symbol": "CardFace::flashback_cost",
+      "typed_path": "/faces/0/flashback_cost"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q74_flashback_utility::q74_flashback_canary_hardest_burning_oil_kills_two_attackers_and_exiles",
+      "covers": "actual Burning Oil kills an attacking creature from hand and flashback"
+    },
+    {
+      "test": "scenario q74_flashback_utility::q74_flashback_utility_rejects_wrong_targets_and_illegal_flashback",
+      "covers": "actual Burning Oil rejects an idle creature"
+    },
+    {
+      "test": "scenario q74_flashback_utility::q74_flashback_utility_cards_apply_their_printed_bodies_and_flash_back",
+      "covers": "actual Burning Oil applies its printed body from hand and flashback"
+    },
+    {
+      "test": "mechanic_registry::q74_flashback_utility::q74_flashback_utility_map_definitions",
+      "covers": "reviewed identity, characteristics and typed flashback definition of burning oil"
+    },
+    {
+      "test": "mechanic_registry::q74_flashback_utility::q74_flashback_utility_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for burning oil"
+    },
+    {
+      "test": "scenario q74_flashback_utility::q74_flashback_utility_fizzles_stale_targets_and_exiles_flashback_copies",
+      "covers": "actual Burning Oil fizzles a stale target and still exiles the flashback copy"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

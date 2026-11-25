@@ -1,0 +1,57 @@
+{
+  "format_version": 1,
+  "oracle_id": "80c7b1b4-4e37-4aef-9432-d629d71b7045",
+  "spans": [
+    {
+      "face_id": "suffocating_fumes",
+      "start_line": 1,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpAll",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::DiscardSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q64_batch_a::q64_shrink_canary_simplest_suffocating_fumes_reduces_only_opposing_creatures",
+      "covers": "the printed -1/-1 kills a 1/1 opposing creature and leaves the caster's creature alone"
+    },
+    {
+      "test": "scenario q64_batch_a::q64_shrink_cards_apply_their_printed_values_and_do_not_touch_friendly_creatures",
+      "covers": "the exact printed shrink and opponent scope"
+    },
+    {
+      "test": "scenario q64_batch_a::q64_shrink_cards_cycle_for_two_and_draw_one",
+      "covers": "cycling discards the card and draws one for {2}"
+    },
+    {
+      "test": "mechanic_registry::q64_batch_a::q64_opponent_shrink_map_definitions",
+      "covers": "reviewed identity, printed characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q64_batch_a::q64_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,21 @@
+// Oracle 7bb1b48b-aa6b-4064-9355-c43b0f509388; text checked 2026-11-23 against the pinned
+// Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// Pinned 2014-02-01 ruling: targeting yourself reveals your hand like any other player.
+// CR 701.9 (discard), 400.2 (hidden hand), 701.20 (reveal) and 608.2c.
+(
+  id: "distress",
+  name: "Distress",
+  face_id: "distress",
+  mana_cost: "{B}{B}",
+  types: ["Sorcery"],
+  spell_effect: [
+    ChooseHandCards(action: Discard,
+      count: 1,
+      target: (kind: AnyPlayer),
+      chooser: Controller,
+      card_filter: Some(Nonland),
+      visibility: PublicReveal,
+    ),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
+)

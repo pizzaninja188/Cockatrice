@@ -1,0 +1,89 @@
+{
+  "format_version": 1,
+  "oracle_id": "41bfef9f-6eb7-49c7-9b90-ff9f385ba670",
+  "spans": [
+    {
+      "face_id": "second_thoughts",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    },
+    {
+      "face_id": "second_thoughts",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Exile",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Chosen",
+      "typed_path": "/faces/0/spell_effect/0/Exile/subject"
+    },
+    {
+      "symbol": "TargetFilter",
+      "typed_path": "/faces/0/spell_effect/0/Exile/subject"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q78_attack_removal_rider::q78_attack_removal_rider_canary_simplest_silverstrike_destroys_and_gains_three",
+      "covers": "canary simplest Silverstrike destroys an attacker and gains exactly three life"
+    },
+    {
+      "test": "scenario q78_attack_removal_rider::q78_attack_removal_rider_canary_hardest_bright_reprisal_draws_after_a_legal_destroy",
+      "covers": "canary hardest Bright Reprisal destroys and draws exactly one card"
+    },
+    {
+      "test": "scenario q78_attack_removal_rider::q78_attack_removal_rider_cards_apply_their_printed_removal_and_rider",
+      "covers": "each actual card applies its printed removal and rider"
+    },
+    {
+      "test": "scenario q78_attack_removal_rider::q78_attack_removal_rider_cards_reject_a_nonattacking_creature",
+      "covers": "a nonattacking creature is rejected without spending mana"
+    },
+    {
+      "test": "scenario q78_attack_removal_rider::q78_attack_removal_rider_cards_fizzle_without_the_rider_on_a_stale_target",
+      "covers": "a stale sole target fizzles the whole spell and denies the rider"
+    },
+    {
+      "test": "scenario q78_attack_removal_rider::q78_attack_removal_rider_legal_indestructible_target_still_draws",
+      "covers": "a legal indestructible target still draws"
+    },
+    {
+      "test": "scenario q78_attack_removal_rider::q78_attack_removal_rider_cards_leave_a_creature_that_stopped_attacking",
+      "covers": "a creature that stopped attacking is not removed and grants no rider"
+    },
+    {
+      "test": "scenario q78_attack_removal_rider::q78_attack_removal_rider_silverstrike_still_gains_three_against_an_indestructible_attacker",
+      "covers": "Silverstrike still gains 3 against a legal indestructible attacker"
+    },
+    {
+      "test": "mechanic_registry::q78_attack_removal_rider::q78_attack_removal_rider_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of second_thoughts"
+    },
+    {
+      "test": "mechanic_registry::q78_attack_removal_rider::q78_attack_removal_rider_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for second_thoughts"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

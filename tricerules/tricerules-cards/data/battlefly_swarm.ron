@@ -1,0 +1,23 @@
+// Oracle 1396e7f1-ac91-4778-9f71-493c7a44bd51; source/rulings checked 2026-11-25 against the pinned
+// Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.9 (flying), 602.1/602.2 (activation and printed cost), 611.2a (the grant ends at cleanup),
+// 514.2 and 702.2 (deathtouch). The card has no pinned ruling. Copy of the reviewed Pestilent Wolf
+// self deathtouch grant with Flying instead of nothing and the printed {B} cost.
+(
+  id: "battlefly_swarm",
+  name: "Battlefly Swarm",
+  face_id: "battlefly_swarm",
+  mana_cost: "{B}",
+  types: ["Creature", "Phyrexian", "Insect"],
+  power: 1,
+  toughness: 1,
+  keywords: [Flying],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Mana("{B}")],
+      effect: [GrantKeywords(subject: Source, keywords: [Deathtouch])],
+    ),
+  ],
+)

@@ -1,0 +1,39 @@
+// Oracle f4bd26d5-4448-451f-9909-b6dea1551af7; source/rulings checked 2026-11-25 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.1a/602.2 (activated ability and cost), 701.21a (sacrifice as a cost), 603.6c/603.10a
+// (battlefield-to-graveyard trigger), 115.1 (one player-or-planeswalker target), 120.3a (damage to
+// a player), 120.3c (damage removes loyalty from a planeswalker) and 608.2b (stale target). Pinned
+// 2017-02-09 ruling: the last ability triggers no matter why the artifact is put into a graveyard,
+// and its draw resolves before the first ability.
+(
+  id: "implement_of_combustion",
+  name: "Implement of Combustion",
+  face_id: "implement_of_combustion",
+  mana_cost: "{1}",
+  types: ["Artifact"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{R}"), SacrificeSelf],
+      effect: [DamageTarget(
+        amount: 1,
+        target: (any_of: Some([
+          (kind: AnyPlayer),
+          (kind: AnyPermanent, permanent_types: [Planeswalker]),
+        ])),
+      )],
+      targeting: Some((groups: [(
+        min: 1, max: 1, prompt: "Choose target player or planeswalker", effect_indices: [0],
+      )])),
+    ),
+  ],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WhenSelfDies,
+      effect: [Draw(count: 1)],
+    ),
+  ],
+)

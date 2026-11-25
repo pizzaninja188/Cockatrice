@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "1665ca9f-176d-40f1-a4e9-42da4f1236e9",
+  "spans": [
+    {
+      "face_id": "circuit_mender",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "circuit_mender",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfLeavesBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/1/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/1/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q84_etb_gain_life_riders::q84_gain_life_cards_apply_printed_amount_and_controller_scope",
+      "covers": "the actual card gains exactly its printed two life for its controller only"
+    },
+    {
+      "test": "scenario q84_etb_gain_life_riders::q84_circuit_mender_draws_when_exiled_because_it_left_the_battlefield",
+      "covers": "canary: an exile is not dying but still leaves the battlefield, so the leaves trigger draws one card"
+    },
+    {
+      "test": "mechanic_registry::q84_batch_a::q84_etb_gain_life_riders_map_definitions",
+      "covers": "reviewed identity, Oracle line mapping, entry life gain and leaves-the-battlefield draw"
+    },
+    {
+      "test": "mechanic_registry::q84_batch_a::q84_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

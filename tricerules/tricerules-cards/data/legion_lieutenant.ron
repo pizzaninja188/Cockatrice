@@ -1,0 +1,24 @@
+// Oracle 5fa1b2f0-3ba4-49db-9cb5-b6130e4c255e; source/rulings checked 2026-11-24 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 604.2/611.3b (the continuous effect is active while the source remains on the
+// battlefield), 613.4c (layer 7c), 109.5 ("you" is the source's controller) and the
+// printed "other" excludes the source. Copy of Benalish Marshal with the printed
+// subtype scope. The 2018-01-19 ruling covers marked damage becoming lethal when the lord leaves.
+(
+  id: "legion_lieutenant",
+  name: "Legion Lieutenant",
+  face_id: "legion_lieutenant",
+  mana_cost: "{W}{B}",
+  types: ["Creature", "Vampire", "Knight"],
+  power: 2,
+  toughness: 2,
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: AnthemPt(
+      filter: (controller: YouControl, exclude_self: true, matching: (kind: Creature, required_subtypes: ["Vampire"])),
+      delta_power: 1,
+      delta_toughness: 1,
+    ),
+  )],
+)

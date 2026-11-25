@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "4b1674b1-2176-493f-a463-936e715d51a2",
+  "spans": [
+    {
+      "face_id": "prized_elephant",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "prized_elephant",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::ConditionalSelfModifier",
+      "typed_path": "/faces/0/static_abilities/0"
+    },
+    {
+      "symbol": "GameCondition::BattlefieldAggregate",
+      "typed_path": "/faces/0/static_abilities/0/definition/ConditionalSelfModifier/condition"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q63_batch_a::q63_pump_cards_apply_their_printed_land_conditions",
+      "covers": "the actual card gains exactly +1/+1 only from its controller's Forest and loses it when the Forest leaves"
+    },
+    {
+      "test": "scenario q63_batch_a::q63_pump_cards_activate_their_exact_printed_abilities",
+      "covers": "the actual card spends exactly {G} and gains trample until end of turn"
+    },
+    {
+      "test": "mechanic_registry::q63_batch_a::q63_conditional_pump_map_definitions",
+      "covers": "reviewed identity, printed characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q63_batch_a::q63_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

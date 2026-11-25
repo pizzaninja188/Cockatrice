@@ -1,0 +1,33 @@
+// Oracle 4b1674b1-2176-493f-a463-936e715d51a2; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 611.3/613.4c (the layer-7c self modifier and the live Forest check; the bonus is binary, not
+// per land) and 702.19a-b (trample). No pinned ruling. Copy of Loam Lion's Forest condition plus
+// Bastion Mastodon's activated keyword grant, with the printed Forest bonus.
+(
+  id: "prized_elephant",
+  name: "Prized Elephant",
+  face_id: "prized_elephant",
+  mana_cost: "{3}{W}",
+  types: ["Creature", "Elephant"],
+  power: 3,
+  toughness: 3,
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: ConditionalSelfModifier(
+      condition: BattlefieldAggregate(
+        filter: (controllers: Controller, required_subtypes: ["Forest"]),
+        aggregate: Count,
+        min: Some(1),
+      ),
+      delta_power: 1,
+      delta_toughness: 1,
+    ),
+  )],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    costs: [Mana("{G}")],
+    effect: [GrantKeywords(subject: Source, keywords: [Trample])],
+  )],
+)

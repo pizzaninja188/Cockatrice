@@ -1,0 +1,20 @@
+// Oracle 6024cb2d-a6e7-4adc-8b34-7f4e0cac16ce; source/rulings checked 2026-11-24 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.2 (activation puts the ability on the stack and pays its costs), 118.3 (a cost
+// can't be paid without the necessary resources) and 121.1 (draw). Repeatable activation with no tap cost and a two-card draw.
+// Copy of Azure Mage's activated Draw with the printed cost and count.
+(
+  id: "third_path_savant",
+  name: "Third Path Savant",
+  face_id: "third_path_savant",
+  mana_cost: "{2}{U}",
+  types: ["Creature", "Human", "Wizard"],
+  power: 2,
+  toughness: 3,
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    costs: [Mana("{7}")],
+    effect: [Draw(count: 2)],
+  )],
+)

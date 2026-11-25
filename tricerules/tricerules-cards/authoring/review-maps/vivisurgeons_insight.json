@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "cf6ff089-63d7-4a98-b95d-2837c017a866",
+  "spans": [
+    {
+      "face_id": "vivisurgeons_insight",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Proliferate",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q75_proliferate_riders::q75_proliferate_riders_apply_their_printed_bodies_in_order",
+      "covers": "actual Vivisurgeon's Insight applies its printed body in order and then proliferates"
+    },
+    {
+      "test": "scenario q75_proliferate_riders::q75_proliferate_riders_reject_illegal_targets_and_underfunded_costs",
+      "covers": "actual Vivisurgeon's Insight rejects an illegal or underfunded cast"
+    },
+    {
+      "test": "mechanic_registry::q75_proliferate_riders::q75_proliferate_riders_map_definitions",
+      "covers": "reviewed identity, characteristics and typed Proliferate-rider definition of vivisurgeon's insight"
+    },
+    {
+      "test": "mechanic_registry::q75_proliferate_riders::q75_proliferate_riders_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for vivisurgeon's insight"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

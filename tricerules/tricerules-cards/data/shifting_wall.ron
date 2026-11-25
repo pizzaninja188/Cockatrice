@@ -1,0 +1,18 @@
+// Oracle 7c852dfe-8238-461e-814e-9667807f2cf5; source/rulings checked 2026-11-25 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.3 (defender), 107.3a-b (X is chosen as the spell is cast), 601.2f (the chosen X sets the
+// total cost) and 614.1c/122.6 (the entry replacement adds the counters). The card has no pinned
+// ruling. Copy of Endless One's X entry-counter replacement with Alabaster Wall's Defender.
+(
+  id: "shifting_wall",
+  name: "Shifting Wall",
+  face_id: "shifting_wall",
+  mana_cost: "{X}",
+  types: ["Artifact", "Creature", "Wall"],
+  power: 0,
+  toughness: 0,
+  keywords: [Defender],
+  static_abilities: [
+    (ability_id: "static_01", presentation: OracleLines([2]), definition: EntersWithCounters(counter: PlusOnePlusOne, amount: "X")),
+  ],
+)

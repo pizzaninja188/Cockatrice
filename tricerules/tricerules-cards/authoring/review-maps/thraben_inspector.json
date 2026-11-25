@@ -1,0 +1,43 @@
+{
+  "format_version": 1,
+  "oracle_id": "caa02547-66e3-4e27-a2d3-5e94f3e7a069",
+  "spans": [
+    {
+      "face_id": "thraben_inspector",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "clue"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q66_batch_a::q66_investigate_canary_simplest_thraben_inspector_enters_and_investigates",
+      "covers": "actual Thraben Inspector enters and creates exactly one colorless Clue artifact token"
+    },
+    {
+      "test": "mechanic_registry::q66_batch_a::q66_investigate_permanent_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of thraben_inspector"
+    },
+    {
+      "test": "mechanic_registry::q66_batch_a::q66_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for thraben_inspector"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

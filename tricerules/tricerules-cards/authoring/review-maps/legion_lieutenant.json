@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "5fa1b2f0-3ba4-49db-9cb5-b6130e4c255e",
+  "spans": [
+    {
+      "face_id": "legion_lieutenant",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::AnthemPt",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q76_subtype_lords::q76_subtype_lords_all_cards_pump_only_other_controlled_creatures_of_the_subtype",
+      "covers": "actual legion_lieutenant pumps only another controlled creature of its printed subtype"
+    },
+    {
+      "test": "scenario q76_subtype_lords::q76_subtype_lords_apply_to_later_entries_and_end_when_the_source_leaves",
+      "covers": "actual legion_lieutenant affects a later same-subtype creature and drains when the source leaves"
+    },
+    {
+      "test": "scenario q76_subtype_lords::q76_subtype_lords_two_copies_pump_each_other",
+      "covers": "two actual legion_lieutenant copies pump each other, proving \"other\" excludes only the source"
+    },
+    {
+      "test": "mechanic_registry::q76_subtype_lords::q76_subtype_lords_map_definitions",
+      "covers": "reviewed identity, characteristics and AnthemPt definition of legion_lieutenant"
+    },
+    {
+      "test": "mechanic_registry::q76_subtype_lords::q76_subtype_lords_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for legion_lieutenant"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

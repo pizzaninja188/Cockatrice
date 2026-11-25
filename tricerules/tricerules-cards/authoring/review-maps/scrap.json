@@ -1,0 +1,69 @@
+{
+  "format_version": 1,
+  "oracle_id": "0ad3b788-eb3d-4876-9c89-893429595e0e",
+  "spans": [
+    {
+      "face_id": "scrap",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    },
+    {
+      "face_id": "scrap",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    },
+    {
+      "symbol": "AbilitySourceZone::Hand",
+      "typed_path": "/faces/0/activated_abilities/0/source_zone"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::DiscardSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q71_batch_a::q71_cycling_canary_simplest_scrap_cycles_and_destroys",
+      "covers": "actual scrap printed removal body"
+    },
+    {
+      "test": "scenario q71_batch_a::q71_cycling_removal_cards_cycle_for_the_printed_cost",
+      "covers": "actual scrap cycling cost, discard and draw"
+    },
+    {
+      "test": "mechanic_registry::q71_batch_a::q71_batch_a_cycling_removal_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of scrap"
+    },
+    {
+      "test": "mechanic_registry::q71_batch_a::q71_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for scrap"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

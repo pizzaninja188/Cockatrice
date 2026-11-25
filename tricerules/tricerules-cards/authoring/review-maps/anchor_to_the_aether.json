@@ -1,0 +1,66 @@
+{
+  "format_version": 1,
+  "oracle_id": "3e00326d-2bf4-4731-a6cd-1c015f94f553",
+  "spans": [
+    {
+      "face_id": "anchor_to_the_aether",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_program",
+        "/faces/0/spell_program/body/steps/0",
+        "/faces/0/spell_program/body/steps/0/kind/Perform/PutInOwnersLibrary",
+        "/faces/0/spell_program/body/steps/0/kind/Perform/PutInOwnersLibrary/placement",
+        "/faces/0/spell_program/body/steps/1",
+        "/faces/0/spell_program/body/steps/1/kind/Perform/Scry",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PutInOwnersLibrary",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform/PutInOwnersLibrary"
+    },
+    {
+      "symbol": "LibraryPlacement::Top",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform/PutInOwnersLibrary/placement"
+    },
+    {
+      "symbol": "SpellEffectKind::Scry",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/Scry"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q74_scry_riders::q74_scry_canary_hardest_anchor_puts_the_target_on_top_then_scries_one",
+      "covers": "actual Anchor to the Aether puts the target on its owner's library and scries the caster's own library"
+    },
+    {
+      "test": "scenario q74_scry_riders::q74_scry_riders_apply_their_printed_bodies_and_scry_counts",
+      "covers": "actual Anchor to the Aether applies its printed body and scry count"
+    },
+    {
+      "test": "scenario q74_scry_riders::q74_scry_riders_reject_wrong_targets_and_fizzle_stale_targets_without_scrying",
+      "covers": "actual Anchor to the Aether rejects an illegal target without paying"
+    },
+    {
+      "test": "mechanic_registry::q74_scry_riders::q74_scry_riders_map_definitions",
+      "covers": "reviewed identity, characteristics and typed scry definition of anchor to the aether"
+    },
+    {
+      "test": "mechanic_registry::q74_scry_riders::q74_scry_riders_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for anchor to the aether"
+    },
+    {
+      "test": "scenario q74_scry_riders::q74_scry_riders_fizzle_stale_targets_without_scrying",
+      "covers": "actual Anchor to the Aether moves nothing and does not scry when its only target is stale"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

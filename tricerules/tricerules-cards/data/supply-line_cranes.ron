@@ -1,0 +1,23 @@
+// Oracle bf3811b3-f3d2-4ffb-8019-e403a2cc1d81; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (entry trigger), 115.1 (one target), 122.1 (counters), 702.9 (flying) and 608.2b
+// (stale target). No pinned ruling. Copy of Backup Agent's counter placement with the printed body.
+(
+  id: "supply-line_cranes",
+  name: "Supply-Line Cranes",
+  face_id: "supply_line_cranes",
+  mana_cost: "{3}{W}{W}",
+  types: ["Creature", "Bird"],
+  power: 2,
+  toughness: 4,
+  keywords: [Flying],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Chosen((kind: Creature)))],
+    targeting: Some((groups: [(
+      min: 1, max: 1, prompt: "Choose target creature", effect_indices: [0],
+    )])),
+  )],
+)

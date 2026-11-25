@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "3fdc76b0-450a-4fcb-8a64-113edce67f3d",
+  "spans": [
+    {
+      "face_id": "bronze_walrus",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "bronze_walrus",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Scry",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "ManaAmount",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/ProduceMana/options"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q69_batch_a::q69_rocks_bronze_walrus_scries_two_on_entry",
+      "covers": "actual Bronze Walrus clause coverage"
+    },
+    {
+      "test": "scenario q69_batch_a::q69_rocks_each_card_offers_its_printed_any_color_option",
+      "covers": "actual Bronze Walrus clause coverage"
+    },
+    {
+      "test": "scenario q69_batch_a::q69_rocks_mana_abilities_reject_a_tapped_source_without_producing",
+      "covers": "actual Bronze Walrus clause coverage"
+    },
+    {
+      "test": "mechanic_registry::q69_batch_a::q69_batch_a_cohorts_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of bronze_walrus"
+    },
+    {
+      "test": "mechanic_registry::q69_batch_a::q69_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for bronze_walrus"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

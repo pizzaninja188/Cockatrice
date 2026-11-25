@@ -1,0 +1,13 @@
+// Oracle da790c72-63e7-4955-9435-d073767f9bb5; source/rulings checked 2026-11-24 against the pinned
+// Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.16b-f (protection). The hybrid cost is the printed {G/W} symbol repeated five times.
+(
+  id: "oversoul_of_dusk",
+  name: "Oversoul of Dusk",
+  face_id: "oversoul_of_dusk",
+  mana_cost: "{G/W}{G/W}{G/W}{G/W}{G/W}",
+  types: ["Creature", "Spirit", "Avatar"],
+  power: 5,
+  toughness: 5,
+  protections: [Color(Blue), Color(Black), Color(Red)],
+)

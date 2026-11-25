@@ -1,0 +1,16 @@
+// Oracle 40ee79dd-cf53-415c-8e3c-d1a125a735db; source/rulings checked 2026-11-24 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 613.4c (layer-7c pump) and 701.26 (untap). The pinned 2017-09-29 rulings: already-untapped
+// creatures still get +1/+1, and creatures controlled later in the turn are unaffected.
+// Copy of Rally the Forces' PumpAll plus Vitalize's UntapAll.
+(
+  id: "rallying_roar",
+  name: "Rallying Roar",
+  face_id: "rallying_roar",
+  mana_cost: "{2}{W}",
+  types: ["Instant"],
+  spell_effect: [
+    PumpAll(filter: (controller: YouControl), power: 1, toughness: 1),
+    UntapAll(players: Controller),
+  ],
+)

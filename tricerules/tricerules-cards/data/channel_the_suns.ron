@@ -1,0 +1,13 @@
+// Oracle d1b1be96-b2aa-4386-97d2-eb0a8cc47210; source/rulings checked 2026-11-24 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 106.1a and 106.4 (one mana of each color added to the pool), 601.2 (the spell uses the
+// stack) and 500.4 (unused mana empties at the end of the step). Copy of Narset's Rebuke's
+// multi-color AddMana shape.
+(
+  id: "channel_the_suns",
+  name: "Channel the Suns",
+  face_id: "channel_the_suns",
+  mana_cost: "{3}{G}",
+  types: ["Sorcery"],
+  spell_effect: [AddMana(amount: (w: 1, u: 1, b: 1, r: 1, g: 1), retention: EndOfStep)],
+)

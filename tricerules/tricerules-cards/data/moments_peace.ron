@@ -1,0 +1,15 @@
+// Oracle b6d22228-a45e-4296-9ae2-1649e04b1c53; source/rulings checked 2026-11-24 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 614.9/615 (damage prevention), 514.2 (the prevention lasts through the turn) and
+// 702.34a-d (flashback alternative cost and exile). Pinned 2021-03-19 rulings: flashback always
+// exiles the spell afterward and still follows the card type's timing. Copy of Fog's
+// combat-damage prevention and Firebolt's flashback cost.
+(
+  id: "moments_peace",
+  name: "Moment's Peace",
+  face_id: "moments_peace",
+  mana_cost: "{1}{G}",
+  types: ["Instant"],
+  flashback_cost: Some("{2}{G}"),
+  spell_effect: [PreventAllCombatDamageTurn],
+)

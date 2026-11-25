@@ -1,0 +1,22 @@
+// Oracle 6c853b95-3d98-44fd-b05a-02d05d5eb0b8; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1a/601.2c (artifact target at cast), 701.8 (destroy), 701.22a-b (scry 2) and 608.2b (a
+// stale sole target fizzles, so no scry). No pinned ruling. Copy of Expose to Daylight's artifact
+// destruction plus scry, with the printed count of two.
+(
+  id: "tel-jilad_justice",
+  name: "Tel-Jilad Justice",
+  face_id: "tel_jilad_justice",
+  mana_cost: "{1}{G}",
+  types: ["Instant"],
+  spell_effect: [
+    Destroy(subject: Chosen((kind: AnyPermanent, permanent_types: [Artifact]))),
+    Scry(count: 2),
+  ],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target artifact",
+    effect_indices: [0],
+  )])),
+)

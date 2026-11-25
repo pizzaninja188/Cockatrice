@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "3a091f7b-efc9-4aaa-9da8-157ef8099a36",
+  "spans": [
+    {
+      "face_id": "weather_the_storm",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "weather_the_storm",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_keywords/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellKeyword::Storm",
+      "typed_path": "/faces/0/spell_keywords/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q71_batch_a::q71_storm_canary_simplest_weather_the_storm_copies_once",
+      "covers": "actual weather_the_storm canary end-to-end path"
+    },
+    {
+      "test": "scenario q71_batch_a::q71_storm_untargeted_copies_multiply_the_printed_effect",
+      "covers": "actual weather_the_storm shared Storm copy scenario"
+    },
+    {
+      "test": "mechanic_registry::q71_batch_a::q71_batch_a_storm_spells_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of weather_the_storm"
+    },
+    {
+      "test": "mechanic_registry::q71_batch_a::q71_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for weather_the_storm"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

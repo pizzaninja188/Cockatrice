@@ -1,0 +1,23 @@
+// Oracle 861096be-dbb3-429e-820f-d82f6ed2aa24; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1a/601.2c (target at cast), 701.8 (destroy), 119.3 (life loss) and 608.2b: an illegal
+// sole target fizzles, so no life is lost. The pinned 2013-09-15 ruling fixes the indestructible
+// branch: the controller still loses 2 life. Copy of Victorious Destruction's controller life
+// loss with the printed creature target.
+(
+  id: "sip_of_hemlock",
+  name: "Sip of Hemlock",
+  face_id: "sip_of_hemlock",
+  mana_cost: "{4}{B}{B}",
+  types: ["Sorcery"],
+  spell_effect: [
+    Destroy(subject: Chosen((kind: Creature))),
+    LoseLife(amount: Fixed(2), who: ControllerOfTargetGroup(group_index: 0)),
+  ],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target creature",
+    effect_indices: [0],
+  )])),
+)

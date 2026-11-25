@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "5731ecb5-6ddc-4452-990c-b69986367f25",
+  "spans": [
+    {
+      "face_id": "mephitic_vapors",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "mephitic_vapors",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpAll",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::LibraryPartition",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "LibraryPartitionKind::Surveil",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q75_surveil_cantrips::q75_surveil_canary_hardest_mephitic_vapors_shrinks_then_surveils",
+      "covers": "actual Mephitic Vapors shrinks every creature then surveils while doomed creatures are still on the battlefield"
+    },
+    {
+      "test": "scenario q75_surveil_cantrips::q75_surveil_mephitic_vapors_affects_only_creatures_present_at_resolution",
+      "covers": "actual Mephitic Vapors leaves a creature that enters later unaffected"
+    },
+    {
+      "test": "scenario q75_surveil_cantrips::q75_surveil_canary_hardest_mephitic_vapors_shrinks_then_surveils",
+      "covers": "actual Mephitic Vapors shrinks every creature before the printed surveil 2"
+    },
+    {
+      "test": "scenario q75_surveil_cantrips::q75_surveil_cantrips_reject_underfunded_casts",
+      "covers": "actual Mephitic Vapors rejects an underfunded cast"
+    },
+    {
+      "test": "mechanic_registry::q75_surveil_cantrips::q75_surveil_cantrips_map_definitions",
+      "covers": "reviewed identity, characteristics and typed surveil definition of mephitic vapors"
+    },
+    {
+      "test": "mechanic_registry::q75_surveil_cantrips::q75_surveil_cantrips_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for mephitic vapors"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

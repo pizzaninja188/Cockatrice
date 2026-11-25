@@ -1,0 +1,24 @@
+// Oracle 83a76601-ef59-4888-af70-5088dd1f504c; source/rulings checked 2026-11-24 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 604.2/611.3b (the continuous effect is active while the source remains on the
+// battlefield), 613.4c (layer 7c), 109.5 ("you" is the source's controller) and the
+// printed "other" excludes the source. Copy of Benalish Marshal with the printed
+// subtype scope. The card has no pinned ruling; the printed continuous modification needs none.
+(
+  id: "regal_imperiosaur",
+  name: "Regal Imperiosaur",
+  face_id: "regal_imperiosaur",
+  mana_cost: "{1}{G}{G}",
+  types: ["Creature", "Dinosaur"],
+  power: 5,
+  toughness: 4,
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: AnthemPt(
+      filter: (controller: YouControl, exclude_self: true, matching: (kind: Creature, required_subtypes: ["Dinosaur"])),
+      delta_power: 1,
+      delta_toughness: 1,
+    ),
+  )],
+)

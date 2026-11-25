@@ -1,0 +1,62 @@
+{
+  "format_version": 1,
+  "oracle_id": "78db3190-59bc-4033-95bc-32d8ed872b6a",
+  "spans": [
+    {
+      "face_id": "tendrils_of_agony",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    },
+    {
+      "face_id": "tendrils_of_agony",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_keywords/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::TargetPlayerLosesLife",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    },
+    {
+      "symbol": "SpellKeyword::Storm",
+      "typed_path": "/faces/0/spell_keywords/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q71_batch_a::q71_storm_canary_hardest_tendrils_of_agony_drains_each_copy",
+      "covers": "actual tendrils_of_agony canary end-to-end path"
+    },
+    {
+      "test": "scenario q71_batch_a::q71_storm_targeted_copies_choose_independent_targets",
+      "covers": "actual tendrils_of_agony shared Storm copy scenario"
+    },
+    {
+      "test": "mechanic_registry::q71_batch_a::q71_batch_a_storm_spells_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of tendrils_of_agony"
+    },
+    {
+      "test": "mechanic_registry::q71_batch_a::q71_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for tendrils_of_agony"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

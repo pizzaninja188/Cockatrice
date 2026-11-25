@@ -1,0 +1,47 @@
+{
+  "format_version": 1,
+  "oracle_id": "1ff62220-be95-4901-b8d8-812b9a1a1b0a",
+  "spans": [
+    {
+      "face_id": "greed",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/costs/0",
+        "/faces/0/activated_abilities/0/costs/1",
+        "/faces/0/activated_abilities/0/effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::PayLife",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q66_batch_a::q66_draw_canary_hardest_greed_pays_life_and_rejects_insufficient_life",
+      "covers": "actual Greed pays {B} and two life, draws one card, and refuses a payment below zero life"
+    },
+    {
+      "test": "mechanic_registry::q66_batch_a::q66_activated_draw_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of greed"
+    },
+    {
+      "test": "mechanic_registry::q66_batch_a::q66_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for greed"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

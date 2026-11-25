@@ -1,0 +1,61 @@
+{
+  "format_version": 1,
+  "oracle_id": "4620bfa8-7198-44ae-a162-51a19ca0f555",
+  "spans": [
+    {
+      "face_id": "ray_of_revelation",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    },
+    {
+      "face_id": "ray_of_revelation",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/flashback_cost"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetFilter",
+      "typed_path": "/faces/0/spell_effect/0/Destroy/subject/Chosen"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    },
+    {
+      "symbol": "CardFaceDef.flashback_cost",
+      "typed_path": "/faces/0/flashback_cost"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q58_batch_a::q58_destroy_enchantment_cards_destroy_only_enchantments",
+      "covers": "destroys an enchantment and rejects a creature target"
+    },
+    {
+      "test": "scenario q58_batch_a::q58_destroy_enchantment_riders_draw_cycle_and_flashback",
+      "covers": "destroys, then flashbacks to destroy again and exiles"
+    },
+    {
+      "test": "mechanic_registry::q58_batch_a::q58_destroy_enchantment_map_definitions",
+      "covers": "typed identity, destruction and flashback cost for ray_of_revelation"
+    },
+    {
+      "test": "mechanic_registry::q58_batch_a::q58_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

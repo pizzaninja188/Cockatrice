@@ -1,0 +1,25 @@
+// Oracle ac2720d2-b010-4fa9-8c94-b13680b75aac; source/rulings checked 2026-11-24 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.8 (destroy), 115.1/601.2c (target), 608.2b (stale target) and 702.35a-d (madness
+// alternative cost and exile). Pinned 2022-12-08 rulings: madness ignores the card type's timing
+// rules, a discarded card counts as discarded, and the spell resolves normally (instant/sorcery
+// to its owner's graveyard). Copy of Hand of Death's nonblack destruction and Fiery Temper's
+// reviewed Madness static.
+(
+  id: "dark_withering",
+  name: "Dark Withering",
+  face_id: "dark_withering",
+  mana_cost: "{4}{B}{B}",
+  types: ["Instant"],
+  spell_effect: [Destroy(subject: Chosen((kind: Creature, not_color: Black)))],
+  targeting: Some((groups: [
+    (min: 1, max: 1, prompt: "Choose target nonblack creature", effect_indices: [0]),
+  ])),
+  static_abilities: [
+    (
+      ability_id: "madness",
+      presentation: OracleLines([2]),
+      definition: Madness(cost: "{B}"),
+    ),
+  ],
+)

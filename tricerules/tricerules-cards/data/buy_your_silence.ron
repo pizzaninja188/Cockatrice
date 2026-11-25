@@ -1,0 +1,22 @@
+// Oracle 2fd01a30-0c0e-4ac5-b96d-b2a6dad31f0c; source/rulings checked 2026-11-24 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.13 (exile), 115.1a/601.2c (nonland-permanent target), 608.2b (stale target) and
+// 111.10a/701.7 (the target's controller creates a Treasure). Copy of Zuko's Exile's controller
+// recipient with the printed Treasure token.
+(
+  id: "buy_your_silence",
+  name: "Buy Your Silence",
+  face_id: "buy_your_silence",
+  mana_cost: "{4}{W}",
+  types: ["Sorcery"],
+  spell_effect: [
+    Exile(subject: Chosen((kind: AnyPermanent, excluded_permanent_types: [Land]))),
+    CreateTokens(token: "treasure", count: 1, who: ControllerOfTargetGroup(group_index: 0)),
+  ],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target nonland permanent",
+    effect_indices: [0],
+  )])),
+)

@@ -1,0 +1,51 @@
+{
+  "format_version": 1,
+  "oracle_id": "6de8bdc0-9b2a-4105-bbac-d5a2f73f52dc",
+  "spans": [
+    {
+      "face_id": "pirates_prize",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [
+    "treasure"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q75_treasure_riders::q75_treasure_pirates_prize_draw_is_one_players_private_action",
+      "covers": "actual Pirate's Prize draws exactly two private cards and creates a Treasure"
+    },
+    {
+      "test": "scenario q75_treasure_riders::q75_treasure_riders_apply_their_printed_bodies_and_exact_costs",
+      "covers": "actual Pirate's Prize applies its printed body and creates the Treasure for its printed cost"
+    },
+    {
+      "test": "scenario q75_treasure_riders::q75_treasure_riders_reject_underfunded_casts",
+      "covers": "actual Pirate's Prize rejects an underfunded cast"
+    },
+    {
+      "test": "mechanic_registry::q75_treasure_riders::q75_treasure_riders_map_definitions",
+      "covers": "reviewed identity, characteristics and typed Treasure-rider definition of pirate's prize"
+    },
+    {
+      "test": "mechanic_registry::q75_treasure_riders::q75_treasure_riders_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for pirate's prize"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

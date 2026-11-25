@@ -1,0 +1,23 @@
+// Oracle ad09b3c3-c8e7-481c-8c45-e7f234935117; source/rulings checked 2026-11-24 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.13 (exile), 115.1a/601.2c (nonland-permanent target), 608.2b (stale target) and 119.3
+// (the caster loses 3 life). The pinned 2024-04-12 ruling confirms a stale sole target prevents
+// both the exile and the life loss. Copy of Utter End's exile with Vapor Snag's controller life loss
+// replaced by the printed self loss.
+(
+  id: "anguished_unmaking",
+  name: "Anguished Unmaking",
+  face_id: "anguished_unmaking",
+  mana_cost: "{1}{W}{B}",
+  types: ["Instant"],
+  spell_effect: [
+    Exile(subject: Chosen((kind: AnyPermanent, excluded_permanent_types: [Land]))),
+    LoseLife(amount: Fixed(3)),
+  ],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target nonland permanent",
+    effect_indices: [0],
+  )])),
+)

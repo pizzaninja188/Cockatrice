@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "4c9bcba6-87b5-4fb3-97ee-6fe5b739337d",
+  "spans": [
+    {
+      "face_id": "consider",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "consider",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::LibraryPartition",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "LibraryPartitionKind::Surveil",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q75_surveil_cantrips::q75_surveil_canary_simplest_consider_surveils_one_then_draws",
+      "covers": "actual Consider surveils one before drawing one"
+    },
+    {
+      "test": "scenario q75_surveil_cantrips::q75_surveil_canary_simplest_consider_surveils_one_then_draws",
+      "covers": "actual Consider surveils one before drawing one"
+    },
+    {
+      "test": "scenario q75_surveil_cantrips::q75_surveil_cantrips_reject_underfunded_casts",
+      "covers": "actual Consider rejects an underfunded cast"
+    },
+    {
+      "test": "mechanic_registry::q75_surveil_cantrips::q75_surveil_cantrips_map_definitions",
+      "covers": "reviewed identity, characteristics and typed surveil definition of consider"
+    },
+    {
+      "test": "mechanic_registry::q75_surveil_cantrips::q75_surveil_cantrips_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for consider"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

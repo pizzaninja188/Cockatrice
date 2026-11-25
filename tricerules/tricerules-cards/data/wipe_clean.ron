@@ -1,0 +1,27 @@
+// Oracle f5cbc4f3-4e73-405f-9daf-e5b7c73fa6ee; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.13 (exile), 115.1a/601.2c (enchantment target), 608.2b (stale target), 702.29a
+// (cycling) and 118.3. Pinned 2008-10-01 ruling: cycling is an activated ability.
+(
+  id: "wipe_clean",
+  name: "Wipe Clean",
+  face_id: "wipe_clean",
+  mana_cost: "{1}{W}",
+  types: ["Instant"],
+  spell_effect: [Exile(subject: Chosen((kind: AnyPermanent, permanent_types: [Enchantment])))],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target enchantment",
+    effect_indices: [0],
+  )])),
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      source_zone: Hand,
+      costs: [Mana("{3}"), DiscardSelf],
+      effect: [Draw(count: 1)],
+    ),
+  ],
+)

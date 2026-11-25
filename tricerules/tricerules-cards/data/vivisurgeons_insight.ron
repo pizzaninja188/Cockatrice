@@ -1,0 +1,16 @@
+// Oracle cf6ff089-63d7-4a98-b95d-2837c017a866; source/rulings checked 2026-11-24 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 121.1 (draw), 701.34 (proliferate) and 608.2c (printed order: draw, then proliferate).
+// Pinned 2023-02-04 rulings: any number (including zero) may be chosen for proliferate.
+// Copy of Tezzeret's Gambit's draw-plus-Proliferate composition with a three-card draw.
+(
+  id: "vivisurgeons_insight",
+  name: "Vivisurgeon's Insight",
+  face_id: "vivisurgeons_insight",
+  mana_cost: "{3}{U}{U}",
+  types: ["Sorcery"],
+  spell_effect: [
+    Draw(count: 3),
+    Proliferate,
+  ],
+)

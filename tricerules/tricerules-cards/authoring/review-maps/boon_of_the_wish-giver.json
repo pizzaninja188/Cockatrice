@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "1720d38a-c3c1-4294-85c1-a91fc7179d6f",
+  "spans": [
+    {
+      "face_id": "boon_of_the_wish_giver",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "boon_of_the_wish_giver",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "AbilitySourceZone::Hand",
+      "typed_path": "/faces/0/activated_abilities/0/source_zone"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::DiscardSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q73_batch_a::q73_cycling_card_advantage_cards_apply_their_printed_values_and_cycle",
+      "covers": "actual Boon of the Wish-Giver applies its printed body and cycles for its printed cost"
+    },
+    {
+      "test": "scenario q73_batch_a::q73_cycling_card_advantage_rejects_missing_targets_and_unfunded_cycling",
+      "covers": "actual Boon of the Wish-Giver rejects an underfunded cycling activation"
+    },
+    {
+      "test": "mechanic_registry::q73_batch_a::q73_cycling_card_advantage_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of boon_of_the_wish_giver"
+    },
+    {
+      "test": "mechanic_registry::q73_batch_a::q73_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for boon_of_the_wish_giver"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,72 @@
+{
+  "format_version": 1,
+  "oracle_id": "f2c43b85-8c42-4b23-84c2-bec8d6230039",
+  "spans": [
+    {
+      "face_id": "sky_skiff",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "sky_skiff",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "AbilityCost::TapPermanents",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::AddTypes",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Source",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q86_batch_b::q86_vehicle_cards_crew_makes_the_printed_artifact_creature",
+      "covers": "shared 02-crew-vehicles evidence"
+    },
+    {
+      "test": "scenario q86_batch_b::q86_vehicle_cards_reject_insufficient_power_and_other_creature_crew",
+      "covers": "shared 02-crew-vehicles evidence"
+    },
+    {
+      "test": "scenario q86_batch_b::q86_vehicle_cards_crew_ends_at_end_of_turn",
+      "covers": "shared 02-crew-vehicles evidence"
+    },
+    {
+      "test": "scenario q86_batch_b::q86_vehicle_cards_cast_as_noncreature_artifacts",
+      "covers": "shared 02-crew-vehicles evidence"
+    },
+    {
+      "test": "scenario q86_batch_b::q86_vehicle_canary_sky_skiff_crews_into_a_flying_body",
+      "covers": "actual sky_skiff canary"
+    },
+    {
+      "test": "mechanic_registry::q86_batch_a::q86_crew_vehicles_map_definitions",
+      "covers": "actual sky_skiff registry identity and fingerprint"
+    },
+    {
+      "test": "mechanic_registry::q86_batch_a::q86_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual sky_skiff registry identity and fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

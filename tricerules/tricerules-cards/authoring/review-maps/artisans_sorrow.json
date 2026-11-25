@@ -1,0 +1,62 @@
+{
+  "format_version": 1,
+  "oracle_id": "115fd5ac-460b-49a3-83ed-9d56a7aecb14",
+  "spans": [
+    {
+      "face_id": "artisans_sorrow",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetFilter",
+      "typed_path": "/faces/0/spell_effect/0/Destroy/subject/Chosen"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    },
+    {
+      "symbol": "SpellEffectKind::Scry",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q60_batch_a::q60_artifact_enchantment_cards_hit_both_printed_types",
+      "covers": "destroys either printed type and rejects a creature target"
+    },
+    {
+      "test": "scenario q60_batch_a::q60_artifact_enchantment_riders_scry_treasure_draw_and_flashback",
+      "covers": "applies the printed scry, Treasure, draw and flashback riders"
+    },
+    {
+      "test": "scenario q60_batch_a::q60_artifact_enchantment_stale_target_fizzles_without_the_rider",
+      "covers": "a stale sole target prevents the rider and creates no Treasure"
+    },
+    {
+      "test": "scenario q60_batch_a::q60_artifact_enchantment_indestructible_target_still_gets_the_rider",
+      "covers": "a legal indestructible target survives and still gets the rider"
+    },
+    {
+      "test": "mechanic_registry::q60_batch_a::q60_artifact_enchantment_map_definitions",
+      "covers": "typed identity and effects"
+    },
+    {
+      "test": "mechanic_registry::q60_batch_a::q60_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

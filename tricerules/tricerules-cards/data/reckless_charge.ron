@@ -1,0 +1,19 @@
+// Oracle 45bee121-0beb-4901-9473-20e4704ba6dc; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1a (one target creature), 611.2a/514.2 (until end of turn), 613.4c (layer 7c),
+// 702.10 (haste), 702.34a-d (flashback alternative cost and exile) and 601.2 (sorcery timing).
+// The pinned 2021-03-19 rulings confirm a flashback cast still follows normal timing and always
+// exiles afterward, whether it resolves, is countered or leaves the stack another way.
+(
+  id: "reckless_charge",
+  name: "Reckless Charge",
+  face_id: "reckless_charge",
+  mana_cost: "{R}",
+  flashback_cost: Some("{2}{R}"),
+  types: ["Sorcery"],
+  spell_effect: [
+    PumpTarget(power: 3, toughness: 0, subject: Chosen((kind: Creature))),
+    GrantKeywords(subject: Chosen((kind: Creature)), keywords: [Haste]),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0, 1])])),
+)

@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "14291205-1ac2-4804-b365-4f65377d5803",
+  "spans": [
+    {
+      "face_id": "grey_havens_navigator",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "grey_havens_navigator",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flash",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Scry",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q84_etb_scry_riders::q84_scry_canary_grey_havens_navigator_scries_one_with_flash",
+      "covers": "canary simplest: printed Flash, body, exact Scry 1 offer and bottoming choice"
+    },
+    {
+      "test": "scenario q84_etb_scry_riders::q84_scry_cards_offer_their_exact_printed_counts",
+      "covers": "the actual card offers exactly one card and accepts only its printed scry count"
+    },
+    {
+      "test": "mechanic_registry::q84_batch_a::q84_etb_scry_riders_map_definitions",
+      "covers": "reviewed identity, Oracle line mapping, printed keyword and entry trigger"
+    },
+    {
+      "test": "mechanic_registry::q84_batch_a::q84_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

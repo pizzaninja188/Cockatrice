@@ -1,0 +1,30 @@
+// Oracle 92c824da-2351-43bd-9fa0-d09709ad8205; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// Pinned 2020-06-23 ruling: the same creature cannot be targeted twice by the one trigger.
+// CR 603.6a (entry trigger), 115.3 (distinct targets), 122.1 (counters), 702.15 (lifelink) and
+// 608.2b (stale target). Copy of Felidar Savior's other-creature counter placement.
+(
+  id: "basris_acolyte",
+  name: "Basri's Acolyte",
+  face_id: "basris_acolyte",
+  mana_cost: "{2}{W}{W}",
+  types: ["Creature", "Cat", "Cleric"],
+  power: 2,
+  toughness: 3,
+  keywords: [Lifelink],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [PutCounters(
+      counter: PlusOnePlusOne,
+      count: 1,
+      subject: Chosen((kind: Creature, controller: You, excluded_objects: [Source])),
+    )],
+    targeting: Some((groups: [(
+      min: 0, max: 2,
+      prompt: "Choose up to two other target creatures you control",
+      effect_indices: [0],
+    )])),
+  )],
+)

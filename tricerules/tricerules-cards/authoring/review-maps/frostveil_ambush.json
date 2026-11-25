@@ -1,0 +1,78 @@
+{
+  "format_version": 1,
+  "oracle_id": "5cf069cf-3a10-4427-a02b-5405429b5652",
+  "spans": [
+    {
+      "face_id": "frostveil_ambush",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    },
+    {
+      "face_id": "frostveil_ambush",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Tap",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::SkipNextUntap",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    },
+    {
+      "symbol": "AbilitySourceZone::Hand",
+      "typed_path": "/faces/0/activated_abilities/0/source_zone"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::DiscardSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q70_batch_a::q70_tap_skip_cards_accept_already_tapped_creatures",
+      "covers": "the actual card still skips the next untap of an already-tapped target"
+    },
+    {
+      "test": "scenario q70_batch_a::q70_tap_skip_frostveil_ambush_cycles_from_hand",
+      "covers": "the actual card cycles from hand for {1}, discards itself and draws one"
+    },
+    {
+      "test": "scenario q70_batch_a::q70_tap_skip_cards_reject_unfunded_casts_and_cycling",
+      "covers": "the actual cycling ability rejects an unpaid activation"
+    },
+    {
+      "test": "mechanic_registry::q70_batch_a::q70_batch_a_cohorts_map_definitions",
+      "covers": "reviewed identity, printed characteristics and typed definition of frostveil_ambush"
+    },
+    {
+      "test": "mechanic_registry::q70_batch_a::q70_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for frostveil_ambush"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

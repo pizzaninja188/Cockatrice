@@ -1,0 +1,32 @@
+// Oracle b6859c7a-4c4d-4652-938f-ecedce29d506; source/rulings checked 2026-11-24 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.17 (reach), 603.6a (entry trigger), 111.10a/701.7 (Food token creation), and 702.29a-f
+// (typecycling is cycling with its own search instruction). Pinned 2023-06-16 rulings confirm
+// typecycling is cycling and does not draw. Copy of Zog, Triceraton Castaway's Forestcycling
+// action with Sweettooth Witch's entry Food token.
+(
+  id: "generous_ent",
+  name: "Generous Ent",
+  face_id: "generous_ent",
+  mana_cost: "{5}{G}",
+  types: ["Creature", "Treefolk"],
+  power: 5,
+  toughness: 7,
+  keywords: [Reach],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [CreateTokens(token: "food", count: 1)],
+  )],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([3]),
+    source_zone: Hand,
+    costs: [Mana("{1}"), DiscardSelf],
+    effect: [SearchLibrary(
+      filter: Some((required_subtypes: ["Forest"])),
+      reveal: true,
+    )],
+  )],
+)

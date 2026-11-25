@@ -1,0 +1,69 @@
+{
+  "format_version": 1,
+  "oracle_id": "9d8d88dd-c266-4b7d-a756-ac2d8976ca89",
+  "spans": [
+    {
+      "face_id": "rally_to_battle",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpAll",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "CreatureScopeFilter",
+      "typed_path": "/faces/0/spell_effect/0/PumpAll/filter"
+    },
+    {
+      "symbol": "SpellEffectKind::UntapAll",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "MassPlayerSet",
+      "typed_path": "/faces/0/spell_effect/1/UntapAll/players"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q78_team_untap::q78_team_untap_canary_simplest_mobilize_untaps_only_your_creatures",
+      "covers": "canary simplest Mobilize untaps only its controller creatures"
+    },
+    {
+      "test": "scenario q78_team_untap::q78_team_untap_canary_hardest_rallying_roar_pumps_and_untaps_even_untapped_creatures",
+      "covers": "canary hardest Rallying Roar pumps already-untapped creatures and untaps all"
+    },
+    {
+      "test": "scenario q78_team_untap::q78_team_untap_cards_apply_only_their_printed_riders",
+      "covers": "each actual card applies exactly its printed pump, untap and draw"
+    },
+    {
+      "test": "scenario q78_team_untap::q78_team_untap_cards_do_not_affect_creatures_that_enter_later",
+      "covers": "a creature that enters later is not pumped"
+    },
+    {
+      "test": "scenario q78_team_untap::q78_team_untap_mobilize_keeps_sorcery_timing",
+      "covers": "Mobilize keeps its printed sorcery timing"
+    },
+    {
+      "test": "scenario q78_team_untap::q78_team_untap_pump_does_not_apply_to_a_creature_controlled_later",
+      "covers": "a creature controlled later in the turn is not retroactively pumped"
+    },
+    {
+      "test": "mechanic_registry::q78_team_untap::q78_team_untap_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of rally_to_battle"
+    },
+    {
+      "test": "mechanic_registry::q78_team_untap::q78_team_untap_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for rally_to_battle"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

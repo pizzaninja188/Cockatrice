@@ -1,0 +1,33 @@
+// Oracle 2b34f341-42bc-408a-85cc-b2d8797612b8; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 611.3/613.4c (the layer-7c self modifier and the live Swamp check; the bonus is binary, not
+// per land) and 701.19a-c (regeneration shield). No pinned ruling. Copy of Mire Kavu's Swamp
+// condition plus the reviewed regenerate activated-ability shape.
+(
+  id: "crimson_muckwader",
+  name: "Crimson Muckwader",
+  face_id: "crimson_muckwader",
+  mana_cost: "{1}{R}",
+  types: ["Creature", "Lizard"],
+  power: 2,
+  toughness: 1,
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: ConditionalSelfModifier(
+      condition: BattlefieldAggregate(
+        filter: (controllers: Controller, required_subtypes: ["Swamp"]),
+        aggregate: Count,
+        min: Some(1),
+      ),
+      delta_power: 1,
+      delta_toughness: 1,
+    ),
+  )],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    costs: [Mana("{2}{B}")],
+    effect: [Regenerate(subject: Source)],
+  )],
+)

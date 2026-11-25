@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "2361ca87-6352-4ba3-8d91-b3d71242914d",
+  "spans": [
+    {
+      "face_id": "favorable_winds",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::AnthemPt",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "CreatureScopeFilter.matching.required_keywords",
+      "typed_path": "/faces/0/static_abilities/0/definition/AnthemPt/filter/matching/required_keywords"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q57_batch_a::q57_static_anthems_cards_apply_to_later_entries_and_stop_when_the_source_leaves",
+      "covers": "the anthem pumps only controlled flyers, affects later entries and ends when the source leaves"
+    },
+    {
+      "test": "mechanic_registry::q57_batch_a::q57_static_anthems_map_definitions",
+      "covers": "reviewed identity and typed static anthem of favorable_winds"
+    },
+    {
+      "test": "mechanic_registry::q57_batch_a::q57_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for favorable_winds"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

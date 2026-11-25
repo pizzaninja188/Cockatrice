@@ -1,0 +1,27 @@
+// Oracle f60fb81a-969a-476c-a227-5231bbed4ad4; source checked 2026-11-23 against the pinned
+// Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// No pinned ruling. CR 701.13 (exile), 115.1/601.2c (one artifact-or-enchantment target),
+// 608.2b (stale target), 702.29a (cycling) and 118.3 (printed cycling cost).
+(
+  id: "forsake_the_worldly",
+  name: "Forsake the Worldly",
+  face_id: "forsake_the_worldly",
+  mana_cost: "{2}{W}",
+  types: ["Instant"],
+  spell_effect: [Exile(subject: Chosen((kind: AnyPermanent, permanent_types: [Artifact, Enchantment])))],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target artifact or enchantment",
+    effect_indices: [0],
+  )])),
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      source_zone: Hand,
+      costs: [Mana("{2}"), DiscardSelf],
+      effect: [Draw(count: 1)],
+    ),
+  ],
+)

@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "08cb8a30-9cb4-4517-bee5-8848aa60d1a2",
+  "spans": [
+    {
+      "face_id": "zuran_orb",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::SacrificePermanent",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q77_land_sac_life::q77_land_sac_life_canary_simplest_zuran_orb_sacrifices_a_land_for_two_life",
+      "covers": "canary simplest actual Zuran Orb sacrifices a land for exactly two life"
+    },
+    {
+      "test": "scenario q77_land_sac_life::q77_land_sac_life_cards_use_their_printed_costs_and_life_totals",
+      "covers": "actual zuran_orb sacrifices a any land as its cost and gains its printed life total"
+    },
+    {
+      "test": "scenario q77_land_sac_life::q77_land_sac_life_cards_reject_nonmatching_or_missing_land_costs_atomically",
+      "covers": "actual zuran_orb rejects a missing or nonmatching sacrifice cost atomically"
+    },
+    {
+      "test": "mechanic_registry::q77_land_sac_life::q77_land_sac_life_map_definitions",
+      "covers": "reviewed identity, characteristics and sacrifice/GainLife definition of zuran_orb"
+    },
+    {
+      "test": "mechanic_registry::q77_land_sac_life::q77_land_sac_life_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for zuran_orb"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

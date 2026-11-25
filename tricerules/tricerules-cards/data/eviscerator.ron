@@ -1,0 +1,23 @@
+// Oracle 710e6d6a-caaa-4b76-82c8-e363e9438bec; source/rulings checked 2026-11-25 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.16a-b (protection from white), 603.6a (enters-the-battlefield trigger), 119.3 (life loss
+// adjusts the total) and 119.4 (the life is lost as an effect, not paid). Pinned 2004-10-04
+// ruling: the entry effect is loss of life, not damage, and it can't be prevented.
+(
+  id: "eviscerator",
+  name: "Eviscerator",
+  face_id: "eviscerator",
+  mana_cost: "{3}{B}{B}",
+  types: ["Creature", "Phyrexian", "Horror"],
+  power: 5,
+  toughness: 5,
+  protections: [Color(White)],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [LoseLife(amount: Fixed(5))],
+    ),
+  ],
+)

@@ -1,0 +1,72 @@
+{
+  "format_version": 1,
+  "oracle_id": "6de38910-8d0d-4fac-b9db-c80ffd1850ea",
+  "spans": [
+    {
+      "face_id": "bone_pit_brute",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "bone_pit_brute",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Chosen",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/PumpTarget/subject"
+    },
+    {
+      "symbol": "TargetKind::Creature",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/PumpTarget/subject/Chosen/kind"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q81_etb_target_pump::q81_etb_pump_cards_apply_printed_pump_and_body",
+      "covers": "actual bone_pit_brute is cast and its entry trigger applies the printed pump"
+    },
+    {
+      "test": "scenario q81_etb_target_pump::q81_etb_pump_cards_target_any_creature",
+      "covers": "actual bone_pit_brute may target any creature, including an opponent's"
+    },
+    {
+      "test": "scenario q81_etb_target_pump::q81_etb_pump_cards_pump_expires_at_end_of_turn",
+      "covers": "actual bone_pit_brute pump ends during cleanup"
+    },
+    {
+      "test": "scenario q81_etb_target_pump::q81_etb_pump_cards_stale_target_fizzles_without_retargeting",
+      "covers": "actual bone_pit_brute does not retarget after its chosen creature leaves"
+    },
+    {
+      "test": "mechanic_registry::q81_etb_target_pump::q81_etb_pump_map_definitions",
+      "covers": "reviewed identity and complete typed shape of bone_pit_brute (Menace body + entry target pump)"
+    },
+    {
+      "test": "mechanic_registry::q81_etb_target_pump::q81_etb_pump_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for bone_pit_brute"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

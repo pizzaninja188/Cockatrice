@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "4960c3a0-77ca-48d8-b565-6c5f1e6522cf",
+  "spans": [
+    {
+      "face_id": "press_for_answers",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    },
+    {
+      "face_id": "press_for_answers",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/2"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Tap",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::SkipNextUntap",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_effect/2"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [
+    "clue"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q70_batch_a::q70_tap_skip_press_for_answers_investigates_with_a_legal_target",
+      "covers": "actual Press for Answers taps, skips the next untap, and creates one Clue"
+    },
+    {
+      "test": "scenario q70_batch_a::q70_tap_skip_all_illegal_targets_fizzle_without_riders",
+      "covers": "the actual card creates no Clue when its only target is illegal"
+    },
+    {
+      "test": "mechanic_registry::q70_batch_a::q70_batch_a_cohorts_map_definitions",
+      "covers": "reviewed identity, printed characteristics and typed definition of press_for_answers"
+    },
+    {
+      "test": "mechanic_registry::q70_batch_a::q70_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for press_for_answers"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "2b34f341-42bc-408a-85cc-b2d8797612b8",
+  "spans": [
+    {
+      "face_id": "crimson_muckwader",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "crimson_muckwader",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::ConditionalSelfModifier",
+      "typed_path": "/faces/0/static_abilities/0"
+    },
+    {
+      "symbol": "GameCondition::BattlefieldAggregate",
+      "typed_path": "/faces/0/static_abilities/0/definition/ConditionalSelfModifier/condition"
+    },
+    {
+      "symbol": "SpellEffectKind::Regenerate",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q63_batch_a::q63_pump_cards_apply_their_printed_land_conditions",
+      "covers": "the actual card gains exactly +1/+1 only from its controller's Swamp and loses it when the Swamp leaves"
+    },
+    {
+      "test": "scenario q63_batch_a::q63_pump_cards_activate_their_exact_printed_abilities",
+      "covers": "the actual card spends exactly {2}{B} and gains one regeneration shield"
+    },
+    {
+      "test": "mechanic_registry::q63_batch_a::q63_conditional_pump_map_definitions",
+      "covers": "reviewed identity, printed characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q63_batch_a::q63_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

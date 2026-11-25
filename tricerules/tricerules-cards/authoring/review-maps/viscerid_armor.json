@@ -1,0 +1,76 @@
+{
+  "format_version": 1,
+  "oracle_id": "87b4cbec-3521-4bdb-bf01-64ddb526b655",
+  "spans": [
+    {
+      "face_id": "viscerid_armor",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "viscerid_armor",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "viscerid_armor",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::AuraAttach",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "SpellEffectKind::ReturnToOwnersHand",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Source",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/ReturnToOwnersHand/subject"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q68_batch_a::q68_aura_self_return_canary_simplest_viscerid_armor_pumps_and_returns",
+      "covers": "actual viscerid_armor attached modifier and source return"
+    },
+    {
+      "test": "scenario q68_batch_a::q68_aura_self_return_fizzles_when_the_enchant_target_leaves",
+      "covers": "actual Viscerid Armor fizzles when its enchant target leaves before resolution"
+    },
+    {
+      "test": "scenario q68_batch_a::q68_aura_self_return_belongs_to_the_aura_controller_and_needs_the_battlefield",
+      "covers": "shared controller-only authorization and stale-source evidence"
+    },
+    {
+      "test": "mechanic_registry::q68_batch_a::q68_batch_a_cohorts_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q68_batch_a::q68_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

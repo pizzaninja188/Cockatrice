@@ -1,0 +1,20 @@
+// Oracle eadd9559-6dcb-4b96-8c95-58abddd0e120; source/rulings checked 2026-11-24 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 601.2 (casting a spell), 603.2/603.3 (the cast trigger) and 120.3 (each opponent is dealt
+// 1 damage). The card has no pinned ruling; a noncreature spell is any spell whose card types
+// exclude Creature (CR 205.2a).
+(
+  id: "kessig_flamebreather",
+  name: "Kessig Flamebreather",
+  face_id: "kessig_flamebreather",
+  mana_cost: "{1}{R}",
+  types: ["Creature", "Human", "Shaman"],
+  power: 1,
+  toughness: 3,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPlayerCastsSpell(filter: (card_type: Some(Noncreature))),
+    effect: [DamagePlayer(amount: 1, who: EachOpponent)],
+  )],
+)

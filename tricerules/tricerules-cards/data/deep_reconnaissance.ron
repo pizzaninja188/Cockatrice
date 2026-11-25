@@ -1,0 +1,21 @@
+// Oracle a823e880-3d5f-4186-a7da-e710a7db583c; source/rulings checked 2026-11-24 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.23 (hidden-zone search; may fail to find), 701.24a (shuffle after searching) and
+// 702.34a-d (flashback alternative cost and exile).
+// Pinned 2021-03-19 rulings: flashback always exiles the spell afterward and still follows the
+// card type's timing. Copy of They Went This Way's tapped basic-land search and Firebolt's
+// flashback cost.
+(
+  id: "deep_reconnaissance",
+  name: "Deep Reconnaissance",
+  face_id: "deep_reconnaissance",
+  mana_cost: "{2}{G}",
+  types: ["Sorcery"],
+  flashback_cost: Some("{4}{G}"),
+  spell_effect: [
+    SearchLibrary(
+      filter: Some((card_type: Some(BasicLand))),
+      destination: Battlefield(tapped: true),
+    ),
+  ],
+)

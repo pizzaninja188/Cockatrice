@@ -1,0 +1,61 @@
+{
+  "format_version": 1,
+  "oracle_id": "e42450c7-a9de-412f-b439-76f2f9b6031b",
+  "spans": [
+    {
+      "face_id": "keen_eyed_raven",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "keen_eyed_raven",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Chosen",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/PutCounters/subject"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q65_batch_a::q65_counters_cards_apply_their_printed_target_scopes",
+      "covers": "actual Keen-Eyed Raven counters another controlled creature, rejects itself and opponents, and is removed with no legal target"
+    },
+    {
+      "test": "mechanic_registry::q65_batch_a::q65_etb_counter_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of keen_eyed_raven"
+    },
+    {
+      "test": "mechanic_registry::q65_batch_a::q65_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for keen_eyed_raven"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

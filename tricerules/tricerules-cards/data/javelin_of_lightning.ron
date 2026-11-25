@@ -1,0 +1,47 @@
+// Oracle 3f244320-3e74-4eff-ba4e-a345700c40c9; source/rulings checked 2026-11-22 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 301.5/702.6 (Equipment and equip), 603.6a (entry trigger), 701.3 (attach), 613.4c
+// (attached P/T modifier), 702.8a (flash), 613.1f (keyword layer) and 611.3b/109.5
+// ("during your turn" re-evaluates continuously for the Equipment's controller).
+// Copy of the reviewed Quick-Draw Katana conditional attached modifier.
+(
+  id: "javelin_of_lightning",
+  name: "Javelin of Lightning",
+  face_id: "javelin_of_lightning",
+  mana_cost: "{1}{R}",
+  types: ["Artifact", "Equipment"],
+  keywords: [Flash],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([4]),
+      costs: [Mana("{4}")],
+      effect: [Equip()],
+    ),
+  ],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [AttachSource(target: (kind: Creature, controller: You))],
+      targeting: Some(
+        (
+          groups: [(min: 1, max: 1, effect_indices: [0])],
+        ),
+      ),
+    ),
+  ],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([3]),
+      definition: AttachedModifier(
+        condition: Some(ActivePlayer(players: Controller)),
+        delta_power: 2,
+        delta_toughness: 0,
+        keywords: [FirstStrike],
+      ),
+    ),
+  ],
+)

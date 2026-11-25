@@ -1,0 +1,53 @@
+{
+  "format_version": 1,
+  "oracle_id": "8186fd80-015f-470c-9e1c-cbf45764a057",
+  "spans": [
+    {
+      "face_id": "soul_feast",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::TargetPlayerLosesLife",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetFilter",
+      "typed_path": "/faces/0/spell_effect/0/TargetPlayerLosesLife/target"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q61_batch_a::q61_drain_life_cards_apply_exact_amounts_and_printed_draws",
+      "covers": "exact printed life loss, life gain and draw"
+    },
+    {
+      "test": "scenario q61_batch_a::q61_drain_life_requires_a_player_target",
+      "covers": "the player target is required"
+    },
+    {
+      "test": "mechanic_registry::q61_batch_a::q61_drain_life_map_definitions",
+      "covers": "typed identity and effects"
+    },
+    {
+      "test": "mechanic_registry::q61_batch_a::q61_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

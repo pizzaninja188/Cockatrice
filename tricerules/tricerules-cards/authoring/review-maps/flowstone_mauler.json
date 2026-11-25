@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "ea205569-b5a0-4c86-b825-67cd48d3b2e8",
+  "spans": [
+    {
+      "face_id": "flowstone_mauler",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "flowstone_mauler",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Trample",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q85_batch_a::q85_pump_cards_apply_the_exact_printed_pump_to_the_source_only",
+      "covers": "the actual card pumps only itself and keeps Trample"
+    },
+    {
+      "test": "scenario q85_batch_a::q85_pump_cards_stack_two_activations_and_die_at_zero_toughness",
+      "covers": "repeated activations accumulate and CR 704.5f applies at zero toughness"
+    },
+    {
+      "test": "scenario q85_batch_a::q85_pump_cards_expire_at_cleanup",
+      "covers": "the pump ends at cleanup"
+    },
+    {
+      "test": "scenario q85_batch_a::q85_pump_cards_reject_activation_without_the_printed_mana",
+      "covers": "the printed {R} is required and a rejected activation changes no state"
+    },
+    {
+      "test": "scenario q85_batch_a::q85_pump_cards_carry_their_exact_printed_characteristics",
+      "covers": "printed 4/5 body and Trample"
+    },
+    {
+      "test": "mechanic_registry::q85_batch_a::q85_flowstone_self_pump_map_definitions",
+      "covers": "reviewed identity, Oracle line mapping, printed keyword and {R} pump"
+    },
+    {
+      "test": "mechanic_registry::q85_batch_a::q85_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

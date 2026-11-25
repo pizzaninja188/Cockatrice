@@ -1,0 +1,22 @@
+// Oracle 1de2c216-0921-45eb-9613-a68d18fbee77; source/rulings checked 2026-11-24 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1a/601.2c (target attacking creature), 608.2b (stale target fizzles the whole spell),
+// 701.8 (destroy) and 121.1 (draw). The pinned 2017-09-29 ruling: an illegal target means no
+// draw; a legal indestructible target still draws.
+// Copy of Immolating Glare's target plus Slice in Twain's draw.
+(
+  id: "bright_reprisal",
+  name: "Bright Reprisal",
+  face_id: "bright_reprisal",
+  mana_cost: "{4}{W}",
+  types: ["Instant"],
+  spell_effect: [
+    Destroy(subject: Chosen((kind: Creature, combat_role: Attacking))),
+    Draw(count: 1),
+  ],
+  targeting: Some((groups: [(
+    min: 1, max: 1,
+    prompt: "Choose target attacking creature",
+    effect_indices: [0],
+  )])),
+)

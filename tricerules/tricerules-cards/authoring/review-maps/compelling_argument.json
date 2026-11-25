@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "686e0b86-121c-45be-842d-c83d3b6547f6",
+  "spans": [
+    {
+      "face_id": "compelling_argument",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "compelling_argument",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::MillTargetPlayer",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "AbilitySourceZone::Hand",
+      "typed_path": "/faces/0/activated_abilities/0/source_zone"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::DiscardSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q73_batch_a::q73_cycling_canary_hardest_compelling_argument_mills_the_chosen_player_and_cycles",
+      "covers": "actual Compelling Argument mills the chosen player's top five"
+    },
+    {
+      "test": "scenario q73_batch_a::q73_cycling_card_advantage_cards_apply_their_printed_values_and_cycle",
+      "covers": "actual Compelling Argument applies its printed body and cycles for its printed cost"
+    },
+    {
+      "test": "scenario q73_batch_a::q73_cycling_card_advantage_rejects_missing_targets_and_unfunded_cycling",
+      "covers": "actual Compelling Argument rejects an underfunded cycling activation"
+    },
+    {
+      "test": "mechanic_registry::q73_batch_a::q73_cycling_card_advantage_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of compelling_argument"
+    },
+    {
+      "test": "mechanic_registry::q73_batch_a::q73_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for compelling_argument"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

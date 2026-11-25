@@ -1,0 +1,15 @@
+// Oracle a503d302-6b12-4d82-9ba6-73efbcb1b1a2; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 303.4 (Aura attach) and 613.1b (control-changing layer). No pinned ruling.
+// Copy of Mind Control with the printed {3}{U}{U} cost.
+(
+  id: "persuasion",
+  name: "Persuasion",
+  face_id: "persuasion",
+  mana_cost: "{3}{U}{U}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach()],
+  static_abilities: [
+    (ability_id: "static_01", presentation: OracleLines([2]), definition: ControlsAttached),
+  ],
+)

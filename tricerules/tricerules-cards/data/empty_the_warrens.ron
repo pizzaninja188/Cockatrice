@@ -1,0 +1,13 @@
+// Oracle 3a59c882-8bb8-49ba-862f-125020dd5bec; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.40a (Storm copies), 608.2 (resolution) and 111.1/111.4 (creating 1/1 red Goblin tokens).
+// Pinned rulings cover copies being non-cast and each copy resolving independently.
+(
+  id: "empty_the_warrens",
+  name: "Empty the Warrens",
+  face_id: "empty_the_warrens",
+  mana_cost: "{3}{R}",
+  types: ["Sorcery"],
+  spell_keywords: [Storm],
+  spell_effect: [CreateTokens(token: "goblin_r_1_1", count: 2)],
+)

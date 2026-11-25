@@ -1,0 +1,23 @@
+// Oracle 9e66f2d6-cc51-4747-914d-2c04e439da2b; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 113.6g (an ability that says a spell can't be countered functions on the stack), 701.6
+// (counter) and 702.16a-b (protection from blue). The pinned 2004-10-04 rulings confirm a
+// counterspell still resolves and its other effects happen, and only countering is ignored.
+// Copy of Surrak, Elusive Hunter's uncounterable static plus White Knight's color protection.
+(
+  id: "scragnoth",
+  name: "Scragnoth",
+  face_id: "scragnoth",
+  mana_cost: "{4}{G}",
+  types: ["Creature", "Beast"],
+  power: 3,
+  toughness: 4,
+  protections: [Color(Blue)],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: SpellCannotBeCountered,
+    ),
+  ],
+)

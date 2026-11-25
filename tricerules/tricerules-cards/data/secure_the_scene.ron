@@ -1,0 +1,23 @@
+// Oracle d6a9746c-eba5-4735-aec1-e70edba2c686; source/rulings checked 2026-11-24 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.13 (exile), 115.1a/601.2c (nonland-permanent target), 608.2b (stale target),
+// 111.3 (the token's controller creates it) and 701.7 (creating tokens). The pinned 2020-06-23
+// ruling confirms a stale sole target prevents the Soldier. Copy of Zuko's Exile's controller
+// recipient with the printed Soldier token.
+(
+  id: "secure_the_scene",
+  name: "Secure the Scene",
+  face_id: "secure_the_scene",
+  mana_cost: "{4}{W}",
+  types: ["Sorcery"],
+  spell_effect: [
+    Exile(subject: Chosen((kind: AnyPermanent, excluded_permanent_types: [Land]))),
+    CreateTokens(token: "soldier_w_1_1", count: 1, who: ControllerOfTargetGroup(group_index: 0)),
+  ],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target nonland permanent",
+    effect_indices: [0],
+  )])),
+)

@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "75e8907d-f726-4a63-ba8b-c0fd4936734e",
+  "spans": [
+    {
+      "face_id": "curate",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "curate",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::LibraryPartition",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "LibraryPartitionKind::Surveil",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q75_surveil_cantrips::q75_surveil_curate_surveils_two_keeps_the_rest_and_draws",
+      "covers": "actual Curate surveils two, keeps the remainder on top and draws"
+    },
+    {
+      "test": "scenario q75_surveil_cantrips::q75_surveil_curate_surveils_two_keeps_the_rest_and_draws",
+      "covers": "actual Curate surveils for its printed count before the printed draw"
+    },
+    {
+      "test": "scenario q75_surveil_cantrips::q75_surveil_cantrips_reject_underfunded_casts",
+      "covers": "actual Curate rejects an underfunded cast"
+    },
+    {
+      "test": "mechanic_registry::q75_surveil_cantrips::q75_surveil_cantrips_map_definitions",
+      "covers": "reviewed identity, characteristics and typed surveil definition of curate"
+    },
+    {
+      "test": "mechanic_registry::q75_surveil_cantrips::q75_surveil_cantrips_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for curate"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

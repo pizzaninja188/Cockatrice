@@ -1,0 +1,21 @@
+// Oracle a30724f0-d174-408e-8baf-4bba3cbc45b5; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.6 (counter), 702.29a-b (basic landcycling is a hand-zone activated ability and a form of
+// cycling), 601.2h (cost checked before payment), 701.23/701.20 (search and reveal), 701.24
+// (shuffle). Pinned 2009-02-01 rulings: the found card is not drawn, the search may fail and still
+// shuffle, and the ability is activated, not a spell. Copy of the reviewed absorb_vis typecycle.
+(
+  id: "traumatic_visions",
+  name: "Traumatic Visions",
+  face_id: "traumatic_visions",
+  mana_cost: "{3}{U}{U}",
+  types: ["Instant"],
+  spell_effect: [CounterTargetSpell()],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    source_zone: Hand,
+    costs: [Mana("{1}{U}"), DiscardSelf],
+    effect: [SearchLibrary(filter: Some((card_type: Some(BasicLand))), reveal: true)],
+  )],
+)

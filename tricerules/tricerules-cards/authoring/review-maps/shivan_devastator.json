@@ -1,0 +1,72 @@
+{
+  "format_version": 1,
+  "oracle_id": "b7daa74c-6142-4107-9355-be98af6ccf13",
+  "spans": [
+    {
+      "face_id": "shivan_devastator",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "shivan_devastator",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::EntersWithCounters",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "CounterKind::PlusOnePlusOne",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "Amount::X",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "Keyword::Haste",
+      "typed_path": "/faces/0/keywords"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q86_batch_c::q86_x_cards_enter_with_exactly_the_chosen_x",
+      "covers": "shared 03-x-entry-counters evidence"
+    },
+    {
+      "test": "scenario q86_batch_c::q86_x_cards_keep_their_printed_keywords",
+      "covers": "shared 03-x-entry-counters evidence"
+    },
+    {
+      "test": "scenario q86_batch_c::q86_x_cards_die_at_zero_toughness_when_cast_for_zero",
+      "covers": "shared 03-x-entry-counters evidence"
+    },
+    {
+      "test": "scenario q86_batch_c::q86_x_cards_require_the_exact_printed_cost",
+      "covers": "shared 03-x-entry-counters evidence"
+    },
+    {
+      "test": "mechanic_registry::q86_batch_a::q86_x_entry_counters_map_definitions",
+      "covers": "actual shivan_devastator registry identity and fingerprint"
+    },
+    {
+      "test": "mechanic_registry::q86_batch_a::q86_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual shivan_devastator registry identity and fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

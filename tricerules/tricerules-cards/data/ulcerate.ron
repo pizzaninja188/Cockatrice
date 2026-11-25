@@ -1,0 +1,18 @@
+// Oracle 4a9e73b7-8c8b-4489-b670-ce49c2c8a46a; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1a/601.2c (target at cast), 611.2a/514.2 (until end of turn), 613.4c (layer 7c),
+// 119.3 (life loss) and 608.2b (an illegal sole target stops the whole spell). The pinned
+// 2017-11-17 ruling confirms the life loss is not a cost, so it does not happen on a fizzle.
+// Copy of Afflict's shrink shape plus Cruel Truths' life loss.
+(
+  id: "ulcerate",
+  name: "Ulcerate",
+  face_id: "ulcerate",
+  mana_cost: "{B}",
+  types: ["Instant"],
+  spell_effect: [
+    PumpTarget(power: -3, toughness: -3, subject: Chosen((kind: Creature))),
+    LoseLife(amount: Fixed(3)),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
+)

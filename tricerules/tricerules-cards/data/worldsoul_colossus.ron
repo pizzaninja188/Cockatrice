@@ -1,0 +1,20 @@
+// Oracle 6970f285-dc2b-437b-b099-ca1d3ef106ab; source/rulings checked 2026-11-25 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.51 (convoke), 107.3a-b (X is chosen as the spell is cast), 601.2f (the chosen X sets the
+// total cost before convoke taps) and 614.1c/122.6 (the entry replacement adds the counters).
+// Pinned 2024-01-12 ruling: with convoke you first choose X, then tap creatures to help pay the
+// resulting total cost, so the counters equal the chosen X and not the number of creatures tapped.
+// Copy of Endless One's X entry-counter replacement with Arboretum Elemental's Convoke.
+(
+  id: "worldsoul_colossus",
+  name: "Worldsoul Colossus",
+  face_id: "worldsoul_colossus",
+  mana_cost: "{X}{G}{W}",
+  types: ["Creature", "Elemental"],
+  power: 0,
+  toughness: 0,
+  keywords: [Convoke],
+  static_abilities: [
+    (ability_id: "static_01", presentation: OracleLines([2]), definition: EntersWithCounters(counter: PlusOnePlusOne, amount: "X")),
+  ],
+)

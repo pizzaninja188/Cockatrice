@@ -1,0 +1,22 @@
+// Oracle fe249f27-db6c-4826-836e-a04efb1a3eaa; source/rulings checked 2026-11-25 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (enters-the-battlefield trigger), 119.3 (life loss adjusts the total) and 119.4 (the
+// life is lost as an effect, not paid). Pinned 2004-10-04 ruling: the card can be cast while its
+// controller has less than the lost amount of life.
+(
+  id: "serpent_warrior",
+  name: "Serpent Warrior",
+  face_id: "serpent_warrior",
+  mana_cost: "{2}{B}",
+  types: ["Creature", "Snake", "Warrior"],
+  power: 3,
+  toughness: 3,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [LoseLife(amount: Fixed(3))],
+    ),
+  ],
+)

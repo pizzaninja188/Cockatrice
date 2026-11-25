@@ -1,0 +1,33 @@
+// Oracle 17d5c53d-7c77-45c2-b8be-7e43c1ecd902; source/rulings checked 2026-11-25 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (enters trigger), 701.22 (Scry), 702.7 (first strike), 611.3a (the static effect
+// applies while the source is on the battlefield), 613.1f (layer 6) and 109.5 ("your"). The card has
+// no pinned ruling. Composition of Augury Owl's entry Scry 2 and Pouncing Lynx's during-your-turn
+// first strike.
+(
+  id: "faithful_pikemaster",
+  name: "Faithful Pikemaster",
+  face_id: "faithful_pikemaster",
+  mana_cost: "{3}{W}",
+  types: ["Creature", "Rhino", "Monk", "Soldier"],
+  power: 3,
+  toughness: 4,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [Scry(count: 2)],
+    ),
+  ],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([2]),
+      definition: ConditionalSelfModifier(
+        condition: ActivePlayer(players: Controller),
+        keywords: [FirstStrike],
+      ),
+    ),
+  ],
+)

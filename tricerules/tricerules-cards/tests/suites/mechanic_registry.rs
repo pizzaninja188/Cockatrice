@@ -1364,3 +1364,145 @@ mod issue_433_infinite_guideline_station;
 
 #[path = "../issue_485_run_away_together.rs"]
 mod issue_485_run_away_together;
+
+#[path = "../q57_batch_a.rs"]
+mod q57_batch_a;
+
+#[path = "../q58_batch_a.rs"]
+mod q58_batch_a;
+
+#[path = "../q59_batch_a.rs"]
+mod q59_batch_a;
+
+#[path = "../q60_batch_a.rs"]
+mod q60_batch_a;
+
+#[path = "../q61_batch_a.rs"]
+mod q61_batch_a;
+
+#[path = "../q62_batch_a.rs"]
+mod q62_batch_a;
+
+#[path = "../q63_batch_a.rs"]
+mod q63_batch_a;
+
+#[path = "../q64_batch_a.rs"]
+mod q64_batch_a;
+
+#[path = "../q65_batch_a.rs"]
+mod q65_batch_a;
+
+#[path = "../q66_batch_a.rs"]
+mod q66_batch_a;
+
+#[path = "../q67_batch_a.rs"]
+mod q67_batch_a;
+
+#[path = "../q68_batch_a.rs"]
+mod q68_batch_a;
+
+#[path = "../q69_batch_a.rs"]
+mod q69_batch_a;
+
+#[path = "../q70_batch_a.rs"]
+mod q70_batch_a;
+
+#[path = "../q71_batch_a.rs"]
+mod q71_batch_a;
+
+#[path = "../q72_batch_a.rs"]
+mod q72_batch_a;
+
+#[path = "../q73_batch_a.rs"]
+mod q73_batch_a;
+
+#[path = "../q74_cycling_control.rs"]
+mod q74_cycling_control;
+
+#[path = "../q74_flashback_utility.rs"]
+mod q74_flashback_utility;
+
+#[path = "../q74_scry_riders.rs"]
+mod q74_scry_riders;
+
+#[path = "../q75_treasure_riders.rs"]
+mod q75_treasure_riders;
+
+#[path = "../q75_proliferate_riders.rs"]
+mod q75_proliferate_riders;
+
+#[path = "../q75_surveil_cantrips.rs"]
+mod q75_surveil_cantrips;
+
+#[path = "../q76_sliver_keywords.rs"]
+mod q76_sliver_keywords;
+
+#[path = "../q76_subtype_lords.rs"]
+mod q76_subtype_lords;
+
+#[path = "../q76_activated_draw.rs"]
+mod q76_activated_draw;
+
+#[path = "../q77_quality_removal.rs"]
+mod q77_quality_removal;
+
+#[path = "../q77_land_sac_life.rs"]
+mod q77_land_sac_life;
+
+#[path = "../q77_sac_artifact_destroy.rs"]
+mod q77_sac_artifact_destroy;
+
+#[path = "../q78_ritual_mana.rs"]
+mod q78_ritual_mana;
+
+#[path = "../q78_attack_removal_rider.rs"]
+mod q78_attack_removal_rider;
+
+#[path = "../q78_team_untap.rs"]
+mod q78_team_untap;
+
+#[path = "../q79_gain_life_drain.rs"]
+mod q79_gain_life_drain;
+
+#[path = "../q79_cast_damage.rs"]
+mod q79_cast_damage;
+
+#[path = "../q79_counter_riders.rs"]
+mod q79_counter_riders;
+
+#[path = "../q80_sliver_pump.rs"]
+mod q80_sliver_pump;
+
+#[path = "../q80_protection_keywords.rs"]
+mod q80_protection_keywords;
+
+#[path = "../q80_kicker_spells.rs"]
+mod q80_kicker_spells;
+
+#[path = "../q81_etb_target_pump.rs"]
+mod q81_etb_target_pump;
+
+#[path = "../q81_exile_nonland_rider.rs"]
+mod q81_exile_nonland_rider;
+
+#[path = "../q81_untap_team_rider.rs"]
+mod q81_untap_team_rider;
+
+#[path = "../q82_etb_tap_riders.rs"]
+mod q82_etb_tap_riders;
+
+#[path = "../q82_etb_stun_riders.rs"]
+mod q82_etb_stun_riders;
+
+#[path = "../q82_etb_food_riders.rs"]
+mod q82_etb_food_riders;
+
+#[path = "../q83_batch_a.rs"]
+mod q83_batch_a;
+
+#[path = "../q84_batch_a.rs"]
+mod q84_batch_a;
+#[path = "../q85_batch_a.rs"]
+mod q85_batch_a;
+#[path = "../q86_batch_a.rs"]
+mod q86_batch_a;

@@ -1,0 +1,77 @@
+{
+  "format_version": 1,
+  "oracle_id": "c2248d3d-3157-4610-868d-2b3fae2b1ec8",
+  "spans": [
+    {
+      "face_id": "raking_claws",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    },
+    {
+      "face_id": "raking_claws",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "Keyword::DoubleStrike",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    },
+    {
+      "symbol": "AbilitySourceZone::Hand",
+      "typed_path": "/faces/0/activated_abilities/0/source_zone"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::DiscardSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q72_batch_a::q72_cycling_combat_canary_simplest_raking_claws_grants_double_strike_and_cycles",
+      "covers": "actual Raking Claws grants double strike and cycles"
+    },
+    {
+      "test": "scenario q72_batch_a::q72_cycling_combat_cards_apply_their_printed_scope_and_expire",
+      "covers": "actual Raking Claws grant expires at cleanup"
+    },
+    {
+      "test": "scenario q72_batch_a::q72_cycling_combat_rejects_wrong_targets_and_unfunded_cycling",
+      "covers": "actual Raking Claws rejects a land target and underfunded cycling"
+    },
+    {
+      "test": "mechanic_registry::q72_batch_a::q72_cycling_combat_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of Raking Claws"
+    },
+    {
+      "test": "mechanic_registry::q72_batch_a::q72_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Raking Claws"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,69 @@
+{
+  "format_version": 1,
+  "oracle_id": "04a3bb42-0464-4638-a6ac-d5f412c222cc",
+  "spans": [
+    {
+      "face_id": "deadly_visit",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    },
+    {
+      "face_id": "deadly_visit",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetFilter",
+      "typed_path": "/faces/0/spell_effect/0/Destroy/subject/Chosen"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    },
+    {
+      "symbol": "SpellEffectKind::LibraryPartition",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q62_batch_a::q62_destroy_surveil_canary_hardest_deadly_visit_surveils_two",
+      "covers": "q62 destroy surveil canary hardest deadly visit surveils two"
+    },
+    {
+      "test": "scenario q62_batch_a::q62_destroy_surveil_scry_cards_apply_the_printed_library_filter",
+      "covers": "q62 destroy surveil scry cards apply the printed library filter"
+    },
+    {
+      "test": "scenario q62_batch_a::q62_destroy_surveil_scry_cards_fizzle_without_a_library_filter",
+      "covers": "q62 destroy surveil scry cards fizzle without a library filter"
+    },
+    {
+      "test": "scenario q62_batch_a::q62_destroy_surveil_scry_cards_still_filter_after_an_indestructible_target",
+      "covers": "q62 destroy surveil scry cards still filter after an indestructible target"
+    },
+    {
+      "test": "mechanic_registry::q62_batch_a::q62_destroy_surveil_scry_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q62_batch_a::q62_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

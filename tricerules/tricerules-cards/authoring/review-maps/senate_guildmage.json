@@ -1,0 +1,72 @@
+{
+  "format_version": 1,
+  "oracle_id": "76f1cc7a-084e-410d-92cb-b8f6ab8da4e9",
+  "spans": [
+    {
+      "face_id": "senate_guildmage",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "senate_guildmage",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/1/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/1/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/1/program/body/steps/0/kind/Perform/Draw"
+    },
+    {
+      "symbol": "SpellEffectKind::Discard",
+      "typed_path": "/faces/0/activated_abilities/1/program/body/steps/1/kind/Perform/Discard"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q69_batch_a::q69_guildmage_canary_hardest_senate_gains_life_and_loots_privately",
+      "covers": "actual Senate Guildmage clause coverage"
+    },
+    {
+      "test": "scenario q69_batch_a::q69_guildmage_cards_reject_unfunded_wrong_target_and_tapped_source",
+      "covers": "actual Senate Guildmage clause coverage"
+    },
+    {
+      "test": "mechanic_registry::q69_batch_a::q69_batch_a_cohorts_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of senate_guildmage"
+    },
+    {
+      "test": "mechanic_registry::q69_batch_a::q69_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for senate_guildmage"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

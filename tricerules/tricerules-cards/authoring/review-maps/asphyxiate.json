@@ -1,0 +1,65 @@
+{
+  "format_version": 1,
+  "oracle_id": "1c2ce0d0-8c3e-48e8-b1fd-54658bdb9af9",
+  "spans": [
+    {
+      "face_id": "asphyxiate",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Chosen",
+      "typed_path": "/faces/0/spell_effect/0/Destroy/subject"
+    },
+    {
+      "symbol": "TargetFilter",
+      "typed_path": "/faces/0/spell_effect/0/Destroy/subject"
+    },
+    {
+      "symbol": "TargetGroupDef",
+      "typed_path": "/faces/0/targeting/groups/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q77_quality_removal::q77_quality_removal_cards_cast_with_exact_costs_and_destroy_matching_creatures",
+      "covers": "actual asphyxiate pays its printed cost and destroys a matching untapped creature"
+    },
+    {
+      "test": "scenario q77_quality_removal::q77_quality_removal_cards_destroy_only_the_chosen_matching_creature",
+      "covers": "actual asphyxiate leaves a non-targeted bystander on the battlefield"
+    },
+    {
+      "test": "scenario q77_quality_removal::q77_quality_removal_cards_reject_illegal_targets_without_spending_mana",
+      "covers": "actual asphyxiate rejects its printed illegal target and spends no mana"
+    },
+    {
+      "test": "scenario q77_quality_removal::q77_quality_removal_cards_recheck_filters_on_resolution",
+      "covers": "actual asphyxiate does not destroy a target that stopped matching on resolution"
+    },
+    {
+      "test": "scenario q77_quality_removal::q77_quality_removal_cards_fizzle_on_stale_target",
+      "covers": "actual asphyxiate fizzles when its target leaves the battlefield"
+    },
+    {
+      "test": "mechanic_registry::q77_quality_removal::q77_quality_removal_map_definitions",
+      "covers": "reviewed identity, characteristics, targeting and Destroy definition of asphyxiate"
+    },
+    {
+      "test": "mechanic_registry::q77_quality_removal::q77_quality_removal_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for asphyxiate"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

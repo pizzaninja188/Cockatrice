@@ -1,0 +1,25 @@
+// Oracle 1d4b8a31-6500-4e3d-bcaf-f6f184d7743e; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1a/601.2c (target at cast), 701.8 (destroy), 119.3 (life loss) and 119.5 (life gain),
+// with 608.2b: an illegal sole target fizzles, so no life changes. The pinned 2016-07-13 rulings
+// fix the order (the creature leaves first) and the indestructible branch (the controller still
+// loses 2 and the caster still gains 2). Copy of Victorious Destruction's controller life loss
+// plus Radiant Strike's life gain.
+(
+  id: "certain_death",
+  name: "Certain Death",
+  face_id: "certain_death",
+  mana_cost: "{5}{B}",
+  types: ["Sorcery"],
+  spell_effect: [
+    Destroy(subject: Chosen((kind: Creature))),
+    LoseLife(amount: Fixed(2), who: ControllerOfTargetGroup(group_index: 0)),
+    GainLife(amount: 2),
+  ],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target creature",
+    effect_indices: [0],
+  )])),
+)

@@ -1,0 +1,24 @@
+// Oracle 588a5bac-dcad-410e-8878-0230500c2e3a; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 113.6g (an ability that says a spell can't be countered functions on the stack), 701.6
+// (counter), 702.18a (shroud) and 115.1 (a counterspell can still target it). The pinned
+// 2004-10-04 rulings confirm a counterspell resolves but does not counter it, and shroud only
+// applies on the battlefield. Copy of Surrak, Elusive Hunter's uncounterable static plus the
+// Shroud keyword.
+(
+  id: "blurred_mongoose",
+  name: "Blurred Mongoose",
+  face_id: "blurred_mongoose",
+  mana_cost: "{1}{G}",
+  types: ["Creature", "Mongoose"],
+  power: 2,
+  toughness: 1,
+  keywords: [Shroud],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: SpellCannotBeCountered,
+    ),
+  ],
+)

@@ -1,0 +1,16 @@
+// Oracle 4c9bcba6-87b5-4fb3-97ee-6fe5b739337d; source/rulings checked 2026-11-24 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.25 (surveil), 121.1 (draw) and 608.2c (printed order: surveil, then draw). Pinned
+// 2024-01-12 ruling: actions are performed in sequence. Copy of Otherworldly Gaze's surveil and
+// Opt's draw.
+(
+  id: "consider",
+  name: "Consider",
+  face_id: "consider",
+  mana_cost: "{U}",
+  types: ["Instant"],
+  spell_effect: [
+    LibraryPartition(count: 1, top_min: 0, top_max: None, kind: Surveil),
+    Draw(count: 1),
+  ],
+)

@@ -1,0 +1,16 @@
+// Oracle 2fc6de19-9d04-422b-90bc-eee2f9f8c84c; source/rulings checked 2026-11-24 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.34 (proliferate), 121.1 (draw) and 608.2c (printed order: proliferate, then draw).
+// Pinned 2023-02-04 rulings: any number (including zero) may be chosen, opponents may be chosen.
+// Copy of Tezzeret's Gambit's Proliferate and Opt's draw.
+(
+  id: "contentious_plan",
+  name: "Contentious Plan",
+  face_id: "contentious_plan",
+  mana_cost: "{1}{U}",
+  types: ["Sorcery"],
+  spell_effect: [
+    Proliferate,
+    Draw(count: 1),
+  ],
+)

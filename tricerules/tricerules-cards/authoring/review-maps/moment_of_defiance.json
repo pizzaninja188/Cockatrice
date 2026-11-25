@@ -1,0 +1,70 @@
+{
+  "format_version": 1,
+  "oracle_id": "257f81fb-b3c9-4ebe-9889-dd0ef960bba3",
+  "spans": [
+    {
+      "face_id": "moment_of_defiance",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    },
+    {
+      "face_id": "moment_of_defiance",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/2"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetFilter",
+      "typed_path": "/faces/0/spell_effect/0/PumpTarget/subject/Chosen"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/2"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q61_batch_a::q61_pump_keyword_draw_cards_apply_exact_stats_keywords_and_draw",
+      "covers": "exact printed pump, keyword and draw"
+    },
+    {
+      "test": "scenario q61_batch_a::q61_pump_keyword_draw_fizzles_without_drawing_when_the_target_leaves",
+      "covers": "illegal target prevents the draw"
+    },
+    {
+      "test": "scenario q61_batch_a::q61_pump_keyword_draw_requires_a_creature_target",
+      "covers": "the creature target is required"
+    },
+    {
+      "test": "mechanic_registry::q61_batch_a::q61_pump_keyword_draw_map_definitions",
+      "covers": "typed identity and effects"
+    },
+    {
+      "test": "mechanic_registry::q61_batch_a::q61_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

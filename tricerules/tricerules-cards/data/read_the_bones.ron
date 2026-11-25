@@ -1,0 +1,18 @@
+// Oracle 5bf4d8d9-a2b2-4dba-ac05-9d4470a89db2; source/rulings checked 2026-11-23 against the pinned
+// Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853 and the
+// pinned rulings file; four pinned 2013-09-15 rulings are generic scry/sequence and one is the
+// card-specific life-loss ruling (the loss is part of the effect, not a cost).
+// CR 701.22a-b (scry 2), 121.2 (two separate draw events), 119.3 (life loss) and 608.2c
+// (scry before the draw).
+(
+  id: "read_the_bones",
+  name: "Read the Bones",
+  face_id: "read_the_bones",
+  mana_cost: "{2}{B}",
+  types: ["Sorcery"],
+  spell_program: Some((body: (steps: [
+    (id: "scry", kind: Perform(Scry(count: 2))),
+    (id: "draw", kind: Perform(Draw(count: 2))),
+    (id: "lose_life", kind: Perform(LoseLife(amount: Fixed(2)))),
+  ]))),
+)

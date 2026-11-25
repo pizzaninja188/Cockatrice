@@ -1,0 +1,22 @@
+// Oracle 13718d93-fe46-4a18-a511-88649ef1c9de; source checked 2026-11-23 against the pinned
+// Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// No pinned ruling. CR 119.3 (life loss and gain), 115.1/601.2c (target player at cast)
+// and 608.2b (a player target that left the game fizzles the whole spell). Copy of the reviewed
+// absorb_vis drain.
+(
+  id: "sovereigns_bite",
+  name: "Sovereign's Bite",
+  face_id: "sovereigns_bite",
+  mana_cost: "{1}{B}",
+  types: ["Sorcery"],
+  spell_effect: [
+    TargetPlayerLosesLife(amount: 3, target: (kind: AnyPlayer)),
+    GainLife(amount: 3),
+  ],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target player",
+    effect_indices: [0],
+  )])),
+)

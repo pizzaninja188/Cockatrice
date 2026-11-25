@@ -1,0 +1,54 @@
+{
+  "format_version": 1,
+  "oracle_id": "3a59c882-8bb8-49ba-862f-125020dd5bec",
+  "spans": [
+    {
+      "face_id": "empty_the_warrens",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "empty_the_warrens",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_keywords/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellKeyword::Storm",
+      "typed_path": "/faces/0/spell_keywords/0"
+    },
+    {
+      "symbol": "Token::goblin_r_1_1",
+      "typed_path": "/faces/0/spell_effect/0/CreateTokens/token"
+    }
+  ],
+  "tokens": [
+    "goblin_r_1_1"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q71_batch_a::q71_storm_untargeted_copies_multiply_the_printed_effect",
+      "covers": "actual empty_the_warrens canary end-to-end path"
+    },
+    {
+      "test": "mechanic_registry::q71_batch_a::q71_batch_a_storm_spells_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of empty_the_warrens"
+    },
+    {
+      "test": "mechanic_registry::q71_batch_a::q71_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for empty_the_warrens"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

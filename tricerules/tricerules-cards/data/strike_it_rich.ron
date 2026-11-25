@@ -1,0 +1,15 @@
+// Oracle c34c17c7-3827-49a2-be25-67f44fdfe150; source/rulings checked 2026-11-24 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 111.10f and 701.6a (Treasure token), 702.34a-d (flashback alternative cost and exile) and
+// 608.2c (the token is created on resolution). Pinned 2021-06-18 rulings: flashback always
+// exiles the spell afterward and still follows the card type's timing. Copy of Seize the Spoils'
+// Treasure creation and Firebolt's flashback cost.
+(
+  id: "strike_it_rich",
+  name: "Strike It Rich",
+  face_id: "strike_it_rich",
+  mana_cost: "{R}",
+  types: ["Sorcery"],
+  flashback_cost: Some("{2}{R}"),
+  spell_effect: [CreateTokens(token: "treasure", count: 1)],
+)

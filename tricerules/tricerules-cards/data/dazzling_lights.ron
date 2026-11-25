@@ -1,0 +1,18 @@
+// Oracle 394709f0-2d29-4a2d-be05-7b22fec57763; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1a/601.2c (target at cast), 611.2a/514.2 (until end of turn), 613.4c (layer 7c),
+// 701.25a-b (surveil) and 608.2b (an illegal sole target stops the whole spell). Pinned
+// 2024-01-12 rulings: a fizzled spell does not surveil and the surveil choice follows the
+// printed sequence. Copy of Bewilder's shrink with Cruel Truths' surveil count 2.
+(
+  id: "dazzling_lights",
+  name: "Dazzling Lights",
+  face_id: "dazzling_lights",
+  mana_cost: "{U}",
+  types: ["Instant"],
+  spell_effect: [
+    PumpTarget(power: -3, toughness: 0, subject: Chosen((kind: Creature))),
+    LibraryPartition(count: 2, top_min: 0, top_max: None, kind: Surveil),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
+)

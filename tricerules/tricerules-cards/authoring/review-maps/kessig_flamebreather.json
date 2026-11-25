@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "eadd9559-6dcb-4b96-8c95-58abddd0e120",
+  "spans": [
+    {
+      "face_id": "kessig_flamebreather",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverPlayerCastsSpell",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::DamagePlayer",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q79_cast_damage::q79_cast_damage_canary_simplest_kessig_hits_before_the_spell_resolves",
+      "covers": "canary simplest Kessig deals 1 before the spell resolves and ignores creature spells"
+    },
+    {
+      "test": "scenario q79_cast_damage::q79_cast_damage_canary_hardest_black_waltz_deals_two_and_keeps_keywords",
+      "covers": "canary hardest Black Waltz deals 2 and keeps flying and deathtouch"
+    },
+    {
+      "test": "scenario q79_cast_damage::q79_cast_damage_cards_apply_their_printed_damage",
+      "covers": "each actual card deals exactly its printed damage to each opponent"
+    },
+    {
+      "test": "scenario q79_cast_damage::q79_cast_damage_cards_ignore_creature_spells",
+      "covers": "creature spells do not trigger any cast-damage card"
+    },
+    {
+      "test": "scenario q79_cast_damage::q79_cast_damage_black_waltz_trigger_survives_a_countered_spell",
+      "covers": "the cast trigger deals damage even when the spell is countered"
+    },
+    {
+      "test": "scenario q79_cast_damage::q79_cast_damage_noncreature_artifact_distinguishes_the_filters",
+      "covers": "a noncreature artifact spell separates Noncreature from InstantOrSorcery"
+    },
+    {
+      "test": "scenario q79_cast_damage::q79_cast_damage_does_not_trigger_on_an_opponents_cast",
+      "covers": "another player casting a spell does not trigger the controller-scoped watcher"
+    },
+    {
+      "test": "mechanic_registry::q79_cast_damage::q79_cast_damage_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of kessig_flamebreather"
+    },
+    {
+      "test": "mechanic_registry::q79_cast_damage::q79_cast_damage_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for kessig_flamebreather"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

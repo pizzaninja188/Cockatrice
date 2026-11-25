@@ -1,0 +1,15 @@
+// Oracle 424683a5-d239-400d-af2b-9c00d1d32d7f; text checked 2026-11-23 against the pinned
+// Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// No pinned ruling. CR 701.6 (counter), 115.1a/601.2c (spell target), 121.1 (draw), 608.2b and
+// 608.2c. Copy of negate's noncreature filter and contradict's counter-then-draw.
+(
+  id: "scatter_arc",
+  name: "Scatter Arc",
+  face_id: "scatter_arc",
+  mana_cost: "{3}{U}",
+  types: ["Instant"],
+  spell_effect: [
+    CounterTargetSpell(spell_filter: (card_type: Some(Noncreature))),
+    Draw(count: 1),
+  ],
+)

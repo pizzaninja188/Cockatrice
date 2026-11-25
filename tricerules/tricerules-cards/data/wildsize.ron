@@ -1,0 +1,24 @@
+// Oracle e1f439c7-217f-4b20-a77d-b9014c5de8c0; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 611.2a/514.2 (until-end-of-turn pump), 613.4c (layer 7c pump), 613.1f (layer 6 keyword),
+// 702.19 (trample), 121.1 (draw) and 608.2b (illegal target fizzles, no draw). The pinned
+// 2020-11-10 ruling confirms the fizzle. Copy of might_of_the_meek's targeted pump, keyword grant
+// and draw.
+(
+  id: "wildsize",
+  name: "Wildsize",
+  face_id: "wildsize",
+  mana_cost: "{2}{G}",
+  types: ["Instant"],
+  spell_effect: [
+    PumpTarget(power: 2, toughness: 2, subject: Chosen((kind: Creature))),
+    GrantKeywords(subject: Chosen((kind: Creature)), keywords: [Trample]),
+    Draw(count: 1),
+  ],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target creature",
+    effect_indices: [0, 1],
+  )])),
+)

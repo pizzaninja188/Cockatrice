@@ -1,0 +1,15 @@
+// Oracle 2e56bc34-1e35-4b95-9525-cb58ac8ba060; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.6 (counter) and 702.34a-d (flashback pays the printed alternative cost from the
+// graveyard and exiles the spell any time it would leave the stack). Pinned 2021-03-19 rulings
+// confirm the exile applies whether it resolves or is countered and that normal timing still
+// applies. Copy of the reviewed ancient_grudge flashback plus cancel's counter.
+(
+  id: "fervent_denial",
+  name: "Fervent Denial",
+  face_id: "fervent_denial",
+  mana_cost: "{3}{U}{U}",
+  flashback_cost: Some("{5}{U}{U}"),
+  types: ["Instant"],
+  spell_effect: [CounterTargetSpell()],
+)

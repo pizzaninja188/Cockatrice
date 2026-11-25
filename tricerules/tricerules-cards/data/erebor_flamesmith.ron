@@ -1,0 +1,20 @@
+// Oracle 6eb93545-a1a6-4447-82c5-421d8e9f023d; source/rulings checked 2026-11-24 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 601.2 (casting a spell), 603.2/603.3 (the cast trigger) and 120.3 (each opponent is dealt
+// 1 damage). The pinned 2023-06-16 ruling confirms the trigger resolves before the spell that
+// caused it.
+(
+  id: "erebor_flamesmith",
+  name: "Erebor Flamesmith",
+  face_id: "erebor_flamesmith",
+  mana_cost: "{1}{R}",
+  types: ["Creature", "Dwarf", "Artificer"],
+  power: 2,
+  toughness: 1,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPlayerCastsSpell(filter: (card_type: Some(InstantOrSorcery))),
+    effect: [DamagePlayer(amount: 1, who: EachOpponent)],
+  )],
+)

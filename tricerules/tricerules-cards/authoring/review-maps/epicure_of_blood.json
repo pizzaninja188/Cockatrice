@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "bdb319a6-a1cd-44f5-999d-af1bb55b2fc4",
+  "spans": [
+    {
+      "face_id": "epicure_of_blood",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverPlayerGainsLife",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::LoseLife",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q79_gain_life_drain::q79_gain_life_drain_canary_simplest_epicure_drains_once_for_one_event",
+      "covers": "canary simplest Epicure drains each opponent once for one 7-life event"
+    },
+    {
+      "test": "scenario q79_gain_life_drain::q79_gain_life_drain_canary_hardest_dina_sacrifices_another_creature_and_pumps",
+      "covers": "canary hardest Dina sacrifices another creature and pumps by its last-known power"
+    },
+    {
+      "test": "scenario q79_gain_life_drain::q79_gain_life_drain_cards_all_drain_each_opponent_once_per_event",
+      "covers": "each actual card drains each opponent once per life-gain event"
+    },
+    {
+      "test": "scenario q79_gain_life_drain::q79_gain_life_drain_two_events_trigger_twice",
+      "covers": "two separate life-gain events trigger two drains"
+    },
+    {
+      "test": "scenario q79_gain_life_drain::q79_gain_life_drain_dina_rejects_sacrificing_itself",
+      "covers": "Dina requires another creature and spends nothing on rejection"
+    },
+    {
+      "test": "scenario q79_gain_life_drain::q79_gain_life_drain_dina_keeps_last_known_power_after_the_sacrifice",
+      "covers": "Dina reads the sacrificed creature power and pumps only itself"
+    },
+    {
+      "test": "scenario q79_gain_life_drain::q79_gain_life_drain_dina_reads_a_controlled_but_not_owned_sacrifice",
+      "covers": "a borrowed creature controlled by the activator still contributes its power"
+    },
+    {
+      "test": "scenario q79_gain_life_drain::q79_gain_life_drain_does_not_trigger_on_an_opponent_gaining_life",
+      "covers": "an opponent life gain does not trigger the controller-scoped watcher"
+    },
+    {
+      "test": "mechanic_registry::q79_gain_life_drain::q79_gain_life_drain_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of epicure_of_blood"
+    },
+    {
+      "test": "mechanic_registry::q79_gain_life_drain::q79_gain_life_drain_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for epicure_of_blood"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

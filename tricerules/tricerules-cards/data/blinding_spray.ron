@@ -1,0 +1,17 @@
+// Oracle 88ce2017-83a6-4b55-afba-371875bf2172; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 611.2c (the affected set is fixed at resolution), 613.4c (layer-7c modification),
+// 514.2 (cleanup expiry) and 121.1 (draw a card). The pinned 2014-09-20 rulings confirm the
+// spell can be cast with no opposing creatures and that later entrants are unaffected.
+// Copy of Hysterical Blindness's opponent-wide shrink plus a draw.
+(
+  id: "blinding_spray",
+  name: "Blinding Spray",
+  face_id: "blinding_spray",
+  mana_cost: "{4}{U}",
+  types: ["Instant"],
+  spell_effect: [
+    PumpAll(filter: (controller: Opponents), power: -4, toughness: 0),
+    Draw(count: 1),
+  ],
+)

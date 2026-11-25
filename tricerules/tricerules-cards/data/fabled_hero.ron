@@ -1,0 +1,24 @@
+// Oracle f9fd9b1c-4c00-4db7-bbfe-7fd5d8bb9258; source/rulings checked 2026-11-25 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.4a-b (double strike), 603.2/115.9b (heroic triggers on a cast spell with this creature as
+// a target), 603.2c (one trigger per spell) and 122.1 (the printed +1/+1 counter). Pinned
+// 2013-09-15 rulings: the heroic ability resolves before the targeting spell, triggers once per
+// spell, and does not trigger for a copied spell or a changed target.
+(
+  id: "fabled_hero",
+  name: "Fabled Hero",
+  face_id: "fabled_hero",
+  mana_cost: "{1}{W}{W}",
+  types: ["Creature", "Human", "Soldier"],
+  power: 2,
+  toughness: 2,
+  keywords: [DoubleStrike],
+  triggered_abilities: [
+    (
+      ability_id: "heroic",
+      presentation: OracleLines([2]),
+      trigger: WheneverSelfBecomesTarget(source: SpellCast, source_controller: Controller),
+      effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
+    ),
+  ],
+)

@@ -1,0 +1,82 @@
+{
+  "format_version": 1,
+  "oracle_id": "85fd04e9-b39c-4ce0-97a1-58f9670a298f",
+  "spans": [
+    {
+      "face_id": "radiants_judgment",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/0/Destroy/subject",
+        "/faces/0/targeting"
+      ]
+    },
+    {
+      "face_id": "radiants_judgment",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetFilter",
+      "typed_path": "/faces/0/spell_effect/0/Destroy/subject/Chosen"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::DiscardSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q62_batch_a::q62_destroy_filtered_cards_enforce_their_printed_filters",
+      "covers": "q62 destroy filtered cards enforce their printed filters"
+    },
+    {
+      "test": "scenario q62_batch_a::q62_destroy_filtered_cards_handle_regeneration_where_printed",
+      "covers": "q62 destroy filtered cards handle regeneration where printed"
+    },
+    {
+      "test": "scenario q62_batch_a::q62_destroy_filtered_cycling_cards_cycle_for_two",
+      "covers": "q62 destroy filtered cycling cards cycle for two"
+    },
+    {
+      "test": "scenario q62_batch_a::q62_destroy_filtered_cards_fizzle_on_stale_targets",
+      "covers": "q62 destroy filtered cards fizzle on stale targets"
+    },
+    {
+      "test": "scenario q62_batch_a::q62_destroy_filtered_cards_recheck_filters_on_resolution",
+      "covers": "the printed filter is rechecked on resolution"
+    },
+    {
+      "test": "mechanic_registry::q62_batch_a::q62_destroy_filtered_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q62_batch_a::q62_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

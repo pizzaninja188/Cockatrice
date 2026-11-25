@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "17ed18cf-33e5-4861-8a36-8f7bb91971f9",
+  "spans": [
+    {
+      "face_id": "valakut_invoker",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/activated_abilities/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q65_batch_a::q65_ping_cards_apply_printed_damage_costs_and_target_scope",
+      "covers": "actual Valakut Invoker pays its printed {8} and deals 3 damage without tapping"
+    },
+    {
+      "test": "mechanic_registry::q65_batch_a::q65_activated_damage_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of valakut_invoker"
+    },
+    {
+      "test": "mechanic_registry::q65_batch_a::q65_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for valakut_invoker"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

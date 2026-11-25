@@ -1,0 +1,69 @@
+{
+  "format_version": 1,
+  "oracle_id": "f5cbc4f3-4e73-405f-9daf-e5b7c73fa6ee",
+  "spans": [
+    {
+      "face_id": "wipe_clean",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    },
+    {
+      "face_id": "wipe_clean",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Exile",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    },
+    {
+      "symbol": "AbilitySourceZone::Hand",
+      "typed_path": "/faces/0/activated_abilities/0/source_zone"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::DiscardSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q71_batch_a::q71_cycling_removal_bodies_hit_their_printed_permanent_types",
+      "covers": "actual wipe_clean printed removal body"
+    },
+    {
+      "test": "scenario q71_batch_a::q71_cycling_removal_cards_cycle_for_the_printed_cost",
+      "covers": "actual wipe_clean cycling cost, discard and draw"
+    },
+    {
+      "test": "mechanic_registry::q71_batch_a::q71_batch_a_cycling_removal_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of wipe_clean"
+    },
+    {
+      "test": "mechanic_registry::q71_batch_a::q71_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for wipe_clean"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

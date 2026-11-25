@@ -1,0 +1,84 @@
+{
+  "format_version": 1,
+  "oracle_id": "4e4a21a8-9332-4aeb-8519-949feb211294",
+  "spans": [
+    {
+      "face_id": "frostfist_strider",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "frostfist_strider",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverSelfBecomesTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CounterTriggeringStackObjectUnlessPays",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Perform/CounterTriggeringStackObjectUnlessPays"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/1/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Tap",
+      "typed_path": "/faces/0/triggered_abilities/1/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/triggered_abilities/1/effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/1/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q82_etb_stun_riders::q82_stun_canary_simplest_gilded_scuttler_taps_and_stuns",
+      "covers": "canary simplest taps and adds a stun counter"
+    },
+    {
+      "test": "scenario q82_etb_stun_riders::q82_stun_canary_hardest_frostfist_ward_pays_or_counters",
+      "covers": "canary hardest pays or declines Ward"
+    },
+    {
+      "test": "scenario q82_etb_stun_riders::q82_stun_cards_apply_entry_effect_body_and_keywords",
+      "covers": "every actual card applies its printed body, tap and stun"
+    },
+    {
+      "test": "scenario q82_etb_stun_riders::q82_stun_cards_accept_an_already_tapped_target",
+      "covers": "pinned already-tapped target rulings"
+    },
+    {
+      "test": "scenario q82_etb_stun_riders::q82_stun_counter_replaces_the_next_untap",
+      "covers": "stun replaces the next untap"
+    },
+    {
+      "test": "scenario q82_etb_stun_riders::q82_stun_trigger_rejects_the_controllers_own_creature",
+      "covers": "the entry trigger requires an opponent's creature"
+    },
+    {
+      "test": "mechanic_registry::q82_etb_stun_riders::q82_stun_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q82_etb_stun_riders::q82_stun_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

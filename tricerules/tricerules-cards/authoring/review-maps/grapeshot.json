@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "ebd2d760-5ad8-4027-b124-171822f3edfe",
+  "spans": [
+    {
+      "face_id": "grapeshot",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "grapeshot",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_keywords/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellKeyword::Storm",
+      "typed_path": "/faces/0/spell_keywords/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q71_batch_a::q71_storm_targeted_copies_choose_independent_targets",
+      "covers": "actual grapeshot canary end-to-end path"
+    },
+    {
+      "test": "mechanic_registry::q71_batch_a::q71_batch_a_storm_spells_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of grapeshot"
+    },
+    {
+      "test": "mechanic_registry::q71_batch_a::q71_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for grapeshot"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

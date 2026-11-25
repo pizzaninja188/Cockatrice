@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "a503d302-6b12-4d82-9ba6-73efbcb1b1a2",
+  "spans": [
+    {
+      "face_id": "persuasion",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "persuasion",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::AuraAttach",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::ControlsAttached",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q66_batch_a::q66_control_persuasion_matches_the_shared_control_shape",
+      "covers": "actual Persuasion attaches and controls the enchanted creature for its printed cost"
+    },
+    {
+      "test": "mechanic_registry::q66_batch_a::q66_control_aura_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of persuasion"
+    },
+    {
+      "test": "mechanic_registry::q66_batch_a::q66_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for persuasion"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

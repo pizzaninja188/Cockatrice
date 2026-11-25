@@ -1,0 +1,65 @@
+{
+  "format_version": 1,
+  "oracle_id": "5a295dc1-7f60-4581-b0f9-61e8b14339bf",
+  "spans": [
+    {
+      "face_id": "defy_gravity",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    },
+    {
+      "face_id": "defy_gravity",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/flashback_cost"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    },
+    {
+      "symbol": "CardFace::flashback_cost",
+      "typed_path": "/faces/0/flashback_cost"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q74_flashback_utility::q74_flashback_utility_rejects_wrong_targets_and_illegal_flashback",
+      "covers": "actual Defy Gravity rejects a land and cannot be flashback-cast from exile"
+    },
+    {
+      "test": "scenario q74_flashback_utility::q74_flashback_utility_cards_apply_their_printed_bodies_and_flash_back",
+      "covers": "actual Defy Gravity applies its printed body from hand and flashback"
+    },
+    {
+      "test": "mechanic_registry::q74_flashback_utility::q74_flashback_utility_map_definitions",
+      "covers": "reviewed identity, characteristics and typed flashback definition of defy gravity"
+    },
+    {
+      "test": "mechanic_registry::q74_flashback_utility::q74_flashback_utility_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for defy gravity"
+    },
+    {
+      "test": "scenario q74_flashback_utility::q74_flashback_utility_fizzles_stale_targets_and_exiles_flashback_copies",
+      "covers": "actual Defy Gravity grants no flying when its only target is stale"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "0d9d7f04-6319-4596-8b74-de5a794936e5",
+  "spans": [
+    {
+      "face_id": "yotian_tactician",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::AnthemPt",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q76_subtype_lords::q76_subtype_lords_all_cards_pump_only_other_controlled_creatures_of_the_subtype",
+      "covers": "actual yotian_tactician pumps only another controlled creature of its printed subtype"
+    },
+    {
+      "test": "scenario q76_subtype_lords::q76_subtype_lords_apply_to_later_entries_and_end_when_the_source_leaves",
+      "covers": "actual yotian_tactician affects a later same-subtype creature and drains when the source leaves"
+    },
+    {
+      "test": "scenario q76_subtype_lords::q76_subtype_lords_two_copies_pump_each_other",
+      "covers": "two actual yotian_tactician copies pump each other, proving \"other\" excludes only the source"
+    },
+    {
+      "test": "mechanic_registry::q76_subtype_lords::q76_subtype_lords_map_definitions",
+      "covers": "reviewed identity, characteristics and AnthemPt definition of yotian_tactician"
+    },
+    {
+      "test": "mechanic_registry::q76_subtype_lords::q76_subtype_lords_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for yotian_tactician"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

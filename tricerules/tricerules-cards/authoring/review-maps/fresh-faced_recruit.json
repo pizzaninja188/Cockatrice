@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "14319020-faf2-49c4-a808-c39650203383",
+  "spans": [
+    {
+      "face_id": "fresh_faced_recruit",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::ConditionalSelfModifier",
+      "typed_path": "/faces/0/static_abilities/0"
+    },
+    {
+      "symbol": "GameCondition::ActivePlayer",
+      "typed_path": "/faces/0/static_abilities/0/definition/ConditionalSelfModifier/condition"
+    },
+    {
+      "symbol": "Keyword::FirstStrike",
+      "typed_path": "/faces/0/static_abilities/0/definition/ConditionalSelfModifier/keywords"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q64_batch_a::q64_first_strike_cards_cast_with_their_printed_costs_and_bodies",
+      "covers": "hybrid red and white payments, printed body, and the condition flipping with the active player"
+    },
+    {
+      "test": "mechanic_registry::q64_batch_a::q64_during_turn_first_strike_map_definitions",
+      "covers": "reviewed identity, printed characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q64_batch_a::q64_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

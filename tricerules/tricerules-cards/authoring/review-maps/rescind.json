@@ -1,0 +1,72 @@
+{
+  "format_version": 1,
+  "oracle_id": "3f487c8e-a923-4031-b0a7-04f778544fe0",
+  "spans": [
+    {
+      "face_id": "rescind",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "rescind",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::ReturnToOwnersHand",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetKind::AnyPermanent",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "AbilitySourceZone::Hand",
+      "typed_path": "/faces/0/activated_abilities/0/source_zone"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::DiscardSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q74_cycling_control::q74_cycling_control_fizzles_a_stale_bounce_target",
+      "covers": "actual Rescind does not return a permanent that left the battlefield"
+    },
+    {
+      "test": "scenario q74_cycling_control::q74_cycling_control_cards_apply_their_printed_bodies_and_cycle",
+      "covers": "actual Rescind applies its printed body and cycles for its printed cost"
+    },
+    {
+      "test": "scenario q74_cycling_control::q74_cycling_control_rejects_missing_wrong_targets_and_unfunded_cycling",
+      "covers": "actual Rescind rejects an underfunded cycling activation"
+    },
+    {
+      "test": "mechanic_registry::q74_cycling_control::q74_cycling_control_map_definitions",
+      "covers": "reviewed identity, characteristics and typed cycling definition of rescind"
+    },
+    {
+      "test": "mechanic_registry::q74_cycling_control::q74_cycling_control_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for rescind"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

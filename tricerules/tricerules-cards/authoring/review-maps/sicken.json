@@ -1,0 +1,80 @@
+{
+  "format_version": 1,
+  "oracle_id": "5208a5f2-eebe-4adc-8f29-543b60116817",
+  "spans": [
+    {
+      "face_id": "sicken",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "sicken",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "sicken",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::AuraAttach",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0"
+    },
+    {
+      "symbol": "AbilitySourceZone::Hand",
+      "typed_path": "/faces/0/activated_abilities/0/source_zone"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::DiscardSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q72_batch_a::q72_cycling_auras_canary_simplest_sicken_applies_minus_one_minus_one_and_cycles",
+      "covers": "actual Sicken applies -1/-1 and cycles"
+    },
+    {
+      "test": "scenario q72_batch_a::q72_cycling_auras_apply_their_printed_static_values_and_cycle",
+      "covers": "actual Sicken is exercised by the shared static-and-cycling scenario"
+    },
+    {
+      "test": "scenario q72_batch_a::q72_cycling_auras_reject_noncreature_targets_and_unfunded_cycling",
+      "covers": "actual Sicken rejects a land target and underfunded cycling"
+    },
+    {
+      "test": "mechanic_registry::q72_batch_a::q72_cycling_auras_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of Sicken"
+    },
+    {
+      "test": "mechanic_registry::q72_batch_a::q72_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Sicken"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

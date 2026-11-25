@@ -1,0 +1,62 @@
+{
+  "format_version": 1,
+  "oracle_id": "015004d7-989b-4549-9ffa-b062126d04d2",
+  "spans": [
+    {
+      "face_id": "inquisitive_puppet",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "inquisitive_puppet",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Scry",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::ExileSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "human_w_1_1"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q84_etb_scry_riders::q84_inquisitive_puppet_exiles_itself_for_a_human_token",
+      "covers": "the exile is a cost paid on activation, and the resolving ability creates exactly one 1/1 white Human token"
+    },
+    {
+      "test": "scenario q84_etb_scry_riders::q84_scry_cards_offer_their_exact_printed_counts",
+      "covers": "the actual card offers exactly one card and accepts only its printed scry count"
+    },
+    {
+      "test": "mechanic_registry::q84_batch_a::q84_etb_scry_riders_map_definitions",
+      "covers": "reviewed identity, Oracle line mapping, self-exile cost and Human token"
+    },
+    {
+      "test": "mechanic_registry::q84_batch_a::q84_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

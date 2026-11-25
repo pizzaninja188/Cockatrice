@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "b04ba676-a1f5-4216-9d93-3c475b504bfa",
+  "spans": [
+    {
+      "face_id": "thirsting_bloodlord",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::AnthemPt",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q76_subtype_lords::q76_subtype_lords_all_cards_pump_only_other_controlled_creatures_of_the_subtype",
+      "covers": "actual thirsting_bloodlord pumps only another controlled creature of its printed subtype"
+    },
+    {
+      "test": "scenario q76_subtype_lords::q76_subtype_lords_apply_to_later_entries_and_end_when_the_source_leaves",
+      "covers": "actual thirsting_bloodlord affects a later same-subtype creature and drains when the source leaves"
+    },
+    {
+      "test": "scenario q76_subtype_lords::q76_subtype_lords_two_copies_pump_each_other",
+      "covers": "two actual thirsting_bloodlord copies pump each other, proving \"other\" excludes only the source"
+    },
+    {
+      "test": "mechanic_registry::q76_subtype_lords::q76_subtype_lords_map_definitions",
+      "covers": "reviewed identity, characteristics and AnthemPt definition of thirsting_bloodlord"
+    },
+    {
+      "test": "mechanic_registry::q76_subtype_lords::q76_subtype_lords_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for thirsting_bloodlord"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

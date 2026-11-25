@@ -1,0 +1,51 @@
+{
+  "format_version": 1,
+  "oracle_id": "15d794f4-7789-40e3-9ee0-b09250c0516d",
+  "spans": [
+    {
+      "face_id": "portent_of_betrayal",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/spell_effect/2",
+        "/faces/0/spell_effect/3"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::GainControl",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Untap",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/spell_effect/2"
+    },
+    {
+      "symbol": "SpellEffectKind::Scry",
+      "typed_path": "/faces/0/spell_effect/3"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q59_batch_a::q59_threaten_portent_scrys_last_and_fizzles_on_stale_target",
+      "covers": "control then scry, and a stale sole target suppressing both"
+    },
+    {
+      "test": "mechanic_registry::q59_batch_a::q59_threaten_map_definitions",
+      "covers": "control, untap, haste and scry wiring"
+    },
+    {
+      "test": "mechanic_registry::q59_batch_a::q59_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

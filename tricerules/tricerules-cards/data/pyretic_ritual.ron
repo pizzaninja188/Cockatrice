@@ -1,0 +1,14 @@
+// Oracle 86ef6474-613f-41fb-931c-d4279b03ed99; source/rulings checked 2026-11-24 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 106.1a and 106.4 (mana added to the pool), 601.2 (the spell uses the stack). The pinned
+// 2010-08-15 rulings state it is not a mana ability, can be responded to and can be countered,
+// and cannot be cast in the middle of casting another spell.
+// Copy of Narset's Rebuke's AddMana shape.
+(
+  id: "pyretic_ritual",
+  name: "Pyretic Ritual",
+  face_id: "pyretic_ritual",
+  mana_cost: "{1}{R}",
+  types: ["Instant"],
+  spell_effect: [AddMana(amount: (r: 3), retention: EndOfStep)],
+)

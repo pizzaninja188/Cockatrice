@@ -1,0 +1,16 @@
+// Oracle 1102524d-7287-496f-a18a-5fdae6d4c271; source/rulings checked 2026-11-24 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.26 (untap), 702.11 (hexproof), 702.12 (indestructible), and 611.2c/514.2 (the grants last
+// until end of turn). The pinned 2018-10-05 ruling confirms an already-untapped creature still
+// gains both keywords. Copy of Make a Stand's mass indestructible grant plus Vitalize's UntapAll.
+(
+  id: "join_shields",
+  name: "Join Shields",
+  face_id: "join_shields",
+  mana_cost: "{3}{G}{W}",
+  types: ["Instant"],
+  spell_effect: [
+    UntapAll(players: Controller),
+    GrantKeywordsAll(filter: (controller: YouControl), keywords: [Hexproof, Indestructible]),
+  ],
+)

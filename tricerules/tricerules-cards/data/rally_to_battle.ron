@@ -1,0 +1,15 @@
+// Oracle 9d8d88dd-c266-4b7d-a756-ac2d8976ca89; source/rulings checked 2026-11-24 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 613.4c (layer-7c pump) and 701.26 (untap). The pinned 2019-01-25 ruling: already-untapped
+// creatures still get +1/+3. Copy of Rally the Forces' PumpAll plus Vitalize's UntapAll.
+(
+  id: "rally_to_battle",
+  name: "Rally to Battle",
+  face_id: "rally_to_battle",
+  mana_cost: "{3}{W}",
+  types: ["Instant"],
+  spell_effect: [
+    PumpAll(filter: (controller: YouControl), power: 1, toughness: 3),
+    UntapAll(players: Controller),
+  ],
+)

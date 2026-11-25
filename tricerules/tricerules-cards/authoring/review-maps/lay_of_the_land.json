@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "cedc52eb-66a6-4b43-87f1-9bb9f4d4871e",
+  "spans": [
+    {
+      "face_id": "lay_of_the_land",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q57_batch_a::q57_basic_land_search_canary_lay_of_the_land_puts_a_basic_land_into_hand",
+      "covers": "the canary cast reveals a private basic-land search and puts the chosen land into hand"
+    },
+    {
+      "test": "scenario q57_batch_a::q57_basic_land_search_spell_cases_use_their_printed_destination",
+      "covers": "the spell uses its printed Hand destination and shuffles once"
+    },
+    {
+      "test": "mechanic_registry::q57_batch_a::q57_basic_land_search_map_definitions",
+      "covers": "reviewed identity and typed basic-land search of lay_of_the_land"
+    },
+    {
+      "test": "mechanic_registry::q57_batch_a::q57_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for lay_of_the_land"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

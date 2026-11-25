@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "86ef6474-613f-41fb-931c-d4279b03ed99",
+  "spans": [
+    {
+      "face_id": "pyretic_ritual",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::AddMana",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "ManaAmount",
+      "typed_path": "/faces/0/spell_effect/0/AddMana/amount"
+    },
+    {
+      "symbol": "ManaRetention",
+      "typed_path": "/faces/0/spell_effect/0/AddMana/retention"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q78_ritual_mana::q78_ritual_mana_canary_simplest_dark_ritual_adds_three_black_on_resolution",
+      "covers": "canary simplest Dark Ritual adds exactly three black mana on resolution"
+    },
+    {
+      "test": "scenario q78_ritual_mana::q78_ritual_mana_canary_hardest_channel_the_suns_adds_one_of_each_color",
+      "covers": "canary hardest Channel the Suns adds one mana of each color"
+    },
+    {
+      "test": "scenario q78_ritual_mana::q78_ritual_mana_cards_add_only_their_printed_mana",
+      "covers": "each actual ritual adds exactly its printed mana"
+    },
+    {
+      "test": "scenario q78_ritual_mana::q78_ritual_mana_rejects_underfunded_casts_without_spending_mana",
+      "covers": "an underfunded cast is rejected without spending mana"
+    },
+    {
+      "test": "scenario q78_ritual_mana::q78_ritual_mana_empties_at_the_end_of_the_step",
+      "covers": "unused ritual mana empties when the step ends"
+    },
+    {
+      "test": "scenario q78_ritual_mana::q78_ritual_mana_pyretic_ritual_is_countered_and_adds_no_mana",
+      "covers": "a countered ritual adds no mana"
+    },
+    {
+      "test": "mechanic_registry::q78_ritual_mana::q78_ritual_mana_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of pyretic_ritual"
+    },
+    {
+      "test": "mechanic_registry::q78_ritual_mana::q78_ritual_mana_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for pyretic_ritual"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

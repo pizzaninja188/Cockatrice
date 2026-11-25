@@ -1,0 +1,28 @@
+// Oracle 61b74f82-39f3-4618-b8e7-292058421d1b; source/rulings checked 2026-11-25 against the pinned
+// Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.73/205.3m (changeling is a characteristic-defining ability granting every creature type),
+// 602.1/602.2 (activation and printed cost), 611.2a (the grant ends at cleanup), 514.2 and
+// 702.2 (deathtouch). The card has no pinned ruling. Copy of the reviewed Sizzling Changeling CDA
+// plus the Pestilent Wolf self deathtouch grant.
+(
+  id: "moonglove_changeling",
+  name: "Moonglove Changeling",
+  face_id: "moonglove_changeling",
+  mana_cost: "{2}{B}",
+  types: ["Creature", "Shapeshifter"],
+  power: 2,
+  toughness: 2,
+  characteristic_defining_abilities: [(
+    ability_id: "characteristic_01",
+    presentation: OracleLines([1]),
+    definition: Changeling,
+  )],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Mana("{B}")],
+      effect: [GrantKeywords(subject: Source, keywords: [Deathtouch])],
+    ),
+  ],
+)

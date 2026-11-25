@@ -1,0 +1,16 @@
+// Oracle a7dad8fe-b0b8-4c6d-ad11-76b402952799; text checked 2026-11-23 against the pinned
+// Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// No pinned ruling. CR 701.6 (counter), 115.1a/601.2c (creature spell target), 121.1 (draw),
+// 701.9 (discard), 608.2b and 608.2c. Copy of remove_soul's filter and failed_inspection's loot.
+(
+  id: "deny_entry",
+  name: "Deny Entry",
+  face_id: "deny_entry",
+  mana_cost: "{2}{U}",
+  types: ["Instant"],
+  spell_effect: [
+    CounterTargetSpell(spell_filter: (card_type: Some(Creature))),
+    Draw(who: Controller, count: 1),
+    Discard(who: Controller, quantity: Exact(1)),
+  ],
+)

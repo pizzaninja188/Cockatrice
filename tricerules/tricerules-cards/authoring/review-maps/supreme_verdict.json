@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "0230de18-8d15-4cfa-9d42-7ccddd9f9570",
+  "spans": [
+    {
+      "face_id": "supreme_verdict",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "supreme_verdict",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::SpellCannotBeCountered",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "SpellEffectKind::DestroyAll",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q58_batch_a::q58_uncounterable_supreme_verdict_sweeps_through_a_counter_attempt",
+      "covers": "sweeps creatures, spares a noncreature permanent and resolves through a counter attempt"
+    },
+    {
+      "test": "mechanic_registry::q58_batch_a::q58_uncounterable_map_definitions",
+      "covers": "typed identity, sweep and static for supreme_verdict"
+    },
+    {
+      "test": "mechanic_registry::q58_batch_a::q58_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

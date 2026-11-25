@@ -1,0 +1,61 @@
+{
+  "format_version": 1,
+  "oracle_id": "4e3c3bdc-667d-42ec-b960-159a39c53cb3",
+  "spans": [
+    {
+      "face_id": "aura_blast",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    },
+    {
+      "face_id": "aura_blast",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetFilter",
+      "typed_path": "/faces/0/spell_effect/0/Destroy/subject/Chosen"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q58_batch_a::q58_destroy_enchantment_cards_destroy_only_enchantments",
+      "covers": "destroys an enchantment, draws and rejects a creature target"
+    },
+    {
+      "test": "scenario q58_batch_a::q58_destroy_enchantment_stale_target_fizzles_without_the_rider",
+      "covers": "a stale sole target prevents the draw"
+    },
+    {
+      "test": "mechanic_registry::q58_batch_a::q58_destroy_enchantment_map_definitions",
+      "covers": "typed identity, destruction and draw for aura_blast"
+    },
+    {
+      "test": "mechanic_registry::q58_batch_a::q58_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,30 @@
+// Oracle 18ffd8ad-1556-450d-8bc1-8103a3d0404e; source/rulings checked 2026-11-23 against the pinned
+// Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 303.4 (Aura attach), 508.1/509.1 (attack and block restrictions), 602.1/602.2 and 118.3
+// (activation and cost), and 400.7/608.2b (source-bound return uses the current object generation).
+// Pinned ruling 2020-11-10: the return ability can be activated only while this Aura is on the
+// battlefield, and if the Aura has left the battlefield when the ability resolves it stays in its
+// new zone. Copy of the reviewed Bound in Silence restriction with the Wingspan Stride return.
+(
+  id: "cage_of_hands",
+  name: "Cage of Hands",
+  face_id: "cage_of_hands",
+  mana_cost: "{2}{W}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach()],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([2]),
+      definition: AttachedModifier(restriction: (cant_attack: true, cant_block: true)),
+    ),
+  ],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([3]),
+      costs: [Mana("{1}{W}")],
+      effect: [ReturnToOwnersHand(subject: Source)],
+    ),
+  ],
+)

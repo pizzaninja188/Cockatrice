@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "fa04f161-4141-491b-ad6f-a16f69c862f3",
+  "spans": [
+    {
+      "face_id": "dark_inquiry",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::ChooseHandCards",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q59_batch_a::q59_hand_discard_canary_dark_inquiry",
+      "covers": "public reveal, controller choice, nonland discard, and the land staying in hand"
+    },
+    {
+      "test": "mechanic_registry::q59_batch_a::q59_hand_discard_map_definitions",
+      "covers": "typed identity and reveal-hand discard wiring"
+    },
+    {
+      "test": "mechanic_registry::q59_batch_a::q59_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle fingerprint"
+    },
+    {
+      "test": "scenario q59_batch_a::q59_hand_discard_target_scope_and_empty_hand_draw",
+      "covers": "opponent-only target rejection and the empty-hand discard path"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "9b06cfae-1655-4b0e-a160-9b32f27c7c9a",
+  "spans": [
+    {
+      "face_id": "pardic_collaborator",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "pardic_collaborator",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Source",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/PumpTarget/subject"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q67_batch_a::q67_pump_cards_keep_their_printed_keyword_and_do_not_tap",
+      "covers": "actual card pays its exact activation cost, applies its printed pump, keeps its keyword and does not tap"
+    },
+    {
+      "test": "scenario q67_batch_a::q67_pump_canary_simplest_anointed_chorister_pumps_and_expires",
+      "covers": "actual Anointed Chorister pump and cleanup expiry plus rejected insufficient mana"
+    },
+    {
+      "test": "scenario q67_batch_a::q67_pump_canary_hardest_rakdos_trumpeter_uses_its_off_color_cost",
+      "covers": "actual Rakdos Trumpeter off-color {3}{R} activation and Pardic Collaborator {B} rejection of red mana"
+    },
+    {
+      "test": "mechanic_registry::q67_batch_a::q67_cohorts_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q67_batch_a::q67_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

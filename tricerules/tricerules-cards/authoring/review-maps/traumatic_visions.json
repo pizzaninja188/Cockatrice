@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "a30724f0-d174-408e-8baf-4bba3cbc45b5",
+  "spans": [
+    {
+      "face_id": "traumatic_visions",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "traumatic_visions",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CounterTargetSpell",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::DiscardSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q58_batch_a::q58_counter_riders_counter_the_target_and_apply_their_printed_rider",
+      "covers": "counters the targeted spell"
+    },
+    {
+      "test": "scenario q58_batch_a::q58_counter_riders_basic_landcycling_searches_a_basic_land",
+      "covers": "pays the printed cost, discards, searches, reveals and shuffles"
+    },
+    {
+      "test": "mechanic_registry::q58_batch_a::q58_counter_rider_map_definitions",
+      "covers": "typed identity, counter and basic landcycling ability for traumatic_visions"
+    },
+    {
+      "test": "mechanic_registry::q58_batch_a::q58_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

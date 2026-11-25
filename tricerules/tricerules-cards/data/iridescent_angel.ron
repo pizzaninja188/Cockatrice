@@ -1,0 +1,15 @@
+// Oracle 28fa9211-96bb-4fef-81bf-8f58114a8df7; source/rulings checked 2026-11-24 against the pinned
+// Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.9a-b (flying) and 702.16b-f (protection). The pinned 2004-10-04 ruling defines
+// "protection from each color" as five separate color protections.
+(
+  id: "iridescent_angel",
+  name: "Iridescent Angel",
+  face_id: "iridescent_angel",
+  mana_cost: "{5}{W}{U}",
+  types: ["Creature", "Angel"],
+  power: 4,
+  toughness: 4,
+  keywords: [Flying],
+  protections: [Color(White), Color(Blue), Color(Black), Color(Red), Color(Green)],
+)

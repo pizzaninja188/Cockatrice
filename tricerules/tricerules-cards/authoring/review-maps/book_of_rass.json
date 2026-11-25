@@ -1,0 +1,47 @@
+{
+  "format_version": 1,
+  "oracle_id": "a5e3ca74-ec33-4679-9366-8b1a45048783",
+  "spans": [
+    {
+      "face_id": "book_of_rass",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/costs/0",
+        "/faces/0/activated_abilities/0/costs/1",
+        "/faces/0/activated_abilities/0/effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::PayLife",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q66_batch_a::q66_draw_cards_use_their_printed_costs",
+      "covers": "actual Book of Rass pays {2} and two life without tapping to draw one card"
+    },
+    {
+      "test": "mechanic_registry::q66_batch_a::q66_activated_draw_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of book_of_rass"
+    },
+    {
+      "test": "mechanic_registry::q66_batch_a::q66_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for book_of_rass"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

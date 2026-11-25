@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "116ee88e-9e13-4f21-bc6a-efa994b5bf75",
+  "spans": [
+    {
+      "face_id": "obsessive_search",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "obsessive_search",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::Madness",
+      "typed_path": "/faces/0/static_abilities/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q73_batch_a::q73_madness_canary_obsessive_search_casts_from_exile_for_its_madness_cost",
+      "covers": "actual Obsessive Search casts from exile for its madness cost and draws one"
+    },
+    {
+      "test": "scenario q73_batch_a::q73_madness_decline_is_final_and_puts_the_card_into_the_graveyard",
+      "covers": "declining the Obsessive Search madness offer puts it into the graveyard and ends the offer"
+    },
+    {
+      "test": "scenario q73_batch_a::q73_madness_spells_apply_their_printed_bodies_from_hand",
+      "covers": "actual Obsessive Search applies its printed body from hand"
+    },
+    {
+      "test": "mechanic_registry::q73_batch_a::q73_madness_spells_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of obsessive_search"
+    },
+    {
+      "test": "mechanic_registry::q73_batch_a::q73_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for obsessive_search"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

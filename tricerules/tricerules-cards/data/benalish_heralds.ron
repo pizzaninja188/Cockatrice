@@ -1,0 +1,20 @@
+// Oracle 09ee1332-741f-4c55-abc3-8bcff9031cd9; source/rulings checked 2026-11-24 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.2 (activation puts the ability on the stack and pays its costs), 118.3 (a cost
+// can't be paid without the necessary resources) and 121.1 (draw). Off-color blue activation on a white creature.
+// Copy of Azure Mage's activated Draw with the printed cost and count.
+(
+  id: "benalish_heralds",
+  name: "Benalish Heralds",
+  face_id: "benalish_heralds",
+  mana_cost: "{3}{W}",
+  types: ["Creature", "Human", "Soldier"],
+  power: 2,
+  toughness: 4,
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    costs: [Mana("{3}{U}"), Tap],
+    effect: [Draw(count: 1)],
+  )],
+)

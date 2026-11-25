@@ -1,0 +1,77 @@
+{
+  "format_version": 1,
+  "oracle_id": "f25c5451-58fa-4916-8342-ae88c5e406cc",
+  "spans": [
+    {
+      "face_id": "wander_in_death",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    },
+    {
+      "face_id": "wander_in_death",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::MoveGraveyardCards",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    },
+    {
+      "symbol": "AbilitySourceZone::Hand",
+      "typed_path": "/faces/0/activated_abilities/0/source_zone"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::DiscardSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q74_cycling_control::q74_cycling_canary_hardest_wander_in_death_returns_two_and_cycles",
+      "covers": "actual Wander in Death returns exactly the chosen two creature cards and cycles"
+    },
+    {
+      "test": "scenario q74_cycling_control::q74_cycling_control_cards_apply_their_printed_bodies_and_cycle",
+      "covers": "actual Wander in Death applies its printed body and cycles for its printed cost"
+    },
+    {
+      "test": "scenario q74_cycling_control::q74_cycling_control_rejects_missing_wrong_targets_and_unfunded_cycling",
+      "covers": "actual Wander in Death rejects an underfunded cycling activation"
+    },
+    {
+      "test": "mechanic_registry::q74_cycling_control::q74_cycling_control_map_definitions",
+      "covers": "reviewed identity, characteristics and typed cycling definition of wander in death"
+    },
+    {
+      "test": "mechanic_registry::q74_cycling_control::q74_cycling_control_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for wander in death"
+    },
+    {
+      "test": "scenario q74_cycling_control::q74_cycling_control_wander_in_death_handles_zero_one_and_stale_targets",
+      "covers": "actual Wander in Death handles zero, one, three and stale graveyard targets"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

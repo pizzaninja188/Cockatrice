@@ -1,0 +1,59 @@
+{
+  "format_version": 1,
+  "oracle_id": "2fd01a30-0c0e-4ac5-b96d-b2a6dad31f0c",
+  "spans": [
+    {
+      "face_id": "buy_your_silence",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Exile",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "PlayerRecipient::ControllerOfTargetGroup",
+      "typed_path": "/faces/0/spell_effect/1/CreateTokens/who"
+    },
+    {
+      "symbol": "TargetKind::AnyPermanent",
+      "typed_path": "/faces/0/spell_effect/0/Exile/subject/Chosen/kind"
+    }
+  ],
+  "tokens": [
+    "treasure"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q81_exile_nonland_rider::q81_exile_rider_cards_exile_and_apply_their_riders",
+      "covers": "actual buy_your_silence exiles the target nonland permanent and applies its printed rider"
+    },
+    {
+      "test": "scenario q81_exile_nonland_rider::q81_exile_rider_rejects_land_targets",
+      "covers": "actual buy_your_silence rejects a land target"
+    },
+    {
+      "test": "scenario q81_exile_nonland_rider::q81_exile_rider_stale_target_prevents_riders",
+      "covers": "actual buy_your_silence applies no rider when its sole target is stale"
+    },
+    {
+      "test": "mechanic_registry::q81_exile_nonland_rider::q81_exile_rider_map_definitions",
+      "covers": "reviewed identity and complete typed shape of buy_your_silence"
+    },
+    {
+      "test": "mechanic_registry::q81_exile_nonland_rider::q81_exile_rider_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for buy_your_silence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "13aab4fc-4c89-45e6-8275-b074b00d0ee9",
+  "spans": [
+    {
+      "face_id": "zhalfirin_void",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "zhalfirin_void",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Scry",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "ManaAmount",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/ProduceMana/options"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q70_batch_a::q70_lands_zhalfirin_void_scries_and_taps_for_colorless",
+      "covers": "actual Zhalfirin Void scries one and taps for colorless mana without entering tapped"
+    },
+    {
+      "test": "scenario q70_batch_a::q70_lands_mana_abilities_require_an_untapped_controller_source",
+      "covers": "the actual mana ability requires the controller and an untapped source"
+    },
+    {
+      "test": "mechanic_registry::q70_batch_a::q70_batch_a_cohorts_map_definitions",
+      "covers": "reviewed identity, printed characteristics and typed definition of zhalfirin_void"
+    },
+    {
+      "test": "mechanic_registry::q70_batch_a::q70_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for zhalfirin_void"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

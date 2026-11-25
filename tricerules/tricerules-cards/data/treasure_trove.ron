@@ -1,0 +1,18 @@
+// Oracle 3c4a6b34-a9bb-426d-908c-7ae0011591df; source/rulings checked 2026-11-24 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.2 (activation puts the ability on the stack and pays its costs), 118.3 (a cost
+// can't be paid without the necessary resources) and 121.1 (draw). Repeatable activation with no tap cost.
+// Copy of Azure Mage's activated Draw with the printed cost and count.
+(
+  id: "treasure_trove",
+  name: "Treasure Trove",
+  face_id: "treasure_trove",
+  mana_cost: "{2}{U}{U}",
+  types: ["Enchantment"],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    costs: [Mana("{2}{U}{U}")],
+    effect: [Draw(count: 1)],
+  )],
+)

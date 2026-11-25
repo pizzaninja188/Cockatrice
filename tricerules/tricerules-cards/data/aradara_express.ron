@@ -1,0 +1,30 @@
+// Oracle be96b9e1-10ef-4955-8d23-c39384def86d; source/rulings checked 2026-11-25 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 301.7/301.7a and 208.3 (a noncreature Vehicle has no body), 702.122a-e (crew),
+// 702.111 (menace) and 611.2a/514.2 (the type change ends at
+// cleanup). Pinned 2017-09-29 rulings confirm a Vehicle is not a creature until crewed, crew taps
+// any untapped creatures you control including one that just entered, you may tap more than
+// necessary, and becoming a creature is not an enters-the-battlefield event. Copy of Consulate
+// Dreadnought's crew ability with Brute Suit's printed-keyword layout.
+(
+  id: "aradara_express",
+  name: "Aradara Express",
+  face_id: "aradara_express",
+  mana_cost: "{5}",
+  types: ["Artifact", "Vehicle"],
+  power: 8,
+  toughness: 6,
+  keywords: [Menace],
+  activated_abilities: [
+    (
+      ability_id: "crew",
+      presentation: OracleLines([2]),
+      costs: [TapPermanents(
+        constraint: AggregateMinimum(minimum: 4, contribution: CurrentPower),
+        filter: (kind: Creature, controller: You),
+        exclude_source: true,
+      )],
+      effect: [AddTypes(subject: Source, addition: (card_types: [Creature]))],
+    ),
+  ],
+)

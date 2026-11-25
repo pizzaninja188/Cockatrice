@@ -1,0 +1,61 @@
+{
+  "format_version": 1,
+  "oracle_id": "713f16db-95ec-479e-a48c-7a69f7668d7f",
+  "spans": [
+    {
+      "face_id": "void_rend",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "void_rend",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::SpellCannotBeCountered",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetFilter",
+      "typed_path": "/faces/0/spell_effect/0/Destroy/subject/Chosen"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q58_batch_a::q58_uncounterable_void_rend_and_wreak_havoc_follow_their_filters",
+      "covers": "destroys a creature, rejects a land target"
+    },
+    {
+      "test": "mechanic_registry::q58_batch_a::q58_uncounterable_map_definitions",
+      "covers": "typed identity, excluded land filter and static for void_rend"
+    },
+    {
+      "test": "mechanic_registry::q58_batch_a::q58_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle fingerprint"
+    },
+    {
+      "test": "scenario q58_batch_a::q58_uncounterable_removal_rechecks_a_stale_target",
+      "covers": "the sole target leaves before resolution; the resolution log asserts the spell fizzles with no legal targets"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

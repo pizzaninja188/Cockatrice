@@ -1,0 +1,21 @@
+// Oracle bbf9fd47-10e1-4749-b06f-4fe72200afc7; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.2 (activate), 118.3 (costs) and 121.1 (draw). No pinned ruling.
+// Copy of Triskaidekaphile's mana-only activated draw with the printed 2/1 body.
+(
+  id: "azure_mage",
+  name: "Azure Mage",
+  face_id: "azure_mage",
+  mana_cost: "{1}{U}",
+  types: ["Creature", "Human", "Wizard"],
+  power: 2,
+  toughness: 1,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{3}{U}")],
+      effect: [Draw(count: 1)],
+    ),
+  ],
+)

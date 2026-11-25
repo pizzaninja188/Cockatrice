@@ -1,0 +1,36 @@
+{
+  "format_version": 1,
+  "oracle_id": "dc85c659-f2ed-4b13-807c-d853f74de410",
+  "spans": [
+    {
+      "face_id": "natural_connection",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q57_batch_a::q57_basic_land_search_spell_cases_use_their_printed_destination",
+      "covers": "the spell puts the chosen basic land onto the battlefield tapped and shuffles once"
+    },
+    {
+      "test": "mechanic_registry::q57_batch_a::q57_basic_land_search_map_definitions",
+      "covers": "reviewed identity and typed basic-land search of natural_connection"
+    },
+    {
+      "test": "mechanic_registry::q57_batch_a::q57_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for natural_connection"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

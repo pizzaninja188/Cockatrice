@@ -2566,3 +2566,165 @@ mod q56_batch_c;
 
 #[path = "scenario/battlebond_lands_batch.rs"]
 mod battlebond_lands_batch;
+
+#[path = "scenario/q57_batch_a.rs"]
+mod q57_batch_a;
+
+#[path = "scenario/q58_batch_a.rs"]
+mod q58_batch_a;
+
+#[path = "scenario/q59_batch_a.rs"]
+mod q59_batch_a;
+
+#[path = "scenario/q60_batch_a.rs"]
+mod q60_batch_a;
+
+#[path = "scenario/q61_batch_a.rs"]
+mod q61_batch_a;
+
+#[path = "scenario/q62_batch_a.rs"]
+mod q62_batch_a;
+
+#[path = "scenario/q63_batch_a.rs"]
+mod q63_batch_a;
+
+#[path = "scenario/q64_batch_a.rs"]
+mod q64_batch_a;
+
+#[path = "scenario/q65_batch_a.rs"]
+mod q65_batch_a;
+
+#[path = "scenario/q66_batch_a.rs"]
+mod q66_batch_a;
+
+#[path = "scenario/q67_batch_a.rs"]
+mod q67_batch_a;
+
+#[path = "scenario/q68_batch_a.rs"]
+mod q68_batch_a;
+
+#[path = "scenario/q69_batch_a.rs"]
+mod q69_batch_a;
+
+#[path = "scenario/q70_batch_a.rs"]
+mod q70_batch_a;
+
+#[path = "scenario/q71_batch_a.rs"]
+mod q71_batch_a;
+
+#[path = "scenario/q72_batch_a.rs"]
+mod q72_batch_a;
+
+#[path = "scenario/q73_batch_a.rs"]
+mod q73_batch_a;
+
+#[path = "scenario/q74_cycling_control.rs"]
+mod q74_cycling_control;
+
+#[path = "scenario/q74_flashback_utility.rs"]
+mod q74_flashback_utility;
+
+#[path = "scenario/q74_scry_riders.rs"]
+mod q74_scry_riders;
+
+#[path = "scenario/q75_treasure_riders.rs"]
+mod q75_treasure_riders;
+
+#[path = "scenario/q75_proliferate_riders.rs"]
+mod q75_proliferate_riders;
+
+#[path = "scenario/q75_surveil_cantrips.rs"]
+mod q75_surveil_cantrips;
+
+#[path = "scenario/q76_sliver_keywords.rs"]
+mod q76_sliver_keywords;
+
+#[path = "scenario/q76_subtype_lords.rs"]
+mod q76_subtype_lords;
+
+#[path = "scenario/q76_activated_draw.rs"]
+mod q76_activated_draw;
+
+#[path = "scenario/q77_quality_removal.rs"]
+mod q77_quality_removal;
+
+#[path = "scenario/q77_land_sac_life.rs"]
+mod q77_land_sac_life;
+
+#[path = "scenario/q77_sac_artifact_destroy.rs"]
+mod q77_sac_artifact_destroy;
+
+#[path = "scenario/q78_ritual_mana.rs"]
+mod q78_ritual_mana;
+
+#[path = "scenario/q78_attack_removal_rider.rs"]
+mod q78_attack_removal_rider;
+
+#[path = "scenario/q78_team_untap.rs"]
+mod q78_team_untap;
+
+#[path = "scenario/q79_gain_life_drain.rs"]
+mod q79_gain_life_drain;
+
+#[path = "scenario/q79_cast_damage.rs"]
+mod q79_cast_damage;
+
+#[path = "scenario/q79_counter_riders.rs"]
+mod q79_counter_riders;
+
+#[path = "scenario/q80_sliver_pump.rs"]
+mod q80_sliver_pump;
+
+#[path = "scenario/q80_protection_keywords.rs"]
+mod q80_protection_keywords;
+
+#[path = "scenario/q80_kicker_spells.rs"]
+mod q80_kicker_spells;
+
+#[path = "scenario/q81_etb_target_pump.rs"]
+mod q81_etb_target_pump;
+
+#[path = "scenario/q81_exile_nonland_rider.rs"]
+mod q81_exile_nonland_rider;
+
+#[path = "scenario/q81_untap_team_rider.rs"]
+mod q81_untap_team_rider;
+
+#[path = "scenario/q82_etb_tap_riders.rs"]
+mod q82_etb_tap_riders;
+
+#[path = "scenario/q82_etb_stun_riders.rs"]
+mod q82_etb_stun_riders;
+
+#[path = "scenario/q82_etb_food_riders.rs"]
+mod q82_etb_food_riders;
+
+#[path = "scenario/q83_artifact_death_draw.rs"]
+mod q83_artifact_death_draw;
+
+#[path = "scenario/q83_heroic_counter.rs"]
+mod q83_heroic_counter;
+
+#[path = "scenario/q83_etb_lose_life.rs"]
+mod q83_etb_lose_life;
+
+#[path = "scenario/q84_etb_scry_riders.rs"]
+mod q84_etb_scry_riders;
+
+#[path = "scenario/q84_dies_draw_riders.rs"]
+mod q84_dies_draw_riders;
+
+#[path = "scenario/q84_etb_gain_life_riders.rs"]
+mod q84_etb_gain_life_riders;
+
+#[path = "scenario/q85_batch_a.rs"]
+mod q85_batch_a;
+
+#[path = "scenario/q86_batch_a.rs"]
+mod q86_batch_a;
+
+#[path = "scenario/q86_batch_b.rs"]
+mod q86_batch_b;
+
+#[path = "scenario/q86_batch_c.rs"]
+mod q86_batch_c;

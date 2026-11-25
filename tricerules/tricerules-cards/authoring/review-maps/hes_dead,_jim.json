@@ -1,0 +1,62 @@
+{
+  "format_version": 1,
+  "oracle_id": "ee7150d1-8b38-4387-9b9c-a40180430170",
+  "spans": [
+    {
+      "face_id": "hes_dead_jim",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetFilter",
+      "typed_path": "/faces/0/spell_effect/0/Destroy/subject/Chosen"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    },
+    {
+      "symbol": "SpellEffectKind::LibraryPartition",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q62_batch_a::q62_destroy_surveil_canary_hes_dead_jim_surveils_one",
+      "covers": "q62 destroy surveil canary hes dead jim surveils one"
+    },
+    {
+      "test": "scenario q62_batch_a::q62_destroy_surveil_scry_cards_apply_the_printed_library_filter",
+      "covers": "q62 destroy surveil scry cards apply the printed library filter"
+    },
+    {
+      "test": "scenario q62_batch_a::q62_destroy_surveil_scry_cards_fizzle_without_a_library_filter",
+      "covers": "q62 destroy surveil scry cards fizzle without a library filter"
+    },
+    {
+      "test": "scenario q62_batch_a::q62_destroy_surveil_scry_cards_still_filter_after_an_indestructible_target",
+      "covers": "q62 destroy surveil scry cards still filter after an indestructible target"
+    },
+    {
+      "test": "mechanic_registry::q62_batch_a::q62_destroy_surveil_scry_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q62_batch_a::q62_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,19 @@
+// Oracle b7daa74c-6142-4107-9355-be98af6ccf13; source/rulings checked 2026-11-25 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.9 (flying), 702.10 (haste), 107.3a-b (X is chosen as the spell is cast), 601.2f (the
+// chosen X sets the total cost) and 614.1c/122.6 (the entry replacement adds the counters). The
+// card has no pinned ruling. Copy of Endless One's X entry-counter replacement with Silver Raven's
+// Flying and Raging Minotaur's Haste.
+(
+  id: "shivan_devastator",
+  name: "Shivan Devastator",
+  face_id: "shivan_devastator",
+  mana_cost: "{X}{R}",
+  types: ["Creature", "Dragon", "Hydra"],
+  power: 0,
+  toughness: 0,
+  keywords: [Flying, Haste],
+  static_abilities: [
+    (ability_id: "static_01", presentation: OracleLines([2]), definition: EntersWithCounters(counter: PlusOnePlusOne, amount: "X")),
+  ],
+)

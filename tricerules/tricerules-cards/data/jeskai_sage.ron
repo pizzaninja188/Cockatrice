@@ -1,0 +1,29 @@
+// Oracle b79d4b17-482e-415b-a63b-1f97a55e7583; source/rulings checked 2026-11-25 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.108a-b (Prowess triggers once per noncreature spell its controller casts and pumps until
+// cleanup under 514.2), 603.6c (dies trigger) and 121.1 (draw). Pinned 2014-11-24 rulings: the
+// trigger resolves before its spell, stays connected if that spell is countered, and a creature
+// spell does not trigger it. Copy of Monastery Swiftspear's Prowess plus Darkslick Drake's draw.
+(
+  id: "jeskai_sage",
+  name: "Jeskai Sage",
+  face_id: "jeskai_sage",
+  mana_cost: "{1}{U}",
+  types: ["Creature", "Human", "Monk"],
+  power: 1,
+  toughness: 1,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WheneverPlayerCastsSpell(caster: Controller, filter: (card_type: Some(Noncreature))),
+      effect: [PumpTarget(power: 1, toughness: 1, subject: Source)],
+    ),
+    (
+      ability_id: "triggered_02",
+      presentation: OracleLines([2]),
+      trigger: WhenSelfDies,
+      effect: [Draw(count: 1)],
+    ),
+  ],
+)

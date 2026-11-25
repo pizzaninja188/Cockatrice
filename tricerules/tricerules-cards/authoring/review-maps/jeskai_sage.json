@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "b79d4b17-482e-415b-a63b-1f97a55e7583",
+  "spans": [
+    {
+      "face_id": "jeskai_sage",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "jeskai_sage",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverPlayerCastsSpell",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellCastFilter",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger/WheneverPlayerCastsSpell/filter"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/1/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/1/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q84_dies_draw_riders::q84_jeskai_sage_prowess_pumps_until_cleanup",
+      "covers": "canary: Prowess triggers once for its controller's noncreature spell, ignores creature and opponent casts, and expires at cleanup"
+    },
+    {
+      "test": "scenario q84_dies_draw_riders::q84_dies_draw_cards_draw_only_for_their_controller",
+      "covers": "the actual card's dies trigger draws one card for its controller only"
+    },
+    {
+      "test": "mechanic_registry::q84_batch_a::q84_dies_draw_riders_map_definitions",
+      "covers": "reviewed identity, Oracle line mapping, Prowess trigger and dies draw"
+    },
+    {
+      "test": "mechanic_registry::q84_batch_a::q84_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

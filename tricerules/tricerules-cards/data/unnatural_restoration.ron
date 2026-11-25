@@ -1,0 +1,25 @@
+// Oracle 05d1e797-bda2-4411-a546-919493768650; source/rulings checked 2026-11-24 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1a/115.2 (a spell targeting a card in another zone), 601.2c, 400.7 (new object after the move), 701.34 (proliferate)
+// and 608.2b (stale target). Pinned 2023-02-04 rulings: any number (including zero) may be chosen
+// for proliferate and opponents' permanents/players may be chosen. The Land plus NonlandPermanent
+// union is the shipped permanent-card encoding from Golgari Findbroker; copy of Regrowth's
+// graveyard-to-hand move and Tezzeret's Gambit's Proliferate.
+(
+  id: "unnatural_restoration",
+  name: "Unnatural Restoration",
+  face_id: "unnatural_restoration",
+  mana_cost: "{1}{G}",
+  types: ["Sorcery"],
+  spell_effect: [
+    MoveGraveyardCards(
+      filter: (card: Some((any_of: Some([
+        (card_type: Some(Land)),
+        (card_type: Some(NonlandPermanent)),
+      ])))),
+      destination: Hand,
+      linked_exile_id: None,
+    ),
+    Proliferate,
+  ],
+)

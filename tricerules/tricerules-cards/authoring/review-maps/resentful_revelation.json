@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "71d6aa12-4888-458d-9dc8-9954b247a246",
+  "spans": [
+    {
+      "face_id": "resentful_revelation",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "resentful_revelation",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/flashback_cost"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::LookChooseOneToHandRestToGraveyard",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "CardFace::flashback_cost",
+      "typed_path": "/faces/0/flashback_cost"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q68_batch_a::q68_top_selection_resentful_revelation_looks_at_three_and_keeps_sorcery_timing",
+      "covers": "actual Resentful Revelation look partition, flashback cost, exile and timing"
+    },
+    {
+      "test": "scenario q68_batch_a::q68_top_selection_keeps_the_look_private_and_clamps_a_short_library",
+      "covers": "shared private-look evidence"
+    },
+    {
+      "test": "mechanic_registry::q68_batch_a::q68_batch_a_cohorts_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q68_batch_a::q68_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

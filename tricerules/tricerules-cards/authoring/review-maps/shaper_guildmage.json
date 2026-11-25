@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "dfbce321-d3c1-4b76-a3fa-27f875015085",
+  "spans": [
+    {
+      "face_id": "shaper_guildmage",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "shaper_guildmage",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/1/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/1/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q69_batch_a::q69_guildmage_shaper_grants_first_strike_and_pumps",
+      "covers": "actual Shaper Guildmage clause coverage"
+    },
+    {
+      "test": "scenario q69_batch_a::q69_guildmage_cards_reject_unfunded_wrong_target_and_tapped_source",
+      "covers": "actual Shaper Guildmage clause coverage"
+    },
+    {
+      "test": "mechanic_registry::q69_batch_a::q69_batch_a_cohorts_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of shaper_guildmage"
+    },
+    {
+      "test": "mechanic_registry::q69_batch_a::q69_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for shaper_guildmage"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

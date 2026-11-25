@@ -1,0 +1,98 @@
+{
+  "format_version": 1,
+  "oracle_id": "b6859c7a-4c4d-4652-938f-ecedce29d506",
+  "spans": [
+    {
+      "face_id": "generous_ent",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "generous_ent",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "generous_ent",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Reach",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::DiscardSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "food"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q82_etb_food_riders::q82_food_canary_simplest_fierce_witchstalker_creates_one_food",
+      "covers": "canary simplest creates one Food"
+    },
+    {
+      "test": "scenario q82_etb_food_riders::q82_food_canary_hardest_generous_ent_cycles_for_a_forest",
+      "covers": "canary hardest Forestcycles for a Forest"
+    },
+    {
+      "test": "scenario q82_etb_food_riders::q82_food_cards_create_one_food_and_match_printed_characteristics",
+      "covers": "every actual card creates one Food and keeps printed characteristics"
+    },
+    {
+      "test": "scenario q82_etb_food_riders::q82_food_tempting_witch_sacrifices_food_for_three_life",
+      "covers": "Tempting Witch sacrifices a Food for targeted life loss"
+    },
+    {
+      "test": "scenario q82_etb_food_riders::q82_food_tempting_witch_rejects_a_non_food_sacrifice",
+      "covers": "Tempting Witch rejects a non-Food sacrifice"
+    },
+    {
+      "test": "mechanic_registry::q82_etb_food_riders::q82_food_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q82_etb_food_riders::q82_food_generous_ent_has_forestcycling",
+      "covers": "Generous Ent Forestcycling identity and search"
+    },
+    {
+      "test": "mechanic_registry::q82_etb_food_riders::q82_food_tempting_witch_has_the_printed_food_sacrifice_ability",
+      "covers": "Tempting Witch Food-sacrifice ability"
+    },
+    {
+      "test": "mechanic_registry::q82_etb_food_riders::q82_food_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,29 @@
+// Oracle ef85a5eb-9cde-47b7-97e4-daa9aa9d4676; source/rulings checked 2026-11-23 against the pinned
+// Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 605.1a/605.3b (mana ability, which does not use the stack), 106.1a (five colors), 602.1/602.2
+// and 118.3 (activation and costs), 614.1a/615.1 (finite prevention shield) and 115.1 (any target).
+// The card has no pinned ruling. Copy of the reviewed Orochi Leafcaller any-color mana ability plus
+// the reviewed Clergy en-Vec prevention shield, both on the printed off-color costs.
+(
+  id: "necra_disciple",
+  name: "Necra Disciple",
+  face_id: "necra_disciple",
+  mana_cost: "{B}",
+  types: ["Creature", "Human", "Wizard"],
+  power: 1,
+  toughness: 1,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{G}"), Tap],
+      effect: [ProduceMana(options: [(w: 1), (u: 1), (b: 1), (r: 1), (g: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([2]),
+      costs: [Mana("{W}"), Tap],
+      effect: [PreventNextDamage(amount: 1, target: (kind: AnyTarget))],
+    ),
+  ],
+)

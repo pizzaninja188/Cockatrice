@@ -1,0 +1,76 @@
+{
+  "format_version": 1,
+  "oracle_id": "e0cb503e-9814-4280-9c29-4eff3379bc24",
+  "spans": [
+    {
+      "face_id": "letter_of_acceptance",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "letter_of_acceptance",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "ManaAmount",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/ProduceMana/options"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/1/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/1/costs/1"
+    },
+    {
+      "symbol": "AbilityCost::SacrificeSelf",
+      "typed_path": "/faces/0/activated_abilities/1/costs/2"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q69_batch_a::q69_rocks_letter_of_acceptance_sacrifices_itself_to_draw",
+      "covers": "actual Letter of Acceptance clause coverage"
+    },
+    {
+      "test": "scenario q69_batch_a::q69_rocks_each_card_offers_its_printed_any_color_option",
+      "covers": "actual Letter of Acceptance clause coverage"
+    },
+    {
+      "test": "scenario q69_batch_a::q69_rocks_mana_abilities_reject_a_tapped_source_without_producing",
+      "covers": "actual Letter of Acceptance clause coverage"
+    },
+    {
+      "test": "mechanic_registry::q69_batch_a::q69_batch_a_cohorts_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of letter_of_acceptance"
+    },
+    {
+      "test": "mechanic_registry::q69_batch_a::q69_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for letter_of_acceptance"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

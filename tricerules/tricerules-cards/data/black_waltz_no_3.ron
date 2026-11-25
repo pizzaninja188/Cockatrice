@@ -1,0 +1,23 @@
+// Oracle 9c84c681-40c1-4ff3-86e6-48b4ab7491e5; source/rulings checked 2026-11-24 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.9a-b (flying), 702.2a-c (deathtouch), 601.2 (casting a spell), 603.2/603.3 (the cast
+// trigger) and 120.3 (each opponent is dealt 2 damage). The pinned 2025-06-06 ruling confirms
+// the trigger resolves before the spell that caused it, even if that spell is countered or
+// otherwise leaves the stack.
+(
+  id: "black_waltz_no._3",
+  name: "Black Waltz No. 3",
+  face_id: "black_waltz_no_3",
+  mana_cost: "{2}{B}{R}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Wizard"],
+  power: 2,
+  toughness: 2,
+  keywords: [Flying, Deathtouch],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WheneverPlayerCastsSpell(filter: (card_type: Some(Noncreature))),
+    effect: [DamagePlayer(amount: 2, who: EachOpponent)],
+  )],
+)

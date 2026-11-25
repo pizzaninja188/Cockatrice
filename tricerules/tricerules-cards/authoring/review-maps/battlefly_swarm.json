@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "1396e7f1-ac91-4778-9f71-493c7a44bd51",
+  "spans": [
+    {
+      "face_id": "battlefly_swarm",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "battlefly_swarm",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q85_batch_a::q85_deathtouch_canary_battlefly_swarm_gains_deathtouch",
+      "covers": "canary simplest: printed Flying plus the exact {B} deathtouch grant"
+    },
+    {
+      "test": "scenario q85_batch_a::q85_deathtouch_cards_grant_only_the_source_and_only_deathtouch",
+      "covers": "the actual card grants deathtouch to itself only and keeps Flying"
+    },
+    {
+      "test": "scenario q85_batch_a::q85_deathtouch_cards_expire_at_cleanup",
+      "covers": "the grant ends at cleanup"
+    },
+    {
+      "test": "scenario q85_batch_a::q85_deathtouch_cards_reject_activation_without_black_mana",
+      "covers": "the printed {B} is required, and the same activation then succeeds, proving the definition is present"
+    },
+    {
+      "test": "scenario q85_batch_a::q85_deathtouch_cards_carry_their_exact_printed_characteristics",
+      "covers": "printed 1/1 body and Flying, with deathtouch only granted"
+    },
+    {
+      "test": "mechanic_registry::q85_batch_a::q85_deathtouch_grant_map_definitions",
+      "covers": "reviewed identity, Oracle line mapping, printed keyword and {B} grant"
+    },
+    {
+      "test": "mechanic_registry::q85_batch_a::q85_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

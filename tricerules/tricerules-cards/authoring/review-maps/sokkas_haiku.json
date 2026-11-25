@@ -1,0 +1,95 @@
+{
+  "format_version": 1,
+  "oracle_id": "87a97c72-143d-48a8-a1c5-3c44aa8e5a86",
+  "spans": [
+    {
+      "face_id": "sokkas_haiku",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting/groups/0"
+      ]
+    },
+    {
+      "face_id": "sokkas_haiku",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/1",
+        "/faces/0/spell_effect/2"
+      ]
+    },
+    {
+      "face_id": "sokkas_haiku",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/spell_effect/3",
+        "/faces/0/targeting/groups/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CounterTargetSpell",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Mill",
+      "typed_path": "/faces/0/spell_effect/2"
+    },
+    {
+      "symbol": "SpellEffectKind::Untap",
+      "typed_path": "/faces/0/spell_effect/3"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q79_counter_riders::q79_counter_riders_canary_simplest_dismissive_denial_counters",
+      "covers": "canary simplest Dismissive Denial counters a Bolt"
+    },
+    {
+      "test": "scenario q79_counter_riders::q79_counter_riders_canary_hardest_sokkas_haiku_draws_mills_and_untaps",
+      "covers": "canary hardest Sokka Haiku counters, draws, mills and untaps only the targeted land"
+    },
+    {
+      "test": "scenario q79_counter_riders::q79_counter_riders_confirm_suspicions_creates_three_clues",
+      "covers": "Confirm Suspicions creates exactly three Clue tokens"
+    },
+    {
+      "test": "scenario q79_counter_riders::q79_counter_riders_confirm_suspicions_stale_target_creates_no_clues",
+      "covers": "a fizzled Confirm Suspicions creates no Clues"
+    },
+    {
+      "test": "scenario q79_counter_riders::q79_counter_riders_sokkas_haiku_still_resolves_when_the_spell_target_is_gone",
+      "covers": "a remaining legal land target still lets Sokka Haiku draw mill and untap"
+    },
+    {
+      "test": "scenario q79_counter_riders::q79_counter_riders_dismissive_denial_basic_landcycling_searches_from_hand",
+      "covers": "basic landcycling discards itself and searches only basic lands"
+    },
+    {
+      "test": "scenario q79_counter_riders::q79_counter_riders_cast_exact_printed_costs",
+      "covers": "each counter rider spends exactly its printed cost"
+    },
+    {
+      "test": "mechanic_registry::q79_counter_riders::q79_counter_riders_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of sokkas_haiku"
+    },
+    {
+      "test": "mechanic_registry::q79_counter_riders::q79_counter_riders_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for sokkas_haiku"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

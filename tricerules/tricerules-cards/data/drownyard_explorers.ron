@@ -1,0 +1,20 @@
+// Oracle c1ebbe89-8976-4ed7-a68a-8b08aac4616c; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (entry trigger), 701.16a (investigate creates a Clue) and 111.10f (token identity).
+// The pinned 2016-04-08 rulings confirm Clue is an artifact type and one Clue cannot pay two costs.
+// Copy of Air Nomad Legacy's entry investigate on the printed 2/4 body.
+(
+  id: "drownyard_explorers",
+  name: "Drownyard Explorers",
+  face_id: "drownyard_explorers",
+  mana_cost: "{3}{U}",
+  types: ["Creature", "Human", "Wizard"],
+  power: 2,
+  toughness: 4,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [CreateTokens(token: "clue", count: 1)],
+  )],
+)

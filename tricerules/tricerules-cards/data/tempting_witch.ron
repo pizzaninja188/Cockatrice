@@ -1,0 +1,31 @@
+// Oracle 82284fe4-ecb3-4b27-bb03-27290ad15b17; source/rulings checked 2026-11-24 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (entry trigger), 111.10a/701.7 (Food token creation), 602.1/602.2 (activation),
+// 118.3 (mana payment), 701.21a (sacrifice) and 119.3 (target player loses life). Pinned
+// 2024-11-08 rulings confirm Food is an artifact subtype and one Food cannot pay two costs. Copy
+// of Sweettooth Witch's entry Food and Food-sacrifice life loss with the printed {T} and 3 life.
+(
+  id: "tempting_witch",
+  name: "Tempting Witch",
+  face_id: "tempting_witch",
+  mana_cost: "{2}{B}",
+  types: ["Creature", "Human", "Warlock"],
+  power: 1,
+  toughness: 3,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [CreateTokens(token: "food", count: 1)],
+  )],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    costs: [
+      Mana("{2}"),
+      Tap,
+      SacrificePermanent(filter: (kind: AnyPermanent, controller: You, required_subtypes: ["Food"])),
+    ],
+    effect: [TargetPlayerLosesLife(amount: 3, target: (kind: AnyPlayer))],
+  )],
+)

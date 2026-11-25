@@ -1,0 +1,21 @@
+// Oracle 99eff6e9-5911-4f89-bad1-0888067a7783; source/rulings checked 2026-11-24 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.6 (counter), 115.1a/601.2c (spell target), 608.2b (stale sole target removes the
+// spell) and 702.29a-b (basic landcycling is a hand-zone activated ability that discards this
+// card as a cost, searches for a basic land card, reveals it, puts it into its hand and
+// shuffles). The card has no pinned ruling. CR 701.23a-b/701.24 govern the search and shuffle.
+(
+  id: "dismissive_denial",
+  name: "Dismissive Denial",
+  face_id: "dismissive_denial",
+  mana_cost: "{2}{U}{U}",
+  types: ["Instant"],
+  spell_effect: [CounterTargetSpell(spell_filter: ())],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    source_zone: Hand,
+    costs: [Mana("{2}"), DiscardSelf],
+    effect: [SearchLibrary(filter: Some((card_type: Some(BasicLand))), reveal: true)],
+  )],
+)

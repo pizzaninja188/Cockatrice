@@ -1,0 +1,20 @@
+// Oracle 74910702-e385-48f7-a6b3-064ebed08be7; source/rulings checked 2026-11-24 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 604.1/611.3a (continuous static ability), 613.1f (layer 6 keyword grant)
+// and 109.2 (a subtype description means every Sliver creature on the battlefield;
+// the source includes itself). Copy of Blade Sliver's subtype scope with Goblin
+// Chieftain's AnthemKeyword. The 2013-07-01 rulings confirm Sliver keyword grants are cumulative and redundant for first strike.
+(
+  id: "talon_sliver",
+  name: "Talon Sliver",
+  face_id: "talon_sliver",
+  mana_cost: "{1}{W}",
+  types: ["Creature", "Sliver"],
+  power: 1,
+  toughness: 1,
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: AnthemKeyword(filter: (matching: (kind: Creature, required_subtypes: ["Sliver"])), keyword: FirstStrike),
+  )],
+)

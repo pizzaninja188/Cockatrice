@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "2e56bc34-1e35-4b95-9525-cb58ac8ba060",
+  "spans": [
+    {
+      "face_id": "fervent_denial",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "fervent_denial",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/flashback_cost"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CounterTargetSpell",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "CardFaceDef.flashback_cost",
+      "typed_path": "/faces/0/flashback_cost"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q58_batch_a::q58_counter_riders_counter_the_target_and_apply_their_printed_rider",
+      "covers": "counters the targeted spell with no other rider"
+    },
+    {
+      "test": "scenario q58_batch_a::q58_counter_riders_flashback_casts_and_exiles",
+      "covers": "pays the printed flashback cost, counters again and exiles"
+    },
+    {
+      "test": "mechanic_registry::q58_batch_a::q58_counter_rider_map_definitions",
+      "covers": "typed identity, counter and flashback cost for fervent_denial"
+    },
+    {
+      "test": "mechanic_registry::q58_batch_a::q58_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -254,6 +254,7 @@ const FINGERPRINTS: &[Fingerprint] = &[
         "slagwurm_armor",
         "Slagwurm Armor",
         "slagwurm_armor",
+        // Pinned bulk a9a2fd3b... (2026-11-10); master's 0516f053... bulk updated this text.
         "ac695ab8d8e8e913add4cc621fd9e8c34e3ea25b161fa829910784a33a9cb91e",
     ),
     (

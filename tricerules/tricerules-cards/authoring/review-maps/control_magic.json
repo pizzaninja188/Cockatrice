@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "cd0d7141-46d2-4aa3-bc77-6b3b4513803e",
+  "spans": [
+    {
+      "face_id": "control_magic",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "control_magic",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::AuraAttach",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::ControlsAttached",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q66_batch_a::q66_control_canary_simplest_control_magic_takes_and_restores_control",
+      "covers": "actual Control Magic attaches, controls the enchanted creature, and restores control when it leaves"
+    },
+    {
+      "test": "mechanic_registry::q66_batch_a::q66_control_aura_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of control_magic"
+    },
+    {
+      "test": "mechanic_registry::q66_batch_a::q66_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for control_magic"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

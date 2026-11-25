@@ -1,0 +1,23 @@
+// Oracle d688baac-0574-4d88-b7eb-a7384c298ef5; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 113.6g (an ability that says a spell can't be countered functions on the stack), 701.6
+// (counter) and 702.19a-b (trample). The pinned 2009-10-01 ruling confirms a counterspell can
+// target it and resolves, but does not counter it; other effects work normally. Copy of Surrak,
+// Elusive Hunter's uncounterable static plus Trample.
+(
+  id: "terra_stomper",
+  name: "Terra Stomper",
+  face_id: "terra_stomper",
+  mana_cost: "{3}{G}{G}{G}",
+  types: ["Creature", "Beast"],
+  power: 8,
+  toughness: 8,
+  keywords: [Trample],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: SpellCannotBeCountered,
+    ),
+  ],
+)

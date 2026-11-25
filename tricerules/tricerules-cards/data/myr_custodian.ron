@@ -1,0 +1,24 @@
+// Oracle 43923f24-7e95-4934-9a5c-8d9a5e06ddea; source/rulings checked 2026-11-25 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (enters trigger), 701.22 (Scry) and 101.4/701.22c (each opponent makes their own scry
+// choice in turn order and looks privately). Pinned 2023-02-04 ruling: first the controller scries
+// two, then each opponent in turn order chooses whether to scry one; accepting opponents look at
+// their top card at the same time and then decide in turn order. Copy of Kaya, Intangible Slayer's
+// ordered Draw + EachOpponentMayScry composition with the controller's Scry leading.
+(
+  id: "myr_custodian",
+  name: "Myr Custodian",
+  face_id: "myr_custodian",
+  mana_cost: "{3}",
+  types: ["Artifact", "Creature", "Myr"],
+  power: 2,
+  toughness: 3,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [Scry(count: 2), EachOpponentMayScry(count: 1)],
+    ),
+  ],
+)

@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "3f16dc14-3d3f-4ffa-90bc-9abc67db75cf",
+  "spans": [
+    {
+      "face_id": "quiet_purity",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetFilter",
+      "typed_path": "/faces/0/spell_effect/0/Destroy/subject/Chosen"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q58_batch_a::q58_destroy_enchantment_cards_destroy_only_enchantments",
+      "covers": "destroys an enchantment and rejects a creature target"
+    },
+    {
+      "test": "mechanic_registry::q58_batch_a::q58_destroy_enchantment_map_definitions",
+      "covers": "typed identity including the Arcane type and destruction for quiet_purity"
+    },
+    {
+      "test": "mechanic_registry::q58_batch_a::q58_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

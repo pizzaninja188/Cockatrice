@@ -1,0 +1,15 @@
+// Oracle 90c97fc4-597c-45cf-96c6-3ba9558ede0d; source/rulings checked 2026-11-24 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.26 (untap), 121.1 (draw) and 608.2 (only creatures controlled at resolution untap).
+// Copy of Vitalize's UntapAll plus an ordinary Draw.
+(
+  id: "to_arms!",
+  name: "To Arms!",
+  face_id: "to_arms",
+  mana_cost: "{1}{W}",
+  types: ["Instant"],
+  spell_effect: [
+    UntapAll(players: Controller),
+    Draw(count: 1),
+  ],
+)

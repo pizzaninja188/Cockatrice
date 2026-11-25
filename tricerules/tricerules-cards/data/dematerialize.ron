@@ -1,0 +1,15 @@
+// Oracle d2fbad7d-d05a-4321-9aff-a93bd102a3f4; source/rulings checked 2026-11-24 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1/601.2c (target permanent at cast), 608.2b (stale target fizzles) and 702.34a-d
+// (flashback alternative cost and exile). Pinned 2021-03-19 rulings: a flashback spell always
+// exiles afterward, even if it resolves, is countered or leaves the stack another way. Copy of
+// Boomerang's permanent bounce and Firebolt's reviewed flashback field.
+(
+  id: "dematerialize",
+  name: "Dematerialize",
+  face_id: "dematerialize",
+  mana_cost: "{3}{U}",
+  types: ["Sorcery"],
+  flashback_cost: Some("{5}{U}{U}"),
+  spell_effect: [ReturnToOwnersHand(subject: Chosen((kind: AnyPermanent)))],
+)

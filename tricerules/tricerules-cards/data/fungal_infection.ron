@@ -1,0 +1,18 @@
+// Oracle 04a8858e-9033-403e-9346-5a2ad1bdf680; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1a/601.2c (target at cast), 611.2a/514.2 (until end of turn), 613.4c (layer 7c),
+// 701.7a (create a token) and 608.2b (an illegal sole target stops the whole spell). Pinned
+// 2018-04-27 rulings: the target is still on the battlefield when the token is created, and a
+// fizzled spell creates no Saproling. Copy of Afflict's shrink plus Sprout's token.
+(
+  id: "fungal_infection",
+  name: "Fungal Infection",
+  face_id: "fungal_infection",
+  mana_cost: "{B}",
+  types: ["Instant"],
+  spell_effect: [
+    PumpTarget(power: -1, toughness: -1, subject: Chosen((kind: Creature))),
+    CreateTokens(token: "saproling_g_1_1", count: 1),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
+)

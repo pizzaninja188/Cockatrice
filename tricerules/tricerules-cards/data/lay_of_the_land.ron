@@ -1,0 +1,15 @@
+// Oracle cedc52eb-66a6-4b43-87f1-9bb9f4d4871e; source/rulings checked 2026-11-22 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.23 (search; a filtered search may fail to find), 701.20 (reveal) and 701.24 (shuffle).
+// Copy of the reviewed Roost Seek hand search with the printed reveal.
+(
+  id: "lay_of_the_land",
+  name: "Lay of the Land",
+  face_id: "lay_of_the_land",
+  mana_cost: "{G}",
+  types: ["Sorcery"],
+  spell_effect: [SearchLibrary(
+    filter: Some((card_type: Some(BasicLand))),
+    reveal: true,
+  )],
+)

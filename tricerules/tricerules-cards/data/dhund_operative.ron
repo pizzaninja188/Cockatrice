@@ -1,0 +1,27 @@
+// Oracle e025c802-9862-4dee-8c2a-b875eb001714; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 611.3/613.4c (the layer-7c self modifier and the live artifact check) and 702.2a-b
+// (deathtouch). No pinned ruling. Copy of Gearsmith Prodigy's artifact-count condition plus a
+// keyword grant, with the printed +1/+0.
+(
+  id: "dhund_operative",
+  name: "Dhund Operative",
+  face_id: "dhund_operative",
+  mana_cost: "{1}{B}",
+  types: ["Creature", "Human", "Rogue"],
+  power: 2,
+  toughness: 2,
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: ConditionalSelfModifier(
+      condition: BattlefieldAggregate(
+        filter: (controllers: Controller, card_type: Some(Artifact)),
+        aggregate: Count,
+        min: Some(1),
+      ),
+      delta_power: 1,
+      keywords: [Deathtouch],
+    ),
+  )],
+)

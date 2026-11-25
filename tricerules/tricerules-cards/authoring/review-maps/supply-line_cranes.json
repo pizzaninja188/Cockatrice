@@ -1,0 +1,57 @@
+{
+  "format_version": 1,
+  "oracle_id": "bf3811b3-f3d2-4ffb-8019-e403a2cc1d81",
+  "spans": [
+    {
+      "face_id": "supply_line_cranes",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "supply_line_cranes",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q65_batch_a::q65_counters_canary_simplest_supply_line_cranes_counters_a_chosen_creature",
+      "covers": "actual Supply-Line Cranes pays its printed cost, enters with flying and counters a chosen creature"
+    },
+    {
+      "test": "mechanic_registry::q65_batch_a::q65_etb_counter_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of supply_line_cranes"
+    },
+    {
+      "test": "mechanic_registry::q65_batch_a::q65_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for supply_line_cranes"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

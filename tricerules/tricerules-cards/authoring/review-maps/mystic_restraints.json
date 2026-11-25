@@ -1,0 +1,92 @@
+{
+  "format_version": 1,
+  "oracle_id": "efb91243-2617-495f-adb0-1c26a669fb80",
+  "spans": [
+    {
+      "face_id": "mystic_restraints",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "mystic_restraints",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "mystic_restraints",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "mystic_restraints",
+      "start_line": 4,
+      "end_line": 4,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flash",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "SpellEffectKind::AuraAttach",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Tap",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q67_batch_a::q67_aura_canary_simplest_dehydration_locks_only_untapping",
+      "covers": "actual Dehydration attaches to an opponent creature and prevents only its untap"
+    },
+    {
+      "test": "scenario q67_batch_a::q67_aura_canary_hardest_frozen_solid_destroys_a_damaged_host",
+      "covers": "actual Frozen Solid destroys a damaged host, follows it to the graveyard, and keeps a survivor locked"
+    },
+    {
+      "test": "scenario q67_batch_a::q67_aura_eternity_snare_draws_on_entry_and_locks",
+      "covers": "actual Eternity Snare draws exactly one card on entry and locks the host"
+    },
+    {
+      "test": "scenario q67_batch_a::q67_aura_mystic_restraints_flashes_in_and_taps_on_entry",
+      "covers": "actual Mystic Restraints flashes in on an opponent's upkeep, taps the host on entry, and locks untapping"
+    },
+    {
+      "test": "scenario q67_batch_a::q67_aura_fizzles_when_its_target_leaves_before_resolution",
+      "covers": "actual Aura fizzles without attaching or drawing when its creature target leaves before resolution"
+    },
+    {
+      "test": "mechanic_registry::q67_batch_a::q67_cohorts_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q67_batch_a::q67_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

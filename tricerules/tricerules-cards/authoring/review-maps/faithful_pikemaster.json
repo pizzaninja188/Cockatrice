@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "17d5c53d-7c77-45c2-b8be-7e43c1ecd902",
+  "spans": [
+    {
+      "face_id": "faithful_pikemaster",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "faithful_pikemaster",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Scry",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::ConditionalSelfModifier",
+      "typed_path": "/faces/0/static_abilities/0"
+    },
+    {
+      "symbol": "GameCondition::ActivePlayer",
+      "typed_path": "/faces/0/static_abilities/0/definition/ConditionalSelfModifier/condition"
+    },
+    {
+      "symbol": "Keyword::FirstStrike",
+      "typed_path": "/faces/0/static_abilities/0/definition/ConditionalSelfModifier/keywords"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q84_etb_scry_riders::q84_faithful_pikemaster_first_strike_is_turn_conditional",
+      "covers": "canary hardest: printed body, exact Scry 2, and first strike that applies only during its controller's turn"
+    },
+    {
+      "test": "scenario q84_etb_scry_riders::q84_scry_cards_offer_their_exact_printed_counts",
+      "covers": "the actual card offers exactly its printed top two cards"
+    },
+    {
+      "test": "mechanic_registry::q84_batch_a::q84_etb_scry_riders_map_definitions",
+      "covers": "reviewed identity, Oracle line mapping, conditional first strike and entry trigger"
+    },
+    {
+      "test": "mechanic_registry::q84_batch_a::q84_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

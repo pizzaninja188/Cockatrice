@@ -1,0 +1,72 @@
+{
+  "format_version": 1,
+  "oracle_id": "e8fcc7ff-6274-4130-a3a5-99f545eeee30",
+  "spans": [
+    {
+      "face_id": "survive_the_night",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    },
+    {
+      "face_id": "survive_the_night",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/2"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "Keyword::Indestructible",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_effect/2"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [
+    "clue"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q72_batch_a::q72_investigate_riders_apply_their_printed_values_and_create_one_clue",
+      "covers": "actual Survive the Night applies +1/+0 and indestructible and creates one Clue"
+    },
+    {
+      "test": "scenario q72_batch_a::q72_survive_the_night_indestructible_prevents_destroy",
+      "covers": "actual Survive the Night's indestructible survives a destroy effect"
+    },
+    {
+      "test": "scenario q72_batch_a::q72_investigate_riders_fizzle_stale_targets_without_clues",
+      "covers": "actual Survive the Night does not investigate when its only target is illegal"
+    },
+    {
+      "test": "mechanic_registry::q72_batch_a::q72_investigate_riders_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of Survive the Night"
+    },
+    {
+      "test": "mechanic_registry::q72_batch_a::q72_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Survive the Night"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

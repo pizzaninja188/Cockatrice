@@ -1,0 +1,29 @@
+// Oracle a71b2ffb-6a62-4239-987f-ec82a358927f; source/rulings checked 2026-11-25 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.1a/602.2 (activated ability and cost), 701.21a (sacrifice as a cost), 603.6c/603.10a
+// (battlefield-to-graveyard trigger), 119.3 (life gain adjusts the total) and 121.1 (draw).
+// Pinned 2017-02-09 ruling: the last ability triggers no matter why the artifact is put into a
+// graveyard, and its draw resolves before the first ability.
+(
+  id: "implement_of_improvement",
+  name: "Implement of Improvement",
+  face_id: "implement_of_improvement",
+  mana_cost: "{1}",
+  types: ["Artifact"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{W}"), SacrificeSelf],
+      effect: [GainLife(amount: 2)],
+    ),
+  ],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WhenSelfDies,
+      effect: [Draw(count: 1)],
+    ),
+  ],
+)

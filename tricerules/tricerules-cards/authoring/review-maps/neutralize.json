@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "c2c60973-b4d5-43fa-a0c4-b5688b28df05",
+  "spans": [
+    {
+      "face_id": "neutralize",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "neutralize",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CounterTargetSpell",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::DiscardSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q58_batch_a::q58_counter_riders_counter_the_target_and_apply_their_printed_rider",
+      "covers": "counters the targeted spell"
+    },
+    {
+      "test": "scenario q58_batch_a::q58_counter_riders_cycling_discards_self_and_draws",
+      "covers": "cycles from hand and draws one"
+    },
+    {
+      "test": "mechanic_registry::q58_batch_a::q58_counter_rider_map_definitions",
+      "covers": "typed identity, counter and cycling ability for neutralize"
+    },
+    {
+      "test": "mechanic_registry::q58_batch_a::q58_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

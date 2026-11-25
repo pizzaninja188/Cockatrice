@@ -1,0 +1,28 @@
+// Oracle a58ee84f-1d9c-4924-b7b1-14a9b2ba3b98; source/rulings checked 2026-11-25 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.9 (flying), 603.6a (the entry watcher includes this creature or another Ally), 603.5
+// (the controller may decline the optional ability) and 122.1 (the +1/+1 counter). Pinned ruling
+// 2009-10-01: the ability triggers on this creature entering, so it enters with its unmodified
+// power and toughness and receives the counter only after the trigger resolves. Copy of Silver
+// Raven's Flying plus Hada Freeblade's Ally entry counter.
+(
+  id: "umara_raptor",
+  name: "Umara Raptor",
+  face_id: "umara_raptor",
+  mana_cost: "{2}{U}",
+  types: ["Creature", "Bird", "Ally"],
+  power: 1,
+  toughness: 1,
+  keywords: [Flying],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      filter: (permanent_type: Some(Creature)),
+      creature_filter: Some((required_subtypes: ["Ally"])),
+    ),
+    effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
+    may: true,
+  )],
+)

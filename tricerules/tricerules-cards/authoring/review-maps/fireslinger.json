@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "oracle_id": "0e5a5cee-d068-42cf-bf58-8e1360720be0",
+  "spans": [
+    {
+      "face_id": "fireslinger",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::DamagePlayer",
+      "typed_path": "/faces/0/activated_abilities/0/effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/activated_abilities/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q65_batch_a::q65_ping_canary_hardest_fireslinger_self_damage_and_stale_target",
+      "covers": "actual Fireslinger deals its printed self-damage and loses the whole ability when its sole target is gone"
+    },
+    {
+      "test": "mechanic_registry::q65_batch_a::q65_activated_damage_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of fireslinger"
+    },
+    {
+      "test": "mechanic_registry::q65_batch_a::q65_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for fireslinger"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

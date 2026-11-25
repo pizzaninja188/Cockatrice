@@ -1,0 +1,26 @@
+// Oracle e14532e9-ecc2-4028-b99e-3629533962bc; source/rulings checked 2026-11-24 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.51a-c (convoke), 702.20 (vigilance), 603.6a (entry trigger), 701.26 (tap), 122.1f (stun
+// counter) and 115.1. Pinned 2023-04-14 and 2024-01-12 rulings confirm convoke timing and that an
+// already-tapped target is legal. Copy of Alchemax Slayer-Bots' tap-plus-stun trigger with the
+// printed convoke and vigilance keywords.
+(
+  id: "referee_squad",
+  name: "Referee Squad",
+  face_id: "referee_squad",
+  mana_cost: "{2}{U}",
+  types: ["Creature", "Homunculus"],
+  power: 2,
+  toughness: 2,
+  keywords: [Convoke, Vigilance],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([3]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [
+      Tap(subject: Chosen((kind: Creature, controller: Opponent))),
+      PutCounters(counter: Stun, count: 1, subject: Chosen((kind: Creature, controller: Opponent))),
+    ],
+    targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0, 1])])),
+  )],
+)

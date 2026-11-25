@@ -1,0 +1,21 @@
+// Oracle ad69f48e-c387-4376-a04f-37d3992c7946; source/rulings checked 2026-11-24 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.19 (trample), 603.6a (entry trigger) and 111.10a/701.7 (Food token creation). The pinned
+// 2024-11-08 rulings confirm Food is an artifact subtype, including nontoken Foods. Copy of
+// Sweettooth Witch's entry Food token with the printed trample keyword.
+(
+  id: "fierce_witchstalker",
+  name: "Fierce Witchstalker",
+  face_id: "fierce_witchstalker",
+  mana_cost: "{2}{G}{G}",
+  types: ["Creature", "Wolf"],
+  power: 4,
+  toughness: 4,
+  keywords: [Trample],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [CreateTokens(token: "food", count: 1)],
+  )],
+)

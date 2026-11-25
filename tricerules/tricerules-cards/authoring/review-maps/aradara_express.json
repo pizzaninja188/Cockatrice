@@ -1,0 +1,72 @@
+{
+  "format_version": 1,
+  "oracle_id": "be96b9e1-10ef-4955-8d23-c39384def86d",
+  "spans": [
+    {
+      "face_id": "aradara_express",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "aradara_express",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Menace",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "AbilityCost::TapPermanents",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::AddTypes",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Source",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q86_batch_b::q86_vehicle_cards_crew_makes_the_printed_artifact_creature",
+      "covers": "shared 02-crew-vehicles evidence"
+    },
+    {
+      "test": "scenario q86_batch_b::q86_vehicle_cards_reject_insufficient_power_and_other_creature_crew",
+      "covers": "shared 02-crew-vehicles evidence"
+    },
+    {
+      "test": "scenario q86_batch_b::q86_vehicle_cards_crew_ends_at_end_of_turn",
+      "covers": "shared 02-crew-vehicles evidence"
+    },
+    {
+      "test": "scenario q86_batch_b::q86_vehicle_cards_cast_as_noncreature_artifacts",
+      "covers": "shared 02-crew-vehicles evidence"
+    },
+    {
+      "test": "scenario q86_batch_b::q86_vehicle_canary_aradara_express_needs_four_power_and_has_menace",
+      "covers": "actual aradara_express canary"
+    },
+    {
+      "test": "mechanic_registry::q86_batch_a::q86_crew_vehicles_map_definitions",
+      "covers": "actual aradara_express registry identity and fingerprint"
+    },
+    {
+      "test": "mechanic_registry::q86_batch_a::q86_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual aradara_express registry identity and fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

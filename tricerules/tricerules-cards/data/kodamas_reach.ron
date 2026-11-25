@@ -1,0 +1,18 @@
+// Oracle 1593ea18-2f2f-4ab4-83fb-6ccc0bec8a90; source/rulings checked 2026-11-22 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.23 (search; up to two, so zero or one is legal), 701.20 (reveal), 701.24 (shuffle) and
+// 614.1c (the first found land enters tapped). The 2004-12-01 ruling fixes the one-land
+// destination as the battlefield tapped. Copy of the reviewed cultivate search.
+(
+  id: "kodamas_reach",
+  name: "Kodama's Reach",
+  face_id: "kodamas_reach",
+  mana_cost: "{2}{G}",
+  types: ["Sorcery", "Arcane"],
+  spell_effect: [SearchLibrary(
+    count: 2,
+    filter: Some((card_type: Some(BasicLand))),
+    destination: BattlefieldTappedThenHand,
+    reveal: true,
+  )],
+)

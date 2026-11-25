@@ -1,0 +1,22 @@
+// Oracle 6dd8ba09-f117-4514-9e09-f9f9f5fb5025; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.2 (activate), 118.3 (costs), 701.16a (investigate creates a Clue) and 111.10f (token
+// identity). The pinned 2021-06-18 rulings confirm Clue's name, artifact type and cost separation.
+// Copy of Merfolk Mesmerist's mana-plus-tap activated shape with investigate replacing the mill.
+(
+  id: "floodhound",
+  name: "Floodhound",
+  face_id: "floodhound",
+  mana_cost: "{U}",
+  types: ["Creature", "Elemental", "Dog"],
+  power: 1,
+  toughness: 2,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{3}"), Tap],
+      effect: [CreateTokens(token: "clue", count: 1)],
+    ),
+  ],
+)

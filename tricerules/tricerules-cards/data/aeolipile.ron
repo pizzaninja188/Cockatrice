@@ -1,0 +1,24 @@
+// Oracle 0897adea-2759-40e8-a05a-c722473e1cf3; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.2 (activate), 118.3 (costs), 115.1 (one any target) and 120.3 (damage). No pinned ruling.
+// Copy of Explosive Apparatus's sacrifice ping with the printed {1} mana cost and 2 damage.
+(
+  id: "aeolipile",
+  name: "Aeolipile",
+  face_id: "aeolipile",
+  mana_cost: "{2}",
+  types: ["Artifact"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{1}"), Tap, SacrificeSelf],
+      effect: [DamageTarget(amount: 2, target: (kind: AnyTarget))],
+      targeting: Some((groups: [(
+        min: 1, max: 1,
+        prompt: "Choose any target",
+        effect_indices: [0],
+      )])),
+    ),
+  ],
+)

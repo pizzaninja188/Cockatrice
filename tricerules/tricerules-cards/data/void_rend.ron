@@ -1,0 +1,28 @@
+// Oracle 713f16db-95ec-479e-a48c-7a69f7668d7f; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.8 (destroy), 113.6g/701.6a (an ability that says it can't be countered functions on the stack),
+// 115.1/601.2c (one nonland-permanent target) and 608.2b (stale sole target). The pinned 2024-04-12
+// rulings confirm a counterspell may target it and Ward does not counter it. Copy of the reviewed
+// long_goodbye static plus drag_to_the_roots' nonland destruction.
+(
+  id: "void_rend",
+  name: "Void Rend",
+  face_id: "void_rend",
+  mana_cost: "{W}{U}{B}",
+  types: ["Instant"],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: SpellCannotBeCountered,
+  )],
+  spell_effect: [Destroy(subject: Chosen((
+    kind: AnyPermanent,
+    excluded_permanent_types: [Land],
+  )))],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target nonland permanent",
+    effect_indices: [0],
+  )])),
+)

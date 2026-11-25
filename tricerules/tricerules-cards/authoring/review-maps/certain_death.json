@@ -1,0 +1,55 @@
+{
+  "format_version": 1,
+  "oracle_id": "1d4b8a31-6500-4e3d-bcaf-f6f184d7743e",
+  "spans": [
+    {
+      "face_id": "certain_death",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/spell_effect/2",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::LoseLife",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/spell_effect/2"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q63_batch_a::q63_drain_certain_death_gains_life_after_the_destruction",
+      "covers": "the actual card derives the -2/+2 from the destroyed creature's controller, including an indestructible legal target"
+    },
+    {
+      "test": "scenario q63_batch_a::q63_drain_cards_reject_illegal_targets_and_fizzle_stale_targets",
+      "covers": "an artifact target is rejected without spending and a stale sole target fizzles the whole spell with no life change"
+    },
+    {
+      "test": "mechanic_registry::q63_batch_a::q63_destroy_drain_map_definitions",
+      "covers": "reviewed identity, printed characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q63_batch_a::q63_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

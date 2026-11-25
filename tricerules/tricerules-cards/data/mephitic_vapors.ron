@@ -1,0 +1,19 @@
+// Oracle 5731ecb5-6ddc-4452-990c-b69986367f25; source/rulings checked 2026-11-24 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 611.2c (the affected set is fixed at resolution), 613.4c (layer-7c modification), 514.2
+// (cleanup expiry), 701.25 (surveil) and 608.2c (printed order). Pinned 2018-10-05 rulings: only
+// creatures on the battlefield at resolution are affected, and creatures that die to the shrink
+// remain on the battlefield while the controller surveils. Pinned 2024-01-12 rulings repeat the
+// surveil sequence. Copy of Nausea's mass -1/-1 and Neutralize the Guards' shrink-then-surveil
+// composition.
+(
+  id: "mephitic_vapors",
+  name: "Mephitic Vapors",
+  face_id: "mephitic_vapors",
+  mana_cost: "{2}{B}",
+  types: ["Sorcery"],
+  spell_effect: [
+    PumpAll(filter: (), power: -1, toughness: -1),
+    LibraryPartition(count: 2, top_min: 0, top_max: None, kind: Surveil),
+  ],
+)

@@ -1,0 +1,22 @@
+// Oracle fbb3f959-ded7-4570-bacf-0e1394dbef80; source/rulings checked 2026-11-24 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.10a (haste), 603.6a (entry trigger), 115.1 (target), and 611.2c/514.2 (until-end-of-turn
+// pump). Copy of Affa Guard Hound's entry pump with the printed haste keyword and +2/+0 value.
+(
+  id: "daybreak_combatants",
+  name: "Daybreak Combatants",
+  face_id: "daybreak_combatants",
+  mana_cost: "{2}{R}",
+  types: ["Creature", "Human", "Warrior"],
+  power: 2,
+  toughness: 2,
+  keywords: [Haste],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [PumpTarget(power: 2, toughness: 0, subject: Chosen((kind: Creature)))],
+    ),
+  ],
+)

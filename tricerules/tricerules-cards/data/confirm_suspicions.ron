@@ -1,0 +1,19 @@
+// Oracle a30d076b-c942-45e4-b943-3749ce955291; source/rulings checked 2026-11-24 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.6 (counter), 115.1a/601.2c (spell target), 608.2b (an illegal sole target removes the
+// spell before it investigates) and 701.16a-b (investigate creates one Clue token each time).
+// The pinned 2016-04-08 rulings confirm Clue is an artifact type and that a spell without a
+// legal target does not resolve and does not investigate. Three investigates create three Clue
+// tokens as three separate investigate actions; the engine has no "whenever you investigate"
+// observer, so the batch is the same visible result.
+(
+  id: "confirm_suspicions",
+  name: "Confirm Suspicions",
+  face_id: "confirm_suspicions",
+  mana_cost: "{3}{U}{U}",
+  types: ["Instant"],
+  spell_effect: [
+    CounterTargetSpell(spell_filter: ()),
+    CreateTokens(token: "clue", count: 3),
+  ],
+)

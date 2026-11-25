@@ -1,0 +1,23 @@
+// Oracle 2361ca87-6352-4ba3-8d91-b3d71242914d; source/rulings checked 2026-11-22 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 604.2/611.3b (continuous while the source remains on the battlefield), 613.1f (layer 6
+// establishes flying before layer 7c reads it), 613.4c and 109.5.
+// Copy of the reviewed Air Nomad Legacy current-Flying anthem.
+(
+  id: "favorable_winds",
+  name: "Favorable Winds",
+  face_id: "favorable_winds",
+  mana_cost: "{1}{U}",
+  types: ["Enchantment"],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: AnthemPt(
+        filter: (controller: YouControl, matching: (kind: Creature, required_keywords: [Flying])),
+        delta_power: 1,
+        delta_toughness: 1,
+      ),
+    ),
+  ],
+)

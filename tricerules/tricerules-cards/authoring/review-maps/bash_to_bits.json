@@ -1,0 +1,57 @@
+{
+  "format_version": 1,
+  "oracle_id": "894b8375-5d55-4138-8448-c38f83a17e4f",
+  "spans": [
+    {
+      "face_id": "bash_to_bits",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    },
+    {
+      "face_id": "bash_to_bits",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/flashback_cost"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "CardFace::flashback_cost",
+      "typed_path": "/faces/0/flashback_cost"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q63_batch_a::q63_artifact_canary_hardest_bash_to_bits_flashes_back_and_exiles",
+      "covers": "the actual card destroys an artifact from hand and again through its printed flashback cost, then is exiled"
+    },
+    {
+      "test": "scenario q63_batch_a::q63_artifact_cards_reject_nonartifacts_and_fizzle_stale_targets",
+      "covers": "illegal nonartifact targets are rejected without spending mana and a stale sole target fizzles without the rider"
+    },
+    {
+      "test": "mechanic_registry::q63_batch_a::q63_artifact_riders_map_definitions",
+      "covers": "reviewed identity, printed characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q63_batch_a::q63_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

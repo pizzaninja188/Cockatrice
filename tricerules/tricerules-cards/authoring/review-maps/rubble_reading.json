@@ -1,0 +1,58 @@
+{
+  "format_version": 1,
+  "oracle_id": "894d96b1-c82a-4141-a2f3-76da505bd5e5",
+  "spans": [
+    {
+      "face_id": "rubble_reading",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetFilter",
+      "typed_path": "/faces/0/spell_effect/0/Destroy/subject/Chosen"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    },
+    {
+      "symbol": "SpellEffectKind::Scry",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q61_batch_a::q61_land_destruction_riders_draw_scry_search_and_cycle",
+      "covers": "destroys, then scries two; indestructible still scries"
+    },
+    {
+      "test": "scenario q61_batch_a::q61_land_destruction_cards_hit_lands_and_reject_creatures",
+      "covers": "destroys a land and rejects a creature target"
+    },
+    {
+      "test": "scenario q61_batch_a::q61_land_destruction_handles_stale_and_indestructible_targets",
+      "covers": "stale and indestructible target branches"
+    },
+    {
+      "test": "mechanic_registry::q61_batch_a::q61_land_destruction_map_definitions",
+      "covers": "typed identity and effects"
+    },
+    {
+      "test": "mechanic_registry::q61_batch_a::q61_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

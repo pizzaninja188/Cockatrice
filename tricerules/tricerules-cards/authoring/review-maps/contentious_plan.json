@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "2fc6de19-9d04-422b-90bc-eee2f9f8c84c",
+  "spans": [
+    {
+      "face_id": "contentious_plan",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "contentious_plan",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Proliferate",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q75_proliferate_riders::q75_proliferate_canary_simplest_contentious_plan_proliferates_before_drawing",
+      "covers": "actual Contentious Plan proliferates before drawing one"
+    },
+    {
+      "test": "scenario q75_proliferate_riders::q75_proliferate_choice_is_optional_and_reaches_opponents",
+      "covers": "actual Contentious Plan's Proliferate choice may include an opponent's permanent and player"
+    },
+    {
+      "test": "scenario q75_proliferate_riders::q75_proliferate_riders_reject_illegal_targets_and_underfunded_costs",
+      "covers": "actual Contentious Plan rejects an illegal or underfunded cast"
+    },
+    {
+      "test": "mechanic_registry::q75_proliferate_riders::q75_proliferate_riders_map_definitions",
+      "covers": "reviewed identity, characteristics and typed Proliferate-rider definition of contentious plan"
+    },
+    {
+      "test": "mechanic_registry::q75_proliferate_riders::q75_proliferate_riders_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for contentious plan"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
