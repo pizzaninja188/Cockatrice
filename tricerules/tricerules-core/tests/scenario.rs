@@ -2693,3 +2693,6 @@ mod q84_dies_draw_riders;
 
 #[path = "scenario/q84_etb_gain_life_riders.rs"]
 mod q84_etb_gain_life_riders;
+
+#[path = "scenario/q85_batch_a.rs"]
+mod q85_batch_a;

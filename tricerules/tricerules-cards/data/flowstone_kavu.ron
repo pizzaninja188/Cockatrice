@@ -1,0 +1,23 @@
+// Oracle 49475268-be95-4670-a5ca-2f2b6c5cf005; source/rulings checked 2026-11-25 against the pinned
+// Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.111 (menace), 602.1/602.2 (activation and printed cost), 611.2a/613.4c (until-end-of-turn
+// P/T modification), 704.5f (zero toughness) and 514.2 (cleanup expiry). The card has no pinned
+// ruling. Copy of the reviewed Flowstone Shambler {R} +1/-1 self pump.
+(
+  id: "flowstone_kavu",
+  name: "Flowstone Kavu",
+  face_id: "flowstone_kavu",
+  mana_cost: "{2}{R}",
+  types: ["Creature", "Kavu"],
+  power: 2,
+  toughness: 3,
+  keywords: [Menace],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Mana("{R}")],
+      effect: [PumpTarget(power: 1, toughness: -1, subject: Source)],
+    ),
+  ],
+)

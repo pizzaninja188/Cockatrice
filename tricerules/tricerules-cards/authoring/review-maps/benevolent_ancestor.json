@@ -1,0 +1,72 @@
+{
+  "format_version": 1,
+  "oracle_id": "ee414d20-b18e-4bed-97fc-3c7535089ec1",
+  "spans": [
+    {
+      "face_id": "benevolent_ancestor",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "benevolent_ancestor",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Defender",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PreventNextDamage",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q85_batch_a::q85_shield_cards_prevent_their_exact_printed_amount_on_a_creature",
+      "covers": "the actual card shields a creature for exactly one and asserts the exact (zero) residual shield"
+    },
+    {
+      "test": "scenario q85_batch_a::q85_shield_cards_require_a_target_and_reject_a_second_activation",
+      "covers": "the any-target recipient is required, and a tapped source pays nothing on a rejected repeat activation"
+    },
+    {
+      "test": "scenario q85_batch_a::q85_shield_cards_expire_at_cleanup",
+      "covers": "the shield ends at cleanup"
+    },
+    {
+      "test": "scenario q85_batch_a::q85_shield_cards_apply_summoning_sickness_to_the_tap_cost",
+      "covers": "a summoning-sick card cannot pay the tap cost"
+    },
+    {
+      "test": "scenario q85_batch_a::q85_shield_cards_cast_with_their_exact_printed_characteristics",
+      "covers": "printed cost, body and Defender after a real cast"
+    },
+    {
+      "test": "scenario q85_batch_a::q85_shield_cards_fizzle_when_the_any_target_recipient_leaves_before_resolution",
+      "covers": "the any-target recipient is destroyed while the shield ability is on the stack, so the ability resolves with a stale target and places no shield (CR 608.2b)"
+    },
+    {
+      "test": "mechanic_registry::q85_batch_a::q85_prevention_shield_clerics_map_definitions",
+      "covers": "reviewed identity, Oracle line mapping, printed keyword and tap ability"
+    },
+    {
+      "test": "mechanic_registry::q85_batch_a::q85_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

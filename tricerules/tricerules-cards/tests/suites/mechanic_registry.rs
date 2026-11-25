@@ -1485,3 +1485,5 @@ mod q83_batch_a;
 
 #[path = "../q84_batch_a.rs"]
 mod q84_batch_a;
+#[path = "../q85_batch_a.rs"]
+mod q85_batch_a;
