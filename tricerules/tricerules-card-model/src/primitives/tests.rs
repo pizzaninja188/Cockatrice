@@ -6781,6 +6781,27 @@ fn source_subject_rejected_in_spell_context_allowed_in_ability() {
     assert!(invalid_fight.validate(EffectContext::Ability).is_err());
 }
 
+/// CR 701.19: "Regenerate target creature." spells (Death Ward, Regenerate, Mending Touch) put a
+/// shield on the chosen creature itself, so a chosen subject loads in spell context while the
+/// source-relative subjects stay ability-only.
+#[test]
+fn regenerate_chosen_creature_loads_as_spell_source_subject_does_not() {
+    let chosen = SpellEffectKind::Regenerate {
+        subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            kind: TargetKind::Creature,
+            ..Default::default()
+        })),
+    };
+    assert_eq!(chosen.validate(EffectContext::Spell), Ok(()));
+    assert_eq!(chosen.validate(EffectContext::Ability), Ok(()));
+
+    let source = SpellEffectKind::Regenerate {
+        subject: EffectSubject::Source,
+    };
+    assert!(source.validate(EffectContext::Spell).is_err());
+    assert_eq!(source.validate(EffectContext::Ability), Ok(()));
+}
+
 #[test]
 fn combat_restriction_scopes_validate_by_context_and_subject_kind() {
     let cant_block = CombatRestriction {

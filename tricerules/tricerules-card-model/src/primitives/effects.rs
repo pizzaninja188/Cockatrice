@@ -2153,8 +2153,10 @@ pub enum SpellEffectKind {
     },
     /// CR 701.19: put a regeneration shield on target creature. The next time that creature would
     /// be destroyed this turn, instead tap it, remove it from combat, and clear all damage from it.
-    /// Legal only as an activated ability effect — never a spell (validated at load). Covers
-    /// Cudgel Troll (`{G}: Regenerate`) and Drudge Skeletons (`{B}: Regenerate`).
+    /// The shield lives on the regenerated object, not on the effect's source, so it is valid on
+    /// abilities (Cudgel Troll's `{G}: Regenerate`, Drudge Skeletons' `{B}: Regenerate`) and on
+    /// spells with a chosen subject (Death Ward, Mending Touch: "Regenerate target creature.").
+    /// Source-relative subjects stay ability-only through the shared spell-subject check.
     Regenerate {
         #[serde(default)]
         subject: EffectSubject,
@@ -7666,17 +7668,6 @@ impl SpellEffectKind {
             SpellEffectKind::EquipPlaneswalker { .. } => Err(
                 "EquipPlaneswalker is supported only as a direct activated ability effect".into(),
             ),
-            // CR 701.19: Regenerate puts a shield on the target; it is an activated ability, not
-            // a spell. Applying a regeneration shield via a spell would have no source permanent
-            // to attach the replacement to and is a nonsensical card design — reject early.
-            SpellEffectKind::Regenerate { .. } => {
-                if context == EffectContext::Spell {
-                    Err("Regenerate is only valid on an activated or triggered ability, not a spell"
-                        .into())
-                } else {
-                    Ok(())
-                }
-            }
             _ => Ok(()),
         }
     }

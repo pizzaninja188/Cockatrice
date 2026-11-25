@@ -1,0 +1,57 @@
+{
+  "format_version": 1,
+  "oracle_id": "4ce6c946-7a93-4a8d-a2c9-086cbd036e3c",
+  "spans": [
+    {
+      "face_id": "regenerate",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Regenerate",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetKind::Creature",
+      "typed_path": "/faces/0/targeting/groups/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_523_regenerate_spell::issue_523_spell_shield_replaces_exactly_one_destruction",
+      "covers": "resolved shield on any player's creature replaces the first destruction (tap, clear damage) and not a second this turn"
+    },
+    {
+      "test": "scenario issue_523_regenerate_spell::issue_523_spell_shield_saves_from_lethal_damage_and_removes_from_combat",
+      "covers": "shield replaces lethal-damage destruction and removes the attacker from combat"
+    },
+    {
+      "test": "scenario issue_523_regenerate_spell::issue_523_spell_shield_expires_at_cleanup",
+      "covers": "unused shield ends at cleanup"
+    },
+    {
+      "test": "scenario issue_523_regenerate_spell::issue_523_cant_be_regenerated_ignores_the_spell_shield",
+      "covers": "Terminate's can't-be-regenerated destruction ignores the shield"
+    },
+    {
+      "test": "scenario issue_523_regenerate_spell::issue_523_rejects_noncreature_and_missing_targets_without_spending_mana",
+      "covers": "noncreature and missing targets are rejected with no state change"
+    },
+    {
+      "test": "scenario issue_523_regenerate_spell::issue_523_spell_fizzles_when_its_target_leaves",
+      "covers": "stale sole target leaves no shield"
+    },
+    {
+      "test": "mechanic_registry::issue_523_regenerate_spell::issue_523_registers_regenerate_target_creature_instants",
+      "covers": "exact Oracle identity, mana, type, chosen-creature Regenerate and single target group"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

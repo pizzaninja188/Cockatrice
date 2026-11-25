@@ -811,6 +811,7 @@ deadly_recluse	0	cast	exercised
 deadly_riposte	0	cast	exercised
 death_in_the_family	0	cast	exercised
 death_stroke	0	cast	exercised
+death_ward	0	cast	exercised
 deathcap_glade	0	ability:0	exercised
 deathcap_glade	0	land	exercised
 deathcap_marionette	0	cast	exercised
@@ -2129,6 +2130,7 @@ meltstriders_gear	0	cast	exercised
 meltstriders_resolve	0	cast	exercised
 memory_drain	0	cast	exercised
 memory_guardian	0	cast	exercised
+mending_touch	0	cast	exercised
 mental_journey	0	ability:0	exercised
 mental_misstep	0	cast	exercised
 mental_modulation	0	cast	exercised
@@ -2685,6 +2687,7 @@ refurbish	0	cast	exercised
 refute	0	cast	exercised
 regal_unicorn	0	cast	exercised
 regathan_firecat	0	cast	exercised
+regenerate	0	cast	exercised
 reigning_victor	0	cast	exercised
 relearn	0	cast	exercised
 release_the_dogs	0	cast	exercised
