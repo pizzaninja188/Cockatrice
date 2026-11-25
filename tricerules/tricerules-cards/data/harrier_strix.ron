@@ -1,0 +1,33 @@
+// Oracle eb154ebb-d02f-405a-a557-3d5ec7648c42; source/rulings checked 2026-11-24 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.9 (flying), 603.6a (entry trigger), 701.26 (tap), 115.1 (one chosen permanent),
+// 602.1/602.2 and 118.3 (the loot activation), 121.1 (draw) and 701.9 (discard). The pinned
+// 2024-04-12 ruling confirms an already-tapped target is legal. Copy of Chrome Prowler's entry tap
+// with Senate Guildmage's draw-then-discard Program.
+(
+  id: "harrier_strix",
+  name: "Harrier Strix",
+  face_id: "harrier_strix",
+  mana_cost: "{U}",
+  types: ["Creature", "Bird"],
+  power: 1,
+  toughness: 1,
+  keywords: [Flying],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [Tap(subject: Chosen((kind: AnyPermanent)))],
+    targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target permanent", effect_indices: [0])])),
+  )],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([3]),
+    costs: [Mana("{2}{U}")],
+    effect: [],
+    program: Some((body: (steps: [
+      (id: "draw_one", kind: Perform(Draw(count: 1))),
+      (id: "discard_one", kind: Perform(Discard(quantity: Exact(1)))),
+    ]))),
+  )],
+)

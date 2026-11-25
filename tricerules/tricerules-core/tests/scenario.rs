@@ -2666,3 +2666,12 @@ mod q81_exile_nonland_rider;
 
 #[path = "scenario/q81_untap_team_rider.rs"]
 mod q81_untap_team_rider;
+
+#[path = "scenario/q82_etb_tap_riders.rs"]
+mod q82_etb_tap_riders;
+
+#[path = "scenario/q82_etb_stun_riders.rs"]
+mod q82_etb_stun_riders;
+
+#[path = "scenario/q82_etb_food_riders.rs"]
+mod q82_etb_food_riders;

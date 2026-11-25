@@ -1,0 +1,80 @@
+{
+  "format_version": 1,
+  "oracle_id": "0d64d150-1716-4da4-9cfe-ee7749b89918",
+  "spans": [
+    {
+      "face_id": "network_disruptor",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "network_disruptor",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Tap",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q82_etb_tap_riders::q82_tap_canary_simplest_network_disruptor_taps_any_permanent",
+      "covers": "canary simplest taps any permanent"
+    },
+    {
+      "test": "scenario q82_etb_tap_riders::q82_tap_canary_hardest_merfolk_trickster_removes_abilities_until_cleanup",
+      "covers": "canary hardest taps and removes abilities until cleanup"
+    },
+    {
+      "test": "scenario q82_etb_tap_riders::q82_tap_cards_apply_entry_effect_body_and_keywords",
+      "covers": "every actual card applies its printed entry tap"
+    },
+    {
+      "test": "scenario q82_etb_tap_riders::q82_tap_harrier_strix_loots_privately",
+      "covers": "Harrier Strix draws then privately discards"
+    },
+    {
+      "test": "scenario q82_etb_tap_riders::q82_tap_harrier_strix_already_tapped_target_is_legal",
+      "covers": "pinned already-tapped target ruling"
+    },
+    {
+      "test": "scenario q82_etb_tap_riders::q82_tap_merfolk_trickster_rejects_your_own_creature",
+      "covers": "Merfolk Trickster rejects the controller's creature"
+    },
+    {
+      "test": "scenario q82_etb_tap_riders::q82_tap_stale_target_does_not_retarget",
+      "covers": "a stale tap target does not retarget"
+    },
+    {
+      "test": "mechanic_registry::q82_etb_tap_riders::q82_tap_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q82_etb_tap_riders::q82_tap_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

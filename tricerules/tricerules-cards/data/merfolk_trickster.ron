@@ -1,0 +1,35 @@
+// Oracle f712aed5-d6e0-45d3-ae20-518b765ce9da; source/rulings checked 2026-11-24 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.8 (flash), 603.6a (entry trigger), 701.26 (tap), 115.1 (one chosen opponent creature),
+// and 613.1f/613.4 (ability removal in layer 6 until cleanup). Pinned 2018-04-27 rulings confirm
+// that a becomes-tapped trigger resolves before the creature loses abilities and that a */* body
+// becomes 0/0. Copy of The Wondrous Wasp's tap-plus-RemoveAllAbilities trigger with the printed
+// until-end-of-turn duration.
+(
+  id: "merfolk_trickster",
+  name: "Merfolk Trickster",
+  face_id: "merfolk_trickster",
+  mana_cost: "{U}{U}",
+  types: ["Creature", "Merfolk", "Wizard"],
+  power: 2,
+  toughness: 2,
+  keywords: [Flash],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [
+      Tap(subject: Chosen((kind: Creature, controller: Opponent))),
+      RemoveAllAbilities(
+        subject: Chosen((kind: Creature, controller: Opponent)),
+        duration: UntilEndOfTurn,
+      ),
+    ],
+    targeting: Some((groups: [(
+      min: 1,
+      max: 1,
+      prompt: "Choose target creature an opponent controls",
+      effect_indices: [0, 1],
+    )])),
+  )],
+)

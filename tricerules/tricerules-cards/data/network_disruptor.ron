@@ -1,0 +1,21 @@
+// Oracle 0d64d150-1716-4da4-9cfe-ee7749b89918; source/rulings checked 2026-11-24 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.9 (flying), 603.6a (entry trigger), 701.26 (tap) and 115.1 (one chosen permanent). No
+// pinned ruling. Copy of Chrome Prowler's entry tap with the printed "target permanent" scope.
+(
+  id: "network_disruptor",
+  name: "Network Disruptor",
+  face_id: "network_disruptor",
+  mana_cost: "{U}",
+  types: ["Artifact", "Creature", "Moonfolk", "Rogue"],
+  power: 1,
+  toughness: 1,
+  keywords: [Flying],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [Tap(subject: Chosen((kind: AnyPermanent)))],
+    targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target permanent", effect_indices: [0])])),
+  )],
+)
