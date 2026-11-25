@@ -12,7 +12,7 @@
       (
         mode_id: "mode_01",
         presentation: OracleLines([2]),
-        effects: [PumpAll(filter: (controller: Some(YouControl), name: None), power: 2, toughness: 0)],
+        effects: [PumpAll(filter: (controller: Some(YouControl)), power: 2, toughness: 0)],
       ),
       (
         mode_id: "mode_02",

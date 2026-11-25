@@ -17,7 +17,7 @@
       ability_id: "static_02",
       presentation: OracleLines([2]),
       definition: AnthemKeyword(
-        filter: (controller: Some(YouControl), name: None, required_counter: Some(PlusOnePlusOne)),
+        filter: (controller: Some(YouControl), matching: (kind: Creature, required_counter: Some(PlusOnePlusOne))),
         condition: Some(ActivePlayer(players: Controller)),
         keyword: FirstStrike,
       ),

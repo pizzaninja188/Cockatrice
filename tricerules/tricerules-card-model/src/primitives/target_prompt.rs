@@ -155,6 +155,7 @@ fn battlefield(
         excluded_subtypes,
         required_supertypes,
         excluded_supertypes,
+        name,
         power,
         toughness,
         required_keywords,
@@ -330,6 +331,9 @@ fn battlefield(
     }
     for keyword in excluded_keywords {
         phrase.add(format!("without {}", keyword.as_str().to_ascii_lowercase()));
+    }
+    if let Some(name) = name {
+        phrase.add(format!("named {name}"));
     }
     if let Some(counter) = required_counter {
         phrase.add(format!("with a {} counter", counter.label()));

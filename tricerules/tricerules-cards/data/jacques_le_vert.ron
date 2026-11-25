@@ -15,7 +15,7 @@
     ability_id: "static_01",
     presentation: OracleLines([1]),
     definition: AnthemPt(
-      filter: (controller: YouControl, color: Green),
+      filter: (controller: YouControl, matching: (kind: Creature, is_color: Some(Green))),
       delta_power: 0,
       delta_toughness: 2,
     ),

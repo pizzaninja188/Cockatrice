@@ -91,7 +91,7 @@ fn issue_267_static_abilities_keep_typed_conditions_and_presentation() {
             }),
             keyword: Keyword::FirstStrike,
         } if filter.controller == Some(CreatureScopeController::YouControl)
-            && filter.required_counter == Some(tricerules_cards::CounterKind::PlusOnePlusOne)
+            && filter.matching.required_counter == Some(tricerules_cards::CounterKind::PlusOnePlusOne)
     ));
 
     for id in ["anthem_of_champions", "warleaders_call"] {

@@ -13,7 +13,7 @@
       ability_id: "activated_01",
       presentation: OracleLines([2]),
       costs: [Mana("{5}")],
-      effect: [PumpAll(filter: (controller: Some(YouControl), name: None), power: 1, toughness: 1)],
+      effect: [PumpAll(filter: (controller: Some(YouControl)), power: 1, toughness: 1)],
     ),
   ],
 )

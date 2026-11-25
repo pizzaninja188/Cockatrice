@@ -118,8 +118,8 @@ fn etb_team_pump_batch_maps_definitions() {
             Some(CreatureScopeController::YouControl),
             "{id}: only the controller's creatures"
         );
-        assert!(filter.subtype.is_none(), "{id}");
-        assert!(filter.color.is_none(), "{id}");
+        assert!(filter.matching.required_subtypes.is_empty(), "{id}");
+        assert!(filter.matching.is_color.is_none(), "{id}");
     }
 }
 

@@ -701,7 +701,7 @@ fn q42_attacking_pump_maps_definitions() {
                 filter,
                 power,
                 toughness,
-            } if filter.attacking
+            } if (filter.matching.combat_role == Some(tricerules_cards::primitives::CombatRole::Attacking))
                 && filter.controller.is_none()
                 && *power == dp
                 && *toughness == dt
@@ -712,7 +712,7 @@ fn q42_attacking_pump_maps_definitions() {
                 SpellEffectKind::GrantKeywordsAll {
                     filter,
                     keywords,
-                } if filter.attacking
+                } if (filter.matching.combat_role == Some(tricerules_cards::primitives::CombatRole::Attacking))
                     && filter.controller.is_none()
                     && keywords == &vec![keyword]
             )),

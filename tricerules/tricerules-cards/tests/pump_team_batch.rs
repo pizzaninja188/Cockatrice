@@ -142,9 +142,16 @@ fn pump_team_batch_maps_definitions() {
             Some(CreatureScopeController::YouControl),
             "{id}: only creatures the caster controls"
         );
-        assert!(filter.subtype.is_none(), "{id}: no subtype filter");
-        assert!(filter.color.is_none(), "{id}: no color filter");
-        assert!(!filter.attacking, "{id}: not limited to attackers");
+        assert!(
+            filter.matching.required_subtypes.is_empty(),
+            "{id}: no subtype filter"
+        );
+        assert!(filter.matching.is_color.is_none(), "{id}: no color filter");
+        assert!(
+            !(filter.matching.combat_role
+                == Some(tricerules_cards::primitives::CombatRole::Attacking)),
+            "{id}: not limited to attackers"
+        );
     }
 }
 

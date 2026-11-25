@@ -88,9 +88,9 @@ fn q36_team_haste_batch_maps_definitions() {
                     condition: None,
                     keyword: Keyword::Haste,
                 } if filter.controller == Some(CreatureScopeController::YouControl)
-                    && filter.subtype.is_none()
+                    && filter.matching.required_subtypes.is_empty()
                     && !filter.exclude_self
-                    && !filter.attacking
+                    && !(filter.matching.combat_role == Some(tricerules_cards::primitives::CombatRole::Attacking))
             ),
             "{}: creatures you control have haste",
             card.id

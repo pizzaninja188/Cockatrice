@@ -15,6 +15,6 @@
     ability_id: "triggered_01",
     presentation: OracleLines([1]),
     trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
-    effect: [GrantKeywordsAll(filter: (attacking: true), keywords: [Trample])],
+    effect: [GrantKeywordsAll(filter: (matching: (kind: Creature, combat_role: Some(Attacking))), keywords: [Trample])],
   )],
 )

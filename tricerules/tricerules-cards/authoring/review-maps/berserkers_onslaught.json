@@ -17,7 +17,7 @@
       "typed_path": "/faces/0/static_abilities/0"
     },
     {
-      "symbol": "CreatureScopeFilter::controller_and_attacking",
+      "symbol": "CreatureScopeFilter::controller_and_matching_combat_role",
       "typed_path": "/faces/0/static_abilities/0/definition/AnthemKeyword/filter"
     },
     {

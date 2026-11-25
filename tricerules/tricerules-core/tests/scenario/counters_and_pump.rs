@@ -1106,7 +1106,11 @@ fn issue_476_flying_anthem_scope_tracks_current_keyword() {
 
     let filter = CreatureScopeFilter {
         controller: Some(CreatureScopeController::YouControl),
-        required_keyword: Some(Keyword::Flying),
+        matching: Box::new(tricerules_card_model::primitives::TargetFilter {
+            kind: tricerules_card_model::primitives::TargetKind::Creature,
+            required_keywords: vec![Keyword::Flying],
+            ..Default::default()
+        }),
         ..CreatureScopeFilter::default()
     };
     let keyword_timestamp = e.state.command_index + 1;

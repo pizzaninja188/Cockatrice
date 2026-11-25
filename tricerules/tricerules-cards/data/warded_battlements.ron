@@ -10,7 +10,7 @@
   // CR 508.1k / 611.3 / 613.4c: continuously follow attacking creatures you control.
   static_abilities: [
     (ability_id: "static_01", presentation: OracleLines([2]), definition: AnthemPt(
-      filter: (controller: YouControl, attacking: true),
+      filter: (controller: YouControl, matching: (kind: Creature, combat_role: Some(Attacking))),
       delta_power: 1,
       delta_toughness: 0,
     )),

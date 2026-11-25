@@ -15,7 +15,7 @@ fn prototyped_entry_uses_selected_color_for_battlefield_counter_replacements() {
             types: ["Artifact"],
             static_abilities: [(ability_id: "static_01", presentation: Fallback,
                 definition: EntersWithCounters(
-                    affected: Creatures((controller: Some(YouControl), color: Some(Red))),
+                    affected: Creatures((controller: Some(YouControl), matching: (kind: Creature, is_color: Some(Red)))),
                     counter: PlusOnePlusOne,
                     amount: 1,
                 ))],

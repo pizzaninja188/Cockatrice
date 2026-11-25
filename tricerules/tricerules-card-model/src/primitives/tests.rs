@@ -2291,7 +2291,7 @@ fn static_emblem_creature_keyword_admits_earlier_layer_filters_only() {
         r#"CreateStaticEmblem(
             emblem_id: "dependency_fixture", display_name: "Dependency fixture",
             effects: [CreatureKeyword(
-                filter: (controller: Some(YouControl), required_keyword: Some(Flying)),
+                filter: (controller: Some(YouControl), matching: (kind: Creature, required_keywords: [Flying])),
                 keyword: Trample,
             )],
         )"#,
@@ -7200,8 +7200,12 @@ fn issue_327_put_counters_all_is_an_untargeted_mass_counter() {
         counter: CounterKind::PlusOnePlusOne,
         count: Amount::Fixed(1),
         filter: CreatureScopeFilter {
-            required_counter: Some(CounterKind::Stun),
-            requires_any_counter: true,
+            matching: Box::new(crate::primitives::TargetFilter {
+                kind: crate::primitives::TargetKind::Creature,
+                required_counter: Some(CounterKind::Stun),
+                requires_any_counter: true,
+                ..Default::default()
+            }),
             ..CreatureScopeFilter::default()
         },
     };
@@ -17753,7 +17757,7 @@ fn program_grant_keywords_all_admits_untargeted_spell_and_ability_scopes() {
     let spell = program_fixture(
         r#"(steps: [(id: "grant_opponents", bind: [], input: None,
             kind: Perform(GrantKeywordsAll(
-                filter: (controller: Some(Opponents), subtype: Some("Elf"), attacking: true),
+                filter: (controller: Some(Opponents), matching: (kind: Creature, required_subtypes: ["Elf"], combat_role: Some(Attacking))),
                 keywords: [Flying, Trample],
             )))], yields: [])"#,
     );
@@ -17783,8 +17787,12 @@ fn program_grant_keywords_all_admits_untargeted_spell_and_ability_scopes() {
         crate::primitives::SpellEffectKind::GrantKeywordsAll {
             filter: crate::primitives::CreatureScopeFilter {
                 controller: Some(crate::primitives::CreatureScopeController::Opponents),
-                subtype: Some("Elf".into()),
-                attacking: true,
+                matching: Box::new(crate::primitives::TargetFilter {
+                    kind: crate::primitives::TargetKind::Creature,
+                    required_subtypes: vec!["Elf".into()],
+                    combat_role: Some(crate::primitives::CombatRole::Attacking),
+                    ..Default::default()
+                }),
                 ..Default::default()
             },
             keywords: vec![crate::Keyword::Flying, crate::Keyword::Trample],
@@ -17795,7 +17803,7 @@ fn program_grant_keywords_all_admits_untargeted_spell_and_ability_scopes() {
         "program_ability_keyword_scope_fixture",
         r#"(steps: [(id: "grant_friendly", bind: [], input: None,
             kind: Perform(GrantKeywordsAll(
-                filter: (controller: Some(YouControl), color: Some(Blue), exclude_self: true),
+                filter: (controller: Some(YouControl), exclude_self: true, matching: (kind: Creature, is_color: Some(Blue))),
                 keywords: [Haste],
             )))], yields: [])"#,
     )
@@ -17816,9 +17824,12 @@ fn program_grant_keywords_all_admits_untargeted_spell_and_ability_scopes() {
         crate::primitives::SpellEffectKind::GrantKeywordsAll {
             filter: crate::primitives::CreatureScopeFilter {
                 controller: Some(crate::primitives::CreatureScopeController::YouControl),
-                color: Some(crate::primitives::Color::Blue),
                 exclude_self: true,
-                ..Default::default()
+                matching: Box::new(crate::primitives::TargetFilter {
+                    kind: crate::primitives::TargetKind::Creature,
+                    is_color: Some(crate::primitives::Color::Blue),
+                    ..Default::default()
+                }),
             },
             keywords: vec![crate::Keyword::Haste],
         }
@@ -17843,7 +17854,7 @@ fn program_grant_keywords_all_rejects_targeted_player_and_invalid_scopes() {
     let invalid_scope = program_fixture(
         r#"(steps: [(id: "grant_invalid_scope", bind: [], input: None,
             kind: Perform(GrantKeywordsAll(
-                filter: (requires_any_counter: true, required_counter: Some(PlusOnePlusOne)),
+                filter: (matching: (kind: Creature, requires_any_counter: true, required_counter: Some(PlusOnePlusOne))),
                 keywords: [Vigilance],
             )))], yields: [])"#,
     );
@@ -24181,4 +24192,75 @@ fn opponent_target_groups_reject_unrepresented_damage_allocation() {
         ability.validate_shape().is_err(),
         "staged replies cannot carry chosen damage allocations"
     );
+}
+
+#[test]
+fn creature_scope_matching_uses_the_shared_object_predicate() {
+    use crate::primitives::{CreatureScopeFilter, TargetFilter, TargetKind};
+    let scope = |text: &str| ron::from_str::<CreatureScopeFilter>(text);
+
+    // Omitted `matching` means every creature and stays omitted when serialized.
+    let plain = scope("(controller: Some(YouControl), exclude_self: true)").expect("plain scope");
+    assert_eq!(
+        *plain.matching,
+        TargetFilter {
+            kind: TargetKind::Creature,
+            ..TargetFilter::default()
+        }
+    );
+    assert!(plain.validate().is_ok());
+    assert!(!ron::to_string(&plain).unwrap().contains("matching"));
+
+    // Shared descriptive predicates, including tapped status and supertypes.
+    let seriema = scope(
+        r#"(controller: Some(YouControl), exclude_self: true,
+            matching: (kind: Creature, tapped: Some(true), required_supertypes: ["Legendary"]))"#,
+    )
+    .expect("tapped legendary scope");
+    assert!(seriema.validate().is_ok());
+    assert_eq!(seriema.matching.tapped, Some(true));
+    assert_eq!(seriema.matching.required_supertypes, ["Legendary"]);
+
+    // Retired flat fields fail loudly instead of silently widening the scope.
+    for retired in [
+        r#"(subtype: Some("Goblin"))"#,
+        "(color: Some(White))",
+        "(required_keyword: Some(Flying))",
+        "(attacking: true)",
+        r#"(name: Some("Pack Mastiff"))"#,
+        "(requires_any_counter: true)",
+    ] {
+        assert!(
+            scope(retired).is_err(),
+            "retired scope field must be rejected: {retired}"
+        );
+    }
+
+    // A scope is not a target: target-relative relations and non-creature kinds are rejected,
+    // and so are contradictory shared predicates.
+    for invalid in [
+        "(matching: (tapped: Some(true)))",
+        "(matching: (kind: AnyPermanent))",
+        "(matching: (kind: Creature, controller: You))",
+        "(matching: (kind: Creature, owner: You))",
+        "(matching: (kind: Creature, excluded_objects: [Source]))",
+        "(matching: (any_of: Some([(kind: Creature), (kind: AnyPlayer)])))",
+        r#"(matching: (kind: Creature, required_supertypes: ["Legendary", "Legendary"]))"#,
+        r#"(matching: (kind: Creature, required_supertypes: [" "]))"#,
+        r#"(matching: (kind: Creature, name: Some(" ")))"#,
+        "(matching: (kind: Creature, requires_any_counter: true, required_counter: Some(Stun)))",
+    ] {
+        let parsed = scope(invalid).expect("parses for validation");
+        assert!(
+            parsed.validate().is_err(),
+            "scope must be rejected: {invalid}"
+        );
+    }
+
+    // Layer dependencies are visible to the consumers that must reject them.
+    let keyword = scope("(matching: (kind: Creature, excluded_keywords: [Flying]))").unwrap();
+    assert!(keyword.reads_keywords() && !keyword.reads_power_or_toughness());
+    let toughness = scope("(matching: (kind: Creature, toughness: Some(AtMost(2))))").unwrap();
+    assert!(toughness.reads_power_or_toughness() && !toughness.reads_keywords());
+    assert!(!seriema.reads_keywords() && !seriema.reads_power_or_toughness());
 }

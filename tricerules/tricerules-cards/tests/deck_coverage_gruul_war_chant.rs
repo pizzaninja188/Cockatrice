@@ -40,8 +40,8 @@ fn gruul_war_chant_registers_its_attack_scoped_pump_and_menace_effects() {
             delta_power: 1,
             delta_toughness: 0,
         } if filter.controller == Some(CreatureScopeController::YouControl)
-            && filter.attacking
-            && filter.subtype.is_none()
+            && (filter.matching.combat_role == Some(tricerules_cards::primitives::CombatRole::Attacking))
+            && filter.matching.required_subtypes.is_empty()
             && !filter.exclude_self
     ));
     assert!(matches!(
@@ -51,8 +51,8 @@ fn gruul_war_chant_registers_its_attack_scoped_pump_and_menace_effects() {
             condition: None,
             keyword: Keyword::Menace,
         } if filter.controller == Some(CreatureScopeController::YouControl)
-            && filter.attacking
-            && filter.subtype.is_none()
+            && (filter.matching.combat_role == Some(tricerules_cards::primitives::CombatRole::Attacking))
+            && filter.matching.required_subtypes.is_empty()
             && !filter.exclude_self
     ));
 }

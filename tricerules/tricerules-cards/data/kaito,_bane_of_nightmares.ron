@@ -38,7 +38,7 @@
         emblem_id: "kaito_bane_of_nightmares_emblem",
         display_name: "Kaito, Bane of Nightmares Emblem",
         effects: [CreaturePt(
-          filter: (controller: Some(YouControl), subtype: Some("Ninja")),
+          filter: (controller: Some(YouControl), matching: (kind: Creature, required_subtypes: ["Ninja"])),
           power: 1,
           toughness: 1,
         )],

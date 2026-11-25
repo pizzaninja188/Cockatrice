@@ -151,9 +151,9 @@ fn other_anthems_batch_maps_definitions() {
             card.id
         );
         assert!(filter.exclude_self, "{} excludes the source", card.id);
-        assert!(filter.subtype.is_none(), "{}", card.id);
-        assert!(filter.color.is_none(), "{}", card.id);
-        assert!(filter.required_keyword.is_none(), "{}", card.id);
+        assert!(filter.matching.required_subtypes.is_empty(), "{}", card.id);
+        assert!(filter.matching.is_color.is_none(), "{}", card.id);
+        assert!(filter.matching.required_keywords.is_empty(), "{}", card.id);
         assert_eq!(
             (*delta_power, *delta_toughness),
             (card.delta_power, card.delta_toughness),

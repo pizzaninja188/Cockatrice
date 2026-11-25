@@ -10,6 +10,6 @@
   mana_cost: "{1}{W}{W}",
   types: ["Instant"],
   spell_effect: [
-    PumpAll(filter: (attacking: true), power: 2, toughness: 0),
+    PumpAll(filter: (matching: (kind: Creature, combat_role: Some(Attacking))), power: 2, toughness: 0),
   ],
 )

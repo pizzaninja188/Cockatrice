@@ -1690,10 +1690,21 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
             }
         }
         if let StaticAbilityDef::AnthemKeyword { filter, .. } = ability {
-            if filter.required_keyword.is_some() {
+            if filter.reads_keywords() {
                 return Err(RegistryError::InvalidCard {
                     id: card.id.clone(),
-                    reason: "AnthemKeyword cannot require a current keyword until CR 613.8 layer-6 dependency ordering is implemented".into(),
+                    reason: "AnthemKeyword cannot depend on current keywords until CR 613.8 layer-6 dependency ordering is implemented".into(),
+                });
+            }
+        }
+        if let StaticAbilityDef::AnthemPt { filter, .. }
+        | StaticAbilityDef::AnthemKeyword { filter, .. }
+        | StaticAbilityDef::CreatureScopeCombatRestriction { filter, .. } = ability
+        {
+            if filter.reads_power_or_toughness() {
+                return Err(RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason: "continuous creature scopes cannot depend on power or toughness until CR 613.8 layer-7 dependency ordering is implemented".into(),
                 });
             }
         }
@@ -1963,10 +1974,10 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                         id: card.id.clone(),
                         reason,
                     })?;
-                if filter.required_keyword.is_some() {
+                if filter.reads_keywords() || filter.reads_power_or_toughness() {
                     return Err(RegistryError::InvalidCard {
                         id: card.id.clone(),
-                        reason: "EntersWithCounters creature scopes cannot require a current keyword before layer 6 is applied".into(),
+                        reason: "EntersWithCounters creature scopes cannot depend on current keywords, power or toughness before layer 6 is applied".into(),
                     });
                 }
             }

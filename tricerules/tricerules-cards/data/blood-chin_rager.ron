@@ -15,6 +15,6 @@
     ability_id: "triggered_01",
     presentation: OracleLines([1]),
     trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
-    effect: [GrantKeywordsAll(filter: (controller: YouControl, subtype: "Warrior"), keywords: [Menace])],
+    effect: [GrantKeywordsAll(filter: (controller: YouControl, matching: (kind: Creature, required_subtypes: ["Warrior"])), keywords: [Menace])],
   )],
 )

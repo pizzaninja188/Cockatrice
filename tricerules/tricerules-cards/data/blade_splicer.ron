@@ -18,6 +18,6 @@
   static_abilities: [(
     ability_id: "static_01",
     presentation: OracleLines([2]),
-    definition: AnthemKeyword(filter: (controller: YouControl, subtype: "Golem"), keyword: FirstStrike),
+    definition: AnthemKeyword(filter: (controller: YouControl, matching: (kind: Creature, required_subtypes: ["Golem"])), keyword: FirstStrike),
   )],
 )

@@ -1380,6 +1380,22 @@ an ordered sequence as separate `Draw` and `Discard` program instructions, addin
 activated-ability and triggered-ability programs, including the target signatures described above,
 are admitted.
 
+### Creature scopes
+
+"Creatures you control get ...", "other Goblins have ..." and other untargeted creature sets use
+`CreatureScopeFilter`. It holds only the scope-relative fields: `controller` (relative to the source's
+current controller; `TargetedPlayer` is one-shot only) and `exclude_self` ("other"). Every
+descriptive predicate goes in `matching`, which is the shared battlefield `TargetFilter` vocabulary
+and must say `kind: Creature`. Example: `(controller: Some(YouControl), exclude_self: true, matching:
+(kind: Creature, tapped: Some(true), required_supertypes: ["Legendary"]))`. Omit `matching` for every
+creature. A scope is not a target (CR 115). Hexproof, shroud and ward never apply to it, and validation
+rejects the target-relative `controller`, `owner` and `excluded_objects` inside `matching`. Static
+scopes are re-evaluated continuously (CR 611.3a). One-shot scopes are fixed at resolution (CR 611.2c).
+Continuous layer consumers reject predicates that read the same or a later layer: `AnthemKeyword` and
+emblem keyword grants cannot read keywords, and no continuous scope can read power or toughness
+(CR 613.8 dependencies are not implemented). Retired flat fields (`subtype`, `color`,
+`required_keyword`, `name`, `attacking`, counters) are rejected, never ignored.
+
 ### Printed-card filters and graveyard targets
 
 Use `ZoneCardFilter` for printed characteristics outside the battlefield and stack: searches,

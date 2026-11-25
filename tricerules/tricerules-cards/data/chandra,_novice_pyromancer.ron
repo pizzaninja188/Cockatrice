@@ -11,7 +11,7 @@
       ability_id: "activated_01",
       presentation: OracleLines([1]),
       costs: [Loyalty(1)],
-      effect: [PumpAll(filter: (controller: YouControl, subtype: Some("Elemental")), power: 2, toughness: 0)],
+      effect: [PumpAll(filter: (controller: YouControl, matching: (kind: Creature, required_subtypes: ["Elemental"])), power: 2, toughness: 0)],
     ),
     (
       ability_id: "activated_02",

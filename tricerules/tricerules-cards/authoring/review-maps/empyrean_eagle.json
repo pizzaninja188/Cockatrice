@@ -29,8 +29,8 @@
       "typed_path": "/faces/0/static_abilities/0/definition"
     },
     {
-      "symbol": "CreatureScopeFilter.required_keyword",
-      "typed_path": "/faces/0/static_abilities/0/definition/AnthemPt/filter/required_keyword"
+      "symbol": "CreatureScopeFilter.matching.required_keywords",
+      "typed_path": "/faces/0/static_abilities/0/definition/AnthemPt/filter/matching/required_keywords"
     },
     {
       "symbol": "CreatureScopeFilter.exclude_self",

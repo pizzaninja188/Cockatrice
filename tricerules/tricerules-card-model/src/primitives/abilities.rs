@@ -2674,71 +2674,96 @@ pub enum CreatureScopeController {
 }
 
 /// Which creatures a static ability or resolving one-shot effect applies to (CR 611/613).
-/// AND-combined
-/// optional constraints over the creatures in play, mirroring how [`TargetFilter`] narrows a
-/// chosen target. "Name two" per field: `controller` (Glorious Anthem, Goblin King) · `subtype`
-/// (Lord of Atlantis = Merfolk, Goblin Chieftain = Goblin) · `color` (Crusade = White, Bad Moon =
-/// Black) · `exclude_self` (every "Other ... creatures" lord) · `attacking` (Trumpet Blast,
-/// Warded Battlements). Reused by both [`StaticAbilityDef::AnthemPt`] and
-/// [`SpellEffectKind::PumpAll`].
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+///
+/// A scope is not a target (CR 115) and not a choice: nothing is chosen, hexproof/shroud/ward
+/// never apply, and the set is re-evaluated continuously for static abilities (CR 611.3a) or
+/// fixed as a one-shot effect resolves (CR 611.2c). This wrapper owns only the scope-relative
+/// parts; every descriptive object predicate lives in the shared [`TargetFilter`] vocabulary in
+/// `matching`, so scopes, targets and untargeted selections all describe objects the same way
+/// and are evaluated by the same engine matcher.
+///
+/// - `controller` relates each creature to the source's current controller (Glorious Anthem,
+///   Goblin King; `Opponents` for Uncomfortable Chill; `TargetedPlayer` for one-shots only).
+/// - `exclude_self` is "other ... creatures" (every "Other ..." lord).
+/// - `matching` narrows by characteristics and status, e.g. `required_subtypes` (Lord of
+///   Atlantis, Goblin Chieftain), `is_color` (Crusade, Bad Moon), `combat_role` (Trumpet Blast,
+///   Warded Battlements), `tapped` (Adept Watershaper, The Wandering Rescuer) and
+///   `required_supertypes` (The Seriema). It must use `kind: Creature` and may not carry the
+///   target-only controller, owner or object-exclusion relations.
+///
+/// Example RON: `(controller: Some(YouControl), exclude_self: true, matching: (kind: Creature,
+/// tapped: Some(true), required_supertypes: ["Legendary"]))`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct CreatureScopeFilter {
     /// `None` = every creature in play; otherwise use the listed relationship to the source's
     /// controller.
     #[serde(default)]
     pub controller: Option<CreatureScopeController>,
-    /// If `Some`, only creatures whose type line contains this subtype (e.g. "Merfolk", "Goblin").
-    #[serde(default)]
-    pub subtype: Option<String>,
-    /// If `Some`, only creatures of this color (Crusade = White, Bad Moon = Black).
-    #[serde(default)]
-    pub color: Option<Color>,
-    /// If `Some`, only creatures with this keyword in their current derived characteristics.
-    /// Layer-7 power/toughness scopes read this after layer 6 (Air Nomad Legacy and Empyrean
-    /// Eagle). Same-layer keyword dependencies remain rejected until CR 613.8 ordering exists.
-    #[serde(default)]
-    pub required_keyword: Option<Keyword>,
-    /// If `Some`, only creatures whose current layer-one copiable face has this name. Pack
-    /// Mastiff and Cylian Sunsinger use name-selected resolving effects; copied permanents match
-    /// the name they acquired rather than their physical card definition id.
-    #[serde(default)]
-    pub name: Option<String>,
-    /// If `Some`, only creatures with at least one counter of this kind. Pridemalkin, Abzan
-    /// Falconer, Ainok Bond-Kin, and Tuskguard Captain share this static-scope predicate.
-    #[serde(default)]
-    pub required_counter: Option<CounterKind>,
-    /// If true, only creatures with at least one counter of any kind. Michelangelo, Mutant BFF
-    /// uses this physical-object predicate; it is mutually exclusive with `required_counter` so
-    /// authored scopes state either an any-counter or named-counter requirement unambiguously.
-    #[serde(default)]
-    pub requires_any_counter: bool,
     /// CR "other ... creatures": exclude the effect's physical source permanent when it is on
     /// the battlefield. A resolving instant or sorcery source cannot itself match this filter.
     #[serde(default)]
     pub exclude_self: bool,
-    /// If true, only creatures currently attacking in the authoritative combat assignment match.
-    /// One-shot consumers snapshot that membership as they resolve; static abilities re-evaluate
-    /// it continuously.
-    #[serde(default)]
-    pub attacking: bool,
+    /// Shared descriptive predicate. Omitted means every creature. Boxed so every enum carrying a
+    /// scope stays small.
+    #[serde(
+        default = "creature_scope_matching",
+        skip_serializing_if = "is_creature_scope_matching"
+    )]
+    pub matching: Box<TargetFilter>,
+}
+
+impl Default for CreatureScopeFilter {
+    fn default() -> Self {
+        Self {
+            controller: None,
+            exclude_self: false,
+            matching: creature_scope_matching(),
+        }
+    }
+}
+
+fn creature_scope_matching() -> Box<TargetFilter> {
+    Box::new(TargetFilter {
+        kind: TargetKind::Creature,
+        ..TargetFilter::default()
+    })
+}
+
+fn is_creature_scope_matching(filter: &TargetFilter) -> bool {
+    *filter == *creature_scope_matching()
 }
 
 impl CreatureScopeFilter {
     pub fn validate(&self) -> Result<(), String> {
-        if self
-            .name
-            .as_ref()
-            .is_some_and(|name| name.trim().is_empty())
-        {
-            return Err("creature scope name cannot be empty".into());
-        }
-        if self.requires_any_counter && self.required_counter.is_some() {
+        self.matching.validate_characteristic_constraints()?;
+        if !self.matching.all_terminal_filters_match(|leaf| {
+            leaf.kind == TargetKind::Creature
+                && leaf.controller == TargetController::Any
+                && leaf.owner == super::TargetOwner::Any
+                && leaf.excluded_objects.is_empty()
+        }) {
             return Err(
-                "creature scope cannot combine any-counter and specific-counter requirements"
+                "creature scope matching must use kind: Creature and leave target-relative                  controller, owner and object exclusions to the scope"
                     .into(),
             );
         }
         Ok(())
+    }
+
+    /// True when membership depends on current keywords. Layer-6 consumers must reject this
+    /// until CR 613.8 dependency ordering exists.
+    pub fn reads_keywords(&self) -> bool {
+        self.matching.any_terminal_filter_matches(|leaf| {
+            !leaf.required_keywords.is_empty() || !leaf.excluded_keywords.is_empty()
+        })
+    }
+
+    /// True when membership depends on current power or toughness, which are only final after
+    /// layer 7. Continuous layer-6/7 consumers must reject this.
+    pub fn reads_power_or_toughness(&self) -> bool {
+        self.matching
+            .any_terminal_filter_matches(|leaf| leaf.power.is_some() || leaf.toughness.is_some())
     }
 }
 

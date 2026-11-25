@@ -35,7 +35,7 @@
       presentation: OracleLines([1]),
       trigger: WhenSelfEntersBattlefield,
       effect: [
-        PutCountersAll(counter: PlusOnePlusOne, count: 1, filter: (controller: Some(YouControl), name: None)),
+        PutCountersAll(counter: PlusOnePlusOne, count: 1, filter: (controller: Some(YouControl))),
       ],
     ),
   ],

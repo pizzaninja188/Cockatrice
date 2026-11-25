@@ -38,8 +38,8 @@ fn berserkers_onslaught_registers_its_attacking_creature_double_strike_grant() {
             condition: None,
             keyword: Keyword::DoubleStrike,
         } if filter.controller == Some(CreatureScopeController::YouControl)
-            && filter.attacking
-            && filter.subtype.is_none()
+            && (filter.matching.combat_role == Some(tricerules_cards::primitives::CombatRole::Attacking))
+            && filter.matching.required_subtypes.is_empty()
             && !filter.exclude_self
     ));
 }

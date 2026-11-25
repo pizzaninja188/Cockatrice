@@ -22,7 +22,7 @@
       )),
     )),
     (ability_id: "static_02", presentation: OracleLines([3]), definition: AnthemKeyword(
-      filter: (controller: YouControl, required_counter: PlusOnePlusOne),
+      filter: (controller: YouControl, matching: (kind: Creature, required_counter: Some(PlusOnePlusOne))),
       keyword: Trample,
     )),
   ],

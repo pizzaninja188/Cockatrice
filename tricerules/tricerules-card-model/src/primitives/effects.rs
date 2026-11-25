@@ -5537,6 +5537,12 @@ impl SpellEffectKind {
                             return Err("static emblem creature modifier cannot be zero".into());
                         }
                         filter.validate()?;
+                        if filter.reads_power_or_toughness() {
+                            return Err(
+                                "static emblem P/T scope cannot depend on layer-7 power/toughness"
+                                    .into(),
+                            );
+                        }
                     }
                     StaticEmblemEffect::CreatureKeyword { filter, .. } => {
                         filter.validate()?;
@@ -5549,9 +5555,9 @@ impl SpellEffectKind {
                                     .into(),
                             );
                         }
-                        if filter.required_keyword.is_some() {
+                        if filter.reads_keywords() || filter.reads_power_or_toughness() {
                             return Err(
-                                "static emblem keyword scope cannot depend on a layer-6 keyword"
+                                "static emblem keyword scope cannot depend on layer-6 keywords or layer-7 power/toughness"
                                     .into(),
                             );
                         }

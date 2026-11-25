@@ -12,7 +12,7 @@
     (
       ability_id: "static_01",
       presentation: OracleLines([2]),
-      definition: AnthemKeyword(filter: (controller: Some(YouControl), name: None, exclude_self: true), keyword: Trample),
+      definition: AnthemKeyword(filter: (controller: Some(YouControl), exclude_self: true), keyword: Trample),
     ),
   ],
 )

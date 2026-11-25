@@ -15,6 +15,6 @@
     ability_id: "triggered_01",
     presentation: OracleLines([1]),
     trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
-    effect: [PumpAll(filter: (controller: YouControl, subtype: "Goblin"), power: 1, toughness: 1)],
+    effect: [PumpAll(filter: (controller: YouControl, matching: (kind: Creature, required_subtypes: ["Goblin"])), power: 1, toughness: 1)],
   )],
 )

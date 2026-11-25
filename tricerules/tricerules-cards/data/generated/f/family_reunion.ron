@@ -12,12 +12,12 @@
       (
         mode_id: "mode_01",
         presentation: OracleLines([2]),
-        effects: [PumpAll(filter: (controller: Some(YouControl), name: None), power: 1, toughness: 1)],
+        effects: [PumpAll(filter: (controller: Some(YouControl)), power: 1, toughness: 1)],
       ),
       (
         mode_id: "mode_02",
         presentation: OracleLines([3]),
-        effects: [GrantKeywordsAll(filter: (controller: Some(YouControl), name: None), keywords: [Hexproof])],
+        effects: [GrantKeywordsAll(filter: (controller: Some(YouControl)), keywords: [Hexproof])],
       ),
     ],
   ),

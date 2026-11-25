@@ -477,7 +477,7 @@ mod tests {
             toughness: 1,
             static_abilities: [(ability_id: "static_01", presentation: Fallback,
                 definition: AnthemKeyword(
-                    filter: (required_keyword: Some(Flying)),
+                    filter: (matching: (kind: Creature, required_keywords: [Flying])),
                     keyword: Vigilance,
                 ))],
         )"#;
@@ -493,7 +493,7 @@ mod tests {
             types: ["Enchantment"],
             static_abilities: [(ability_id: "static_01", presentation: Fallback,
                 definition: EntersWithCounters(
-                    affected: Creatures((required_keyword: Some(Flying))),
+                    affected: Creatures((matching: (kind: Creature, required_keywords: [Flying]))),
                     counter: PlusOnePlusOne,
                     amount: 1,
                 ))],
@@ -504,6 +504,32 @@ mod tests {
             error.to_string().contains("before layer 6 is applied"),
             "unexpected entry-replacement rejection: {error}"
         );
+    }
+
+    #[test]
+    fn continuous_creature_scopes_reject_power_toughness_dependencies() {
+        for definition in [
+            "AnthemPt(filter: (matching: (kind: Creature, power: Some(AtMost(2)))), delta_power: 1, delta_toughness: 1)",
+            "AnthemKeyword(filter: (matching: (kind: Creature, toughness: Some(AtLeast(4)))), keyword: Vigilance)",
+        ] {
+            let card = format!(
+                r#"(
+            id: "bad_pt_scope",
+            name: "Bad PT Scope",
+            face_id: "bad_pt_scope",
+            mana_cost: "{{W}}",
+            types: ["Enchantment"],
+            static_abilities: [(ability_id: "static_01", presentation: Fallback,
+                definition: {definition})],
+        )"#
+            );
+            let error = super::from_chunks(&[card.as_str()])
+                .expect_err("continuous scope cannot read layer-7 power or toughness");
+            assert!(
+                error.to_string().contains("layer-7 dependency"),
+                "unexpected rejection for {definition}: {error}"
+            );
+        }
     }
 
     #[test]
@@ -3531,13 +3557,13 @@ mod tests {
             StaticAbilityDef::EntersWithCounters {
                 affected: EntersWithCountersAffected::Creatures(CreatureScopeFilter {
                     controller: Some(CreatureScopeController::YouControl),
-                    subtype: Some(subtype),
+                    matching,
                     ..
                 }),
                 counter: CounterKind::PlusOnePlusOne,
                 amount: Amount::Fixed(1),
                 ..
-            } if subtype == "Dragon"
+            } if matching.required_subtypes == ["Dragon"]
         )));
     }
 

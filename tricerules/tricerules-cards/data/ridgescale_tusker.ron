@@ -16,7 +16,7 @@
       ability_id: "enter_team_counter",
       presentation: OracleLines([1]),
       trigger: WhenSelfEntersBattlefield,
-      effect: [PutCountersAll(counter: PlusOnePlusOne, count: 1, filter: (controller: Some(YouControl), name: None, exclude_self: true))],
+      effect: [PutCountersAll(counter: PlusOnePlusOne, count: 1, filter: (controller: Some(YouControl), exclude_self: true))],
     ),
   ],
 )

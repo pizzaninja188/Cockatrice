@@ -43,10 +43,10 @@ fn ohran_frostfang_registers_its_exact_characteristics_and_typed_abilities() {
             condition: None,
             keyword: Keyword::Deathtouch,
         } if filter.controller == Some(CreatureScopeController::YouControl)
-            && filter.attacking
-            && filter.subtype.is_none()
-            && filter.color.is_none()
-            && filter.required_keyword.is_none()
+            && (filter.matching.combat_role == Some(tricerules_cards::primitives::CombatRole::Attacking))
+            && filter.matching.required_subtypes.is_empty()
+            && filter.matching.is_color.is_none()
+            && filter.matching.required_keywords.is_empty()
             && !filter.exclude_self
     ));
 

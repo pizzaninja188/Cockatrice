@@ -26,15 +26,14 @@ fn issue_194_consumers_are_registered() {
         StaticAbilityDef::CreatureScopeCombatRestriction {
             filter: CreatureScopeFilter {
                 controller: Some(CreatureScopeController::YouControl),
-                requires_any_counter: true,
-                required_counter: None,
+                matching,
                 ..
             },
             restriction: CombatRestriction {
                 maximum_blockers: Some(1),
                 ..
             },
-        }
+        } if matching.requires_any_counter && matching.required_counter.is_none()
     ));
 
     let herald = registry
@@ -50,35 +49,46 @@ fn issue_194_consumers_are_registered() {
         StaticAbilityDef::CreatureScopeCombatRestriction {
             filter: CreatureScopeFilter {
                 controller: Some(CreatureScopeController::YouControl),
-                requires_any_counter: false,
-                required_counter: Some(CounterKind::PlusOnePlusOne),
+                matching,
                 ..
             },
             restriction: CombatRestriction {
                 cant_be_blocked: true,
                 ..
             },
-        }
+        } if !matching.requires_any_counter && matching.required_counter == Some(CounterKind::PlusOnePlusOne)
     ));
 }
 
 #[test]
 fn creature_scope_counter_predicates_are_mutually_exclusive() {
     assert!(CreatureScopeFilter {
-        requires_any_counter: true,
-        required_counter: Some(CounterKind::PlusOnePlusOne),
+        matching: Box::new(tricerules_cards::primitives::TargetFilter {
+            kind: tricerules_cards::primitives::TargetKind::Creature,
+            requires_any_counter: true,
+            required_counter: Some(CounterKind::PlusOnePlusOne),
+            ..Default::default()
+        }),
         ..CreatureScopeFilter::default()
     }
     .validate()
     .is_err());
     assert!(CreatureScopeFilter {
-        requires_any_counter: true,
+        matching: Box::new(tricerules_cards::primitives::TargetFilter {
+            kind: tricerules_cards::primitives::TargetKind::Creature,
+            requires_any_counter: true,
+            ..Default::default()
+        }),
         ..CreatureScopeFilter::default()
     }
     .validate()
     .is_ok());
     assert!(CreatureScopeFilter {
-        required_counter: Some(CounterKind::PlusOnePlusOne),
+        matching: Box::new(tricerules_cards::primitives::TargetFilter {
+            kind: tricerules_cards::primitives::TargetKind::Creature,
+            required_counter: Some(CounterKind::PlusOnePlusOne),
+            ..Default::default()
+        }),
         ..CreatureScopeFilter::default()
     }
     .validate()

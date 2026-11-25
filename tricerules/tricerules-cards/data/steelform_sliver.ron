@@ -17,7 +17,7 @@
       ability_id: "static_01",
       presentation: OracleLines([1]),
       definition: AnthemPt(
-        filter: (controller: YouControl, subtype: "Sliver"),
+        filter: (controller: YouControl, matching: (kind: Creature, required_subtypes: ["Sliver"])),
         delta_power: 0,
         delta_toughness: 1,
       ),

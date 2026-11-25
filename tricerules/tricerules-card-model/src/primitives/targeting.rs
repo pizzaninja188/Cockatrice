@@ -2114,6 +2114,11 @@ pub struct TargetFilter {
     /// Supertypes that disqualify the target. Demolition Field and Ghost Quarter exclude Basic.
     #[serde(default)]
     pub excluded_supertypes: Vec<String>,
+    /// If `Some`, only objects whose current layer-one copiable face has this name. Pack Mastiff
+    /// and Cylian Sunsinger use name-selected scopes; copied permanents match the name they
+    /// acquired rather than their physical card definition id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
     /// Optional comparison against current derived power. A noncreature has no power and cannot
     /// match a power-constrained filter.
     #[serde(default)]
@@ -2334,6 +2339,13 @@ impl TargetFilter {
         {
             return Err("target filter supertype names must not be empty".into());
         }
+        if self
+            .name
+            .as_ref()
+            .is_some_and(|name| name.trim().is_empty())
+        {
+            return Err("target filter name must not be empty".into());
+        }
         if has_duplicates(&self.required_supertypes) || has_duplicates(&self.excluded_supertypes) {
             return Err("target filter cannot repeat a supertype predicate".into());
         }
@@ -2368,6 +2380,7 @@ impl TargetFilter {
             || !self.excluded_subtypes.is_empty()
             || !self.required_supertypes.is_empty()
             || !self.excluded_supertypes.is_empty()
+            || self.name.is_some()
             || self.power.is_some()
             || self.toughness.is_some()
             || !self.required_keywords.is_empty()

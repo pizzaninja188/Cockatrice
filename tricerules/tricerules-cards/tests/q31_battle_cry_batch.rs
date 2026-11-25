@@ -75,8 +75,12 @@ fn q31_battle_cry_batch_maps_definitions() {
         assert_eq!(
             *filter,
             CreatureScopeFilter {
-                attacking: true,
                 exclude_self: true,
+                matching: Box::new(tricerules_cards::primitives::TargetFilter {
+                    kind: tricerules_cards::primitives::TargetKind::Creature,
+                    combat_role: Some(tricerules_cards::primitives::CombatRole::Attacking),
+                    ..Default::default()
+                }),
                 ..CreatureScopeFilter::default()
             }
         );

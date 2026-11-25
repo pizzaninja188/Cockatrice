@@ -24,10 +24,10 @@ const SHIELDED_FIVE: &str = r#"(id: "shielded_five", name: "Shielded Five", face
     types: ["Creature"], power: 5, toughness: 6, keywords: [Hexproof, Indestructible])"#;
 const ANTHEM: &str = r#"(id: "sliver_anthem", name: "Sliver Anthem", face_id: "sliver_anthem",
     types: ["Artifact"], static_abilities: [(ability_id: "anthem", presentation: Fallback,
-        definition: AnthemPt(filter: (subtype: Some("Sliver")), delta_power: 3, delta_toughness: 0))])"#;
+        definition: AnthemPt(filter: (matching: (kind: Creature, required_subtypes: ["Sliver"])), delta_power: 3, delta_toughness: 0))])"#;
 const DEBUFF: &str = r#"(id: "zombie_debuff", name: "Zombie Debuff", face_id: "zombie_debuff",
     types: ["Artifact"], static_abilities: [(ability_id: "debuff", presentation: Fallback,
-        definition: AnthemPt(filter: (subtype: Some("Zombie")), delta_power: -4, delta_toughness: 0))])"#;
+        definition: AnthemPt(filter: (matching: (kind: Creature, required_subtypes: ["Zombie"])), delta_power: -4, delta_toughness: 0))])"#;
 
 fn fixture() -> (GameEngine, ObjectId) {
     let registry = CardRegistry::from_chunks_and_tokens(

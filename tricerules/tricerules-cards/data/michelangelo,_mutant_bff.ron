@@ -13,7 +13,7 @@
     ability_id: "static_01",
     presentation: OracleLines([1]),
     definition: CreatureScopeCombatRestriction(
-      filter: (controller: YouControl, requires_any_counter: true),
+      filter: (controller: YouControl, matching: (kind: Creature, requires_any_counter: true)),
       restriction: (maximum_blockers: Some(1)),
     ),
   )],

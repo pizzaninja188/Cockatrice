@@ -18,8 +18,8 @@
       "typed_path": "/faces/0/spell_effect/0"
     },
     {
-      "symbol": "CreatureScopeFilter.attacking",
-      "typed_path": "/faces/0/spell_effect/0/PumpAll/filter/attacking"
+      "symbol": "CreatureScopeFilter.matching.combat_role",
+      "typed_path": "/faces/0/spell_effect/0/PumpAll/filter/matching/combat_role"
     },
     {
       "symbol": "SpellEffectKind::GrantKeywordsAll",

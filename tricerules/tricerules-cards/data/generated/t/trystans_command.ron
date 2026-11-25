@@ -62,7 +62,7 @@
         presentation: OracleLines([5]),
         effects: [
           PumpAll(
-            filter: (controller: Some(TargetedPlayer(group_index: 0, kind: AnyPlayer)), name: None),
+            filter: (controller: Some(TargetedPlayer(group_index: 0, kind: AnyPlayer))),
             power: 3,
             toughness: 3,
           ),

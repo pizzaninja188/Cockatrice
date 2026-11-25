@@ -49,8 +49,8 @@
             ],
             effect: [
               CreateTokens(token: "robot_c_2_2", count: 1),
-              PumpAll(filter: (controller: Some(YouControl), name: None), power: 1, toughness: 0),
-              GrantKeywordsAll(filter: (controller: Some(YouControl), name: None), keywords: [Haste]),
+              PumpAll(filter: (controller: Some(YouControl)), power: 1, toughness: 0),
+              GrantKeywordsAll(filter: (controller: Some(YouControl)), keywords: [Haste]),
             ],
             timing: SorcerySpeed,
           ),

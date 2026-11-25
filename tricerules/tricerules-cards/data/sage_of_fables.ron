@@ -11,7 +11,7 @@
     ability_id: "static_01",
     presentation: OracleLines([1]),
     definition: EntersWithCounters(
-      affected: Creatures((controller: Some(YouControl), subtype: Some("Wizard"), exclude_self: true)),
+      affected: Creatures((controller: Some(YouControl), exclude_self: true, matching: (kind: Creature, required_subtypes: ["Wizard"]))),
       counter: PlusOnePlusOne,
       amount: 1,
     ),

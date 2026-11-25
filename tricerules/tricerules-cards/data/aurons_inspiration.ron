@@ -10,5 +10,5 @@
   mana_cost: "{2}{W}",
   flashback_cost: Some("{2}{W}{W}"),
   types: ["Instant"],
-  spell_effect: [PumpAll(filter: (attacking: true), power: 2, toughness: 0)],
+  spell_effect: [PumpAll(filter: (matching: (kind: Creature, combat_role: Some(Attacking))), power: 2, toughness: 0)],
 )

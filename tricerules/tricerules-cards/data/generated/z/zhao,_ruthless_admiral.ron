@@ -19,7 +19,7 @@
       ability_id: "triggered_02",
       presentation: OracleLines([2]),
       trigger: WheneverPlayerSacrificesPermanent(filter: (exclude_source: true)),
-      effect: [PumpAll(filter: (controller: Some(YouControl), name: None), power: 1, toughness: 0)],
+      effect: [PumpAll(filter: (controller: Some(YouControl)), power: 1, toughness: 0)],
     ),
   ],
 )

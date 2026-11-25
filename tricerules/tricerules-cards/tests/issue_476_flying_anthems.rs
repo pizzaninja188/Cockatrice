@@ -24,9 +24,12 @@ fn face(id: &str) -> &'static CardFace {
 fn flying_creatures_you_control(exclude_self: bool) -> CreatureScopeFilter {
     CreatureScopeFilter {
         controller: Some(CreatureScopeController::YouControl),
-        required_keyword: Some(Keyword::Flying),
         exclude_self,
-        ..CreatureScopeFilter::default()
+        matching: Box::new(tricerules_cards::primitives::TargetFilter {
+            kind: tricerules_cards::primitives::TargetKind::Creature,
+            required_keywords: vec![Keyword::Flying],
+            ..Default::default()
+        }),
     }
 }
 

@@ -16,7 +16,7 @@
     presentation: OracleLines([2]),
     costs: [Mana("{2}{R}")],
     effect: [PumpAll(
-      filter: (controller: Some(YouControl), name: None),
+      filter: (controller: Some(YouControl)),
       power: 1,
       toughness: 0,
     )],

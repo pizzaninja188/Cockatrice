@@ -10,7 +10,7 @@
   mana_cost: "{2}{R}",
   types: ["Instant"],
   spell_effect: [
-    PumpAll(filter: (attacking: true), power: 1, toughness: 0),
-    GrantKeywordsAll(filter: (attacking: true), keywords: [FirstStrike]),
+    PumpAll(filter: (matching: (kind: Creature, combat_role: Some(Attacking))), power: 1, toughness: 0),
+    GrantKeywordsAll(filter: (matching: (kind: Creature, combat_role: Some(Attacking))), keywords: [FirstStrike]),
   ],
 )

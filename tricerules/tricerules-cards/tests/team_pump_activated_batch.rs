@@ -107,8 +107,8 @@ fn team_pump_activated_batch_maps_definitions() {
                     power: 1,
                     toughness: 1,
                 }] if filter.controller == Some(CreatureScopeController::YouControl)
-                    && filter.subtype.is_none()
-                    && filter.name.is_none()
+                    && filter.matching.required_subtypes.is_empty()
+                    && filter.matching.name.is_none()
             ),
             "{id}: pump only its controller's creatures by exactly +1/+1"
         );

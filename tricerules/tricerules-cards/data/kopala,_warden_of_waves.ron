@@ -9,7 +9,7 @@
   toughness: 2,
   static_abilities: [
     (ability_id: "static_01", presentation: OracleLines([1, 2]), definition: TargetingCostIncrease(
-      protected: Creatures((controller: Some(YouControl), subtype: Some("Merfolk"))),
+      protected: Creatures((controller: Some(YouControl), matching: (kind: Creature, required_subtypes: ["Merfolk"]))),
       actors: Opponents,
       actions: SpellsAndActivatedAbilities,
       amount: 2,

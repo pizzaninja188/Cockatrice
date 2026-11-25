@@ -15,7 +15,7 @@
       ability_id: "battle_cry",
       presentation: OracleLines([1]),
       trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
-      effect: [PumpAll(filter: (attacking: true, exclude_self: true), power: 1, toughness: 0)],
+      effect: [PumpAll(filter: (exclude_self: true, matching: (kind: Creature, combat_role: Some(Attacking))), power: 1, toughness: 0)],
     ),
   ],
 )

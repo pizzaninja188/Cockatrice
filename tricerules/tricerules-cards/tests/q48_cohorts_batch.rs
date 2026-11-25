@@ -201,9 +201,10 @@ fn q48_team_anthem_maps_definitions() {
             "{}",
             case.id
         );
-        assert_eq!(filter.color, case.color, "{}", case.id);
+        assert_eq!(filter.matching.is_color, case.color, "{}", case.id);
         assert_eq!(
-            filter.required_keyword, case.required_keyword,
+            filter.matching.required_keywords,
+            case.required_keyword.into_iter().collect::<Vec<_>>(),
             "{}",
             case.id
         );

@@ -19,7 +19,7 @@
     ability_id: "static_01",
     presentation: OracleLines([2]),
     definition: AnthemPt(
-      filter: (controller: YouControl, subtype: "Pirate", exclude_self: true),
+      filter: (controller: YouControl, exclude_self: true, matching: (kind: Creature, required_subtypes: ["Pirate"])),
       delta_power: 1,
       delta_toughness: 1,
     ),

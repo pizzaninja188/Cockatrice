@@ -10,7 +10,7 @@
   mana_cost: "{4}{R}",
   types: ["Instant"],
   spell_effect: [
-    PumpAll(filter: (attacking: true), power: 2, toughness: 0),
-    GrantKeywordsAll(filter: (attacking: true), keywords: [Trample]),
+    PumpAll(filter: (matching: (kind: Creature, combat_role: Some(Attacking))), power: 2, toughness: 0),
+    GrantKeywordsAll(filter: (matching: (kind: Creature, combat_role: Some(Attacking))), keywords: [Trample]),
   ],
 )

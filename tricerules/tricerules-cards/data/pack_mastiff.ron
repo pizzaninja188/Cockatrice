@@ -13,7 +13,7 @@
       costs: [Mana("{1}{R}")],
       effect: [
         PumpAll(
-          filter: (controller: YouControl, name: "Pack Mastiff"),
+          filter: (controller: YouControl, matching: (kind: Creature, name: Some("Pack Mastiff"))),
           power: 1,
           toughness: 0,
         ),

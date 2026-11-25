@@ -314,7 +314,11 @@ fn issue_335_drix_fatemaker_keeps_its_warp_counter_and_counter_filtered_anthem()
         StaticAbilityDef::AnthemKeyword {
             filter: CreatureScopeFilter {
                 controller: Some(CreatureScopeController::YouControl),
-                required_counter: Some(CounterKind::PlusOnePlusOne),
+                matching: Box::new(tricerules_cards::primitives::TargetFilter {
+                    kind: tricerules_cards::primitives::TargetKind::Creature,
+                    required_counter: Some(CounterKind::PlusOnePlusOne),
+                    ..Default::default()
+                }),
                 ..CreatureScopeFilter::default()
             },
             condition: None,

@@ -2640,6 +2640,13 @@ pub(super) fn permanent_matches_filter_characteristics(
         return false;
     }
     if filter
+        .name
+        .as_ref()
+        .is_some_and(|required| !characteristics.has_name(required))
+    {
+        return false;
+    }
+    if filter
         .not_color
         .is_some_and(|color| characteristics.colors.contains(&color))
     {
@@ -2674,16 +2681,8 @@ pub(super) fn creature_matches_scope(
     oid: ObjectId,
     characteristics: &Characteristics,
 ) -> bool {
-    let Some(object) = state.objects.get(&oid) else {
-        return false;
-    };
-    let name_matches = filter
-        .name
-        .as_ref()
-        .is_none_or(|required_name| characteristics.has_name(required_name));
-
+    // Scope-relative parts first; every descriptive predicate is the shared matcher's.
     exclude != Some(oid)
-        && (!filter.attacking || super::combat::is_attacking(state, oid))
         && match filter.controller {
             None => true,
             Some(CreatureScopeController::YouControl) => {
@@ -2695,21 +2694,7 @@ pub(super) fn creature_matches_scope(
             Some(CreatureScopeController::TargetedPlayer { .. }) => false,
         }
         && characteristics.is_creature()
-        && filter
-            .subtype
-            .as_ref()
-            .is_none_or(|value| characteristics.has_type(value))
-        && filter
-            .color
-            .is_none_or(|value| characteristics.colors.contains(&value))
-        && filter
-            .required_keyword
-            .is_none_or(|value| characteristics.has_keyword(value))
-        && name_matches
-        && (!filter.requires_any_counter || object.has_any_counter())
-        && filter
-            .required_counter
-            .is_none_or(|counter| object.counter_count(counter) > 0)
+        && permanent_matches_filter_characteristics(state, &filter.matching, oid, characteristics)
 }
 
 impl CharacteristicsEvaluator<'_> {
@@ -4770,7 +4755,11 @@ mod tests {
                 affected: AffectedScope::CreaturesMatching {
                     reference_player: 0,
                     filter: CreatureScopeFilter {
-                        subtype: Some("Knight".to_string()),
+                        matching: Box::new(tricerules_card_model::primitives::TargetFilter {
+                            kind: tricerules_card_model::primitives::TargetKind::Creature,
+                            required_subtypes: vec!["Knight".to_string()],
+                            ..Default::default()
+                        }),
                         ..CreatureScopeFilter::default()
                     },
                     exclude: None,

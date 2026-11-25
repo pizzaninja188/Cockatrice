@@ -6,6 +6,6 @@
   types: ["Instant"],
   // CR 508.1k / 611.2c / 613.4c: snapshot the creatures attacking as this resolves.
   spell_effect: [
-    PumpAll(filter: (attacking: true), power: 2, toughness: 0),
+    PumpAll(filter: (matching: (kind: Creature, combat_role: Some(Attacking))), power: 2, toughness: 0),
   ],
 )

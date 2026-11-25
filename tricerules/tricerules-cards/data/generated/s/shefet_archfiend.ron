@@ -22,7 +22,7 @@
       ability_id: "triggered_01",
       presentation: OracleLines([2]),
       trigger: WhenSelfEntersBattlefield,
-      effect: [PumpAll(filter: (name: None, exclude_self: true), power: -2, toughness: -2)],
+      effect: [PumpAll(filter: (exclude_self: true), power: -2, toughness: -2)],
     ),
   ],
 )

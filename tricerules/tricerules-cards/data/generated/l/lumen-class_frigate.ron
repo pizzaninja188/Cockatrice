@@ -45,7 +45,7 @@
       ability_id: "static_02",
       presentation: OracleLines([2]),
       definition: AnthemPt(
-        filter: (controller: Some(YouControl), name: None, exclude_self: true),
+        filter: (controller: Some(YouControl), exclude_self: true),
         condition: Some(SourceCounterCount(counter: Charge, min: Some(2))),
         delta_power: 1,
         delta_toughness: 1,

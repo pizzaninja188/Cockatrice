@@ -29,7 +29,7 @@
         presentation: OracleLines([3]),
         effects: [
           GrantKeywordsAll(
-            filter: (controller: Some(TargetedPlayer(group_index: 0, kind: AnyPlayer)), name: None),
+            filter: (controller: Some(TargetedPlayer(group_index: 0, kind: AnyPlayer))),
             keywords: [Lifelink],
           ),
         ],

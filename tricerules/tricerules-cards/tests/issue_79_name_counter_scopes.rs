@@ -26,7 +26,11 @@ fn issue_79_cards_use_shared_name_and_counter_scope_predicates() {
         [SpellEffectKind::PumpAll {
             filter: CreatureScopeFilter {
                 controller: Some(CreatureScopeController::YouControl),
-                name: Some("Pack Mastiff".to_string()),
+                matching: Box::new(tricerules_cards::primitives::TargetFilter {
+                    kind: tricerules_cards::primitives::TargetKind::Creature,
+                    name: Some("Pack Mastiff".to_string()),
+                    ..Default::default()
+                }),
                 ..CreatureScopeFilter::default()
             },
             power: 1,
@@ -58,7 +62,11 @@ fn issue_79_cards_use_shared_name_and_counter_scope_predicates() {
         [StaticAbilityDef::AnthemKeyword {
             filter: CreatureScopeFilter {
                 controller: Some(CreatureScopeController::YouControl),
-                required_counter: Some(CounterKind::PlusOnePlusOne),
+                matching: Box::new(tricerules_cards::primitives::TargetFilter {
+                    kind: tricerules_cards::primitives::TargetKind::Creature,
+                    required_counter: Some(CounterKind::PlusOnePlusOne),
+                    ..Default::default()
+                }),
                 ..CreatureScopeFilter::default()
             },
             condition: None,
@@ -70,7 +78,11 @@ fn issue_79_cards_use_shared_name_and_counter_scope_predicates() {
 #[test]
 fn creature_scope_filter_rejects_blank_names() {
     assert!(CreatureScopeFilter {
-        name: Some("  ".to_string()),
+        matching: Box::new(tricerules_cards::primitives::TargetFilter {
+            kind: tricerules_cards::primitives::TargetKind::Creature,
+            name: Some("  ".to_string()),
+            ..Default::default()
+        }),
         ..CreatureScopeFilter::default()
     }
     .validate()

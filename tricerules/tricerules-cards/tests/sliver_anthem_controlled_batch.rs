@@ -139,9 +139,9 @@ fn sliver_anthem_controlled_batch_maps_definitions() {
             "{}",
             card.id
         );
-        assert_eq!(filter.subtype.as_deref(), Some("Sliver"), "{}", card.id);
+        assert_eq!(filter.matching.required_subtypes, ["Sliver"], "{}", card.id);
         assert!(!filter.exclude_self, "{} includes itself", card.id);
-        assert!(filter.required_keyword.is_none(), "{}", card.id);
+        assert!(filter.matching.required_keywords.is_empty(), "{}", card.id);
         assert_eq!(
             (*delta_power, *delta_toughness),
             (card.pump_power, card.pump_toughness),

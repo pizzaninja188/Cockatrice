@@ -6,7 +6,7 @@
   types: ["Artifact"],
   activated_abilities: [(ability_id: "activated_01", presentation: OracleLines([2]), costs: [Tap], effect: [ProduceMana(options: [(w: 1), (u: 1), (b: 1), (r: 1), (g: 1)])], )],
   static_abilities: [(ability_id: "static_01", presentation: OracleLines([1]), definition: EntersWithCounters(
-    affected: Creatures((controller: Some(YouControl), subtype: Some("Dragon"))),
+    affected: Creatures((controller: Some(YouControl), matching: (kind: Creature, required_subtypes: ["Dragon"]))),
     counter: PlusOnePlusOne,
     amount: 1,
   ))],

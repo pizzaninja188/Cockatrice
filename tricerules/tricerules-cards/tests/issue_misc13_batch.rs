@@ -257,7 +257,7 @@ fn issue_misc13_batch_maps_definitions() {
             power: 2,
             toughness: 0,
             filter,
-        } if filter.attacking),
+        } if (filter.matching.combat_role == Some(tricerules_cards::primitives::CombatRole::Attacking))),
         "{:?}",
         auron.spell_effect
     );

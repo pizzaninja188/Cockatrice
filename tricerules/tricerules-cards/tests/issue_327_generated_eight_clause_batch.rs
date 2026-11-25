@@ -171,7 +171,11 @@ fn issue_327_goblin_oriflamme_anthems_attacking_creatures_only() {
         StaticAbilityDef::AnthemPt {
             filter: CreatureScopeFilter {
                 controller: Some(CreatureScopeController::YouControl),
-                attacking: true,
+                matching: Box::new(tricerules_cards::primitives::TargetFilter {
+                    kind: tricerules_cards::primitives::TargetKind::Creature,
+                    combat_role: Some(tricerules_cards::primitives::CombatRole::Attacking),
+                    ..Default::default()
+                }),
                 ..CreatureScopeFilter::default()
             },
             condition: None,

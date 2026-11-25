@@ -9,7 +9,7 @@
       ability_id: "static_01",
       presentation: OracleLines([1]),
       definition: AnthemKeyword(
-        filter: (controller: YouControl, attacking: true),
+        filter: (controller: YouControl, matching: (kind: Creature, combat_role: Some(Attacking))),
         keyword: DoubleStrike,
       ),
     ),

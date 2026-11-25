@@ -122,7 +122,7 @@ fn sliver_anthem_batch_maps_definitions() {
             matches!(
                 &ability.definition,
                 StaticAbilityDef::AnthemPt { filter, delta_power: p, delta_toughness: t, .. }
-                    if filter.subtype.as_deref() == Some("Sliver")
+                    if filter.matching.required_subtypes == ["Sliver"]
                         && filter.controller.is_none()
                         && !filter.exclude_self
                         && *p == dp
