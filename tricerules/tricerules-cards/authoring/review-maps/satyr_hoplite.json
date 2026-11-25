@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "ee7dc820-10ee-429a-a1ef-ecd6a11f5608",
+  "spans": [
+    {
+      "face_id": "satyr_hoplite",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverSelfBecomesTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q83_heroic_counter::q83_heroic_cards_place_their_printed_counter_and_keep_their_body",
+      "covers": "the actual card is exercised by the shared actual-card scenario: body, keywords, heroic counter"
+    },
+    {
+      "test": "scenario q83_heroic_counter::q83_heroic_does_not_trigger_for_a_spell_that_does_not_target_it",
+      "covers": "the actual card does not trigger for a spell that does not target it"
+    },
+    {
+      "test": "mechanic_registry::q83_batch_a::q83_heroic_map_definitions",
+      "covers": "reviewed identity, Oracle line mapping, keywords and heroic trigger"
+    },
+    {
+      "test": "mechanic_registry::q83_batch_a::q83_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

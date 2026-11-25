@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "fe249f27-db6c-4826-836e-a04efb1a3eaa",
+  "spans": [
+    {
+      "face_id": "serpent_warrior",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::LoseLife",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q83_etb_lose_life::q83_lose_life_cards_enter_through_their_exact_cost_and_lose_printed_life",
+      "covers": "the actual card is exercised by the shared actual-card scenario: exact cost, body, printed life loss and protection"
+    },
+    {
+      "test": "scenario q83_etb_lose_life::q83_lose_life_triggers_on_any_battlefield_entry_not_only_a_cast",
+      "covers": "the actual card loses life on an entry that is not a cast"
+    },
+    {
+      "test": "mechanic_registry::q83_batch_a::q83_etb_lose_life_map_definitions",
+      "covers": "reviewed identity, Oracle line mapping, body, protection and life-loss effect"
+    },
+    {
+      "test": "mechanic_registry::q83_batch_a::q83_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

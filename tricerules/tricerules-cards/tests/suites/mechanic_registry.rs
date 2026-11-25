@@ -1479,3 +1479,6 @@ mod q82_etb_stun_riders;
 
 #[path = "../q82_etb_food_riders.rs"]
 mod q82_etb_food_riders;
+
+#[path = "../q83_batch_a.rs"]
+mod q83_batch_a;

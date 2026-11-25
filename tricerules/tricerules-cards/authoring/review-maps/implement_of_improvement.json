@@ -1,0 +1,72 @@
+{
+  "format_version": 1,
+  "oracle_id": "a71b2ffb-6a62-4239-987f-ec82a358927f",
+  "spans": [
+    {
+      "face_id": "implement_of_improvement",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "implement_of_improvement",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::SacrificeSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q83_artifact_death_draw::q83_implement_canary_simplest_improvement_gains_life_and_draws",
+      "covers": "canary simplest: exact life gain, sacrifice and death draw"
+    },
+    {
+      "test": "scenario q83_artifact_death_draw::q83_implement_cards_apply_their_printed_effect",
+      "covers": "the actual card is exercised by the shared actual-card scenario: exact cast, sacrifice and printed effect"
+    },
+    {
+      "test": "scenario q83_artifact_death_draw::q83_implement_dies_trigger_fires_when_destroyed_without_activation",
+      "covers": "the actual card draws when destroyed rather than activated (pinned 2017-02-09 ruling)"
+    },
+    {
+      "test": "scenario q83_artifact_death_draw::q83_implement_unaffordable_activation_rejects_atomically",
+      "covers": "the actual card rejects an unpaid activation without sacrificing itself or moving any card"
+    },
+    {
+      "test": "mechanic_registry::q83_batch_a::q83_artifact_death_draw_map_definitions",
+      "covers": "reviewed identity, Oracle line mapping, costs, effect and death trigger"
+    },
+    {
+      "test": "mechanic_registry::q83_batch_a::q83_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

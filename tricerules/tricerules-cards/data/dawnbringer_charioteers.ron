@@ -1,0 +1,24 @@
+// Oracle 29263d48-cb28-478b-a99e-5a18dbc924f0; source/rulings checked 2026-11-25 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.9a-b (flying), 702.15a-b (lifelink), 603.2/115.9b (heroic triggers on a cast spell with
+// this creature as a target), 603.2c (one trigger per spell) and 122.1 (the printed +1/+1
+// counter). Pinned 2014-04-26 rulings: the heroic ability resolves before the targeting spell,
+// triggers once per spell, and does not trigger for a copied spell or a changed target.
+(
+  id: "dawnbringer_charioteers",
+  name: "Dawnbringer Charioteers",
+  face_id: "dawnbringer_charioteers",
+  mana_cost: "{2}{W}{W}",
+  types: ["Creature", "Human", "Soldier"],
+  power: 2,
+  toughness: 4,
+  keywords: [Flying, Lifelink],
+  triggered_abilities: [
+    (
+      ability_id: "heroic",
+      presentation: OracleLines([2]),
+      trigger: WheneverSelfBecomesTarget(source: SpellCast, source_controller: Controller),
+      effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
+    ),
+  ],
+)

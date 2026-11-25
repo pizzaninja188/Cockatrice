@@ -2675,3 +2675,12 @@ mod q82_etb_stun_riders;
 
 #[path = "scenario/q82_etb_food_riders.rs"]
 mod q82_etb_food_riders;
+
+#[path = "scenario/q83_artifact_death_draw.rs"]
+mod q83_artifact_death_draw;
+
+#[path = "scenario/q83_heroic_counter.rs"]
+mod q83_heroic_counter;
+
+#[path = "scenario/q83_etb_lose_life.rs"]
+mod q83_etb_lose_life;
