@@ -385,6 +385,94 @@ mod tests {
     }
 
     #[test]
+    fn parked_operation_completion_is_mode_aware_and_never_silently_dropped() {
+        use crate::state::{
+            OperationResults, ParkedResume, ParkedStackResolution, ProgramFrame, ProgramRunState,
+        };
+        use tricerules_card_model::primitives::CountResultKind;
+        use tricerules_card_model::{CardFaceId, ProgramOwnerId};
+
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            708,
+            &[17, 29],
+            20,
+            None,
+            false,
+        )
+        .unwrap();
+        let object_id = *engine.state.players[0].library.front().unwrap();
+        let item = engine.observer_return_item(object_id, 17);
+        let outer = OperationResults::from_count(CountResultKind::RevealedPrefix, 7);
+        let receipt = OperationResults::from_count(CountResultKind::TappedPermanents, 2);
+        let run = |in_flight: Option<Vec<_>>| ProgramRunState {
+            owner: ProgramOwnerId::face("parked_contract", CardFaceId::new("front").unwrap()),
+            pending_owners: Vec::new(),
+            frames: vec![ProgramFrame {
+                path: vec![],
+                next_instruction: 0,
+                yield_to: vec![],
+            }],
+            slots: Vec::new(),
+            in_flight,
+            in_flight_results: OperationResults::default(),
+        };
+        let json = |results: &OperationResults| crate::diagnostic_json::to_value(results).unwrap();
+
+        // A flat stack's receipt is the next primitive's PreviousEffect.
+        let mut flat =
+            ParkedStackResolution::for_flat_effects(item.clone(), Some(1), outer.clone());
+        flat.record_operation_completion(receipt.clone());
+        assert_eq!(json(flat.previous_result()), json(&receipt));
+        let ParkedResume::Flat {
+            previous_result, ..
+        } = flat.into_resume()
+        else {
+            panic!("a flat stack resumes its effect list")
+        };
+        assert_eq!(json(&previous_result), json(&receipt));
+
+        // A Program stack keeps its outer context and carries the receipt separately, including
+        // through an execution transfer onto another stack item.
+        let mut program = ParkedStackResolution::for_program(
+            item.clone(),
+            None,
+            outer.clone(),
+            run(Some(vec![])),
+        );
+        program.record_operation_completion(receipt.clone());
+        assert_eq!(json(program.previous_result()), json(&outer));
+        let mut receiver = ParkedStackResolution::dedicated(item.clone());
+        receiver.restore_execution_from(&program);
+        let ParkedResume::Program {
+            saved_previous_result,
+            completion,
+            ..
+        } = receiver.into_resume()
+        else {
+            panic!("a Program stack resumes its Program")
+        };
+        assert_eq!(json(&saved_previous_result), json(&outer));
+        assert_eq!(json(&completion.expect("recorded receipt")), json(&receipt));
+
+        // A receipt with no operation in flight to receive it is an invariant violation.
+        let mut orphan =
+            ParkedStackResolution::for_program(item.clone(), None, outer.clone(), run(None));
+        orphan.record_operation_completion(receipt);
+        assert!(matches!(
+            engine.resume_parked_stack(orphan, Vec::new()),
+            Err(crate::EngineError::ProgramInvariant(_))
+        ));
+
+        // A captured flat effect list cannot resume (and so flatten) a Program stack.
+        let program = ParkedStackResolution::for_program(item, None, outer, run(Some(vec![])));
+        assert!(matches!(
+            engine.resume_parked_stack_with_effects(program, Vec::new(), String::new(), Vec::new()),
+            Err(crate::EngineError::ProgramInvariant(_))
+        ));
+    }
+
+    #[test]
     fn parked_resolution_serialization_and_execution_transfer_contract() {
         use crate::state::{
             OperationResults, ParkedStackResolution, ProgramFrame, ProgramRunState, ProgramValue,
@@ -440,6 +528,7 @@ mod tests {
                 "resume_effect_index": index,
                 "previous_result": crate::diagnostic_json::to_value(&facts).unwrap(),
                 "program": crate::diagnostic_json::to_value(&program_state).unwrap(),
+                "completion": serde_json::Value::Null,
             });
             assert_eq!(crate::diagnostic_json::to_value(source).unwrap(), expected);
             assert_eq!(
@@ -449,6 +538,7 @@ mod tests {
                     "resume_effect_index": index,
                     "previous_result": serde_json::to_value(&facts).unwrap(),
                     "program": serde_json::to_value(program_state).unwrap(),
+                    "completion": serde_json::Value::Null,
                 })
             );
 

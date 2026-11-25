@@ -777,16 +777,12 @@ impl GameEngine {
                     completion,
                     ..
                 } => Some((
-                    stack.item.clone(),
-                    stack.resume_effect_index(),
-                    stack.previous_result().clone(),
+                    stack.clone(),
                     *return_source_to_owner_hand_if_cast,
                     completion.clone(),
                 )),
                 ResolutionContinuation::LegendarySpellCast { stack, .. } => Some((
-                    stack.item.clone(),
-                    stack.resume_effect_index(),
-                    stack.previous_result().clone(),
+                    stack.clone(),
                     false,
                     crate::state::SpecialCastCompletion::ResumeStack,
                 )),
@@ -799,9 +795,8 @@ impl GameEngine {
         self.state.undoable_mana_abilities.clear();
         self.state.pending_spell_cast = None;
         self.pending_spell_cast_internal = None;
-        if let Some((item, resume_effect_index, previous_result, return_source, completion)) =
-            special_continuation
-        {
+        if let Some((parked, return_source, completion)) = special_continuation {
+            let item = parked.item.clone();
             self.state.pending_resolution = None;
             let linked_cohort = self
                 .state
@@ -816,22 +811,16 @@ impl GameEngine {
             } else if return_source {
                 self.return_linked_cast_source_to_owner_hand(&item, &mut batch.events)?;
             }
-            let parked = ParkedStackResolution::for_flat_effects(
-                item.clone(),
-                resume_effect_index,
-                previous_result.clone(),
-            );
-            let commander_choice =
-                self.finish_special_cast_completion(&completion, true, parked, &mut batch.events)?;
+            let commander_choice = self.finish_special_cast_completion(
+                &completion,
+                true,
+                parked.clone(),
+                &mut batch.events,
+            )?;
             batch = if commander_choice {
                 finish_with_events(self, batch.events)
             } else {
-                self.complete_parked_resolution_with_previous(
-                    item,
-                    resume_effect_index,
-                    previous_result,
-                    batch.events,
-                )?
+                self.resume_parked_stack(parked, batch.events)?
             };
         }
         Ok(batch)
@@ -4759,16 +4748,7 @@ impl GameEngine {
             self.state.passes_since_stack_change = 0;
             let resume_stack = special_resume_stack;
             return if let Some(stack) = resume_stack {
-                {
-                    let (parked_item, parked_resume_effect_index, parked_previous_result, _) =
-                        stack.into_parts();
-                    self.complete_parked_resolution_with_previous(
-                        parked_item,
-                        parked_resume_effect_index,
-                        parked_previous_result,
-                        batch.events,
-                    )
-                }
+                self.resume_parked_stack(stack, batch.events)
             } else {
                 Ok(finish_with_events(self, batch.events))
             };

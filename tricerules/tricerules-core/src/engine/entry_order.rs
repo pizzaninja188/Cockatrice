@@ -302,7 +302,7 @@ impl GameEngine {
                 previous_result.set(crate::state::ProgramValue::CreatedTokenBatch(
                     self.token_entry_object_refs(&created_ids),
                 ));
-                self.complete_parked_stack_with_previous(stack, previous_result, events)
+                self.resume_parked_stack_with_completion(stack, previous_result, events)
             }
             SimultaneousEntryBatch::Observer(batch) => {
                 self.commit_observer_return_batch(batch.ready, &mut events)?;
@@ -314,11 +314,7 @@ impl GameEngine {
                     return Ok(events::finish_with_events(self, events));
                 }
                 if let Some(stack) = batch.resume_stack {
-                    self.complete_parked_stack_with_previous(
-                        stack.clone(),
-                        stack.previous_result().clone(),
-                        events,
-                    )
+                    self.resume_parked_stack(stack.clone(), events)
                 } else {
                     self.apply_sbas(&mut events)?;
                     if let Some(index) = self.state.player_idx(self.state.active_player_id()) {

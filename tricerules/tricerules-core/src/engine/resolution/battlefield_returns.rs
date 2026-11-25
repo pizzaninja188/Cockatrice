@@ -730,7 +730,7 @@ impl GameEngine {
             }
             Ok(CohortMoveProgress::Committed(stack)) => {
                 let result = completion_result(&stack);
-                self.complete_parked_stack_with_previous(*stack, result, events)
+                self.resume_parked_stack_with_completion(*stack, result, events)
             }
             Err(error) => {
                 self.state.pending_resolution = Some(backup);
@@ -845,7 +845,7 @@ impl GameEngine {
             }
             Ok(CohortMoveProgress::Committed(stack)) => {
                 let result = completion_result(&stack);
-                self.complete_parked_stack_with_previous(*stack, result, events)
+                self.resume_parked_stack_with_completion(*stack, result, events)
             }
             Err(error) => {
                 self.state.pending_resolution = Some(backup);
@@ -961,7 +961,7 @@ impl GameEngine {
             CohortMoveProgress::Committed(stack) => {
                 let result = completion_result(&stack);
                 let completed =
-                    self.complete_parked_stack_with_previous(*stack, result, refresh_events)?;
+                    self.resume_parked_stack_with_completion(*stack, result, refresh_events)?;
                 events.extend(completed.events);
             }
         }

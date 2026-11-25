@@ -257,7 +257,7 @@ impl GameEngine {
         previous_result.set(crate::state::ProgramValue::CreatedTokenBatch(
             produced_objects,
         ));
-        self.complete_parked_stack_with_previous(stack, previous_result, events)
+        self.resume_parked_stack_with_completion(stack, previous_result, events)
     }
 }
 
@@ -442,7 +442,7 @@ impl GameEngine {
         };
         let mut previous_result = stack.previous_result().clone();
         previous_result.set(crate::state::ProgramValue::CreatedTokenBatch(created));
-        self.complete_parked_stack_with_previous(stack, previous_result, events)
+        self.resume_parked_stack_with_completion(stack, previous_result, events)
     }
 }
 

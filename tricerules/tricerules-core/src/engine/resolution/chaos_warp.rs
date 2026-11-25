@@ -218,16 +218,7 @@ impl GameEngine {
         if self.drain_immediate_observer_actions(Some(stack.clone()), &mut events)? {
             return Ok(super::super::events::finish_with_events(self, events));
         }
-        {
-            let (parked_item, parked_resume_effect_index, parked_previous_result, _) =
-                stack.into_parts();
-            self.complete_parked_resolution_with_previous(
-                parked_item,
-                parked_resume_effect_index,
-                parked_previous_result,
-                events,
-            )
-        }
+        self.resume_parked_stack(stack, events)
     }
 
     pub(in crate::engine) fn refresh_chaos_warp_departure(
@@ -286,16 +277,7 @@ impl GameEngine {
         if self.drain_immediate_observer_actions(Some(stack.clone()), events)? {
             return Ok(());
         }
-        let batch = {
-            let (parked_item, parked_resume_effect_index, parked_previous_result, _) =
-                stack.into_parts();
-            self.complete_parked_resolution_with_previous(
-                parked_item,
-                parked_resume_effect_index,
-                parked_previous_result,
-                vec![],
-            )
-        }?;
+        let batch = { self.resume_parked_stack(stack, vec![]) }?;
         events.extend(batch.events);
         Ok(())
     }

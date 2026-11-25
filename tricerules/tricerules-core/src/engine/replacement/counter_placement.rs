@@ -3662,11 +3662,7 @@ impl GameEngine {
         {
             self.state.pending_resolution = None;
             self.state.pending_replacement_event = None;
-            let completed = self.complete_parked_stack_with_previous(
-                stack.clone(),
-                stack.previous_result().clone(),
-                Vec::new(),
-            )?;
+            let completed = self.resume_parked_stack(stack.clone(), Vec::new())?;
             out.extend(completed.events);
             return Ok(());
         }
@@ -3859,7 +3855,7 @@ impl GameEngine {
             previous_result.record_counter_placements(receipts);
         }
         let completion_events =
-            self.complete_parked_stack_with_previous(stack, previous_result, Vec::new())?;
+            self.resume_parked_stack_with_completion(stack, previous_result, Vec::new())?;
         out.extend(completion_events.events);
         Ok(())
     }
@@ -3933,12 +3929,7 @@ impl GameEngine {
                     *kind,
                 );
             if !current {
-                return self.complete_parked_resolution_with_previous(
-                    parked.item.clone(),
-                    parked.resume_effect_index(),
-                    parked.previous_result().clone(),
-                    Vec::new(),
-                );
+                return self.resume_parked_stack(parked.clone(), Vec::new());
             }
         }
         let Some(application) = batch
@@ -4218,17 +4209,9 @@ impl GameEngine {
             self.fire_triggers(&[GameEvent::Blighted(receipt)], &mut events);
             let previous_result = stack.previous_result().clone();
             return if stack.program().is_some() {
-                self.complete_parked_stack_with_previous(stack, previous_result, events)
+                self.resume_parked_stack(stack, events)
             } else {
-                {
-                    let (parked_item, parked_resume_effect_index, _, _) = stack.into_parts();
-                    self.complete_parked_resolution_with_previous(
-                        parked_item,
-                        parked_resume_effect_index,
-                        previous_result,
-                        events,
-                    )
-                }
+                self.resume_parked_stack_with_completion(stack, previous_result, events)
             };
         }
         if let crate::state::CounterPlacementCompletion::Explore {
@@ -4255,15 +4238,7 @@ impl GameEngine {
                 "P{controller} explores with an empty library ({spell_label})."
             )));
             self.fire_triggers(&[GameEvent::Explored { object: *explorer }], &mut events);
-            return {
-                let (parked_item, parked_resume_effect_index, _, _) = stack.into_parts();
-                self.complete_parked_resolution_with_previous(
-                    parked_item,
-                    parked_resume_effect_index,
-                    previous_result,
-                    events,
-                )
-            };
+            return self.resume_parked_stack_with_completion(stack, previous_result, events);
         }
         let mut previous_result = stack.previous_result().clone();
         previous_result.record_counter_placements(receipts);
@@ -4282,6 +4257,6 @@ impl GameEngine {
                 },
             ]))?;
         }
-        self.complete_parked_stack_with_previous(stack, previous_result, events)
+        self.resume_parked_stack_with_completion(stack, previous_result, events)
     }
 }

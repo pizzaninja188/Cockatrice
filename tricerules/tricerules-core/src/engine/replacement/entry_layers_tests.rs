@@ -1607,15 +1607,7 @@ fn printed_aura_without_recipient_stays_in_library_and_resumes_tail_once() {
         assert!(!events.iter().any(|event| matches!(&event.ev,
             Some(rv1::ruled_event::Ev::PermanentMoved(moved)) if moved.object_id == aura)));
         assert!(engine.state.pending_resolution.is_none());
-        let (item, resume_effect_index, previous_result, _) = resumed.into_parts();
-        engine
-            .complete_parked_resolution_with_previous(
-                item,
-                resume_effect_index,
-                previous_result,
-                events,
-            )
-            .unwrap();
+        engine.resume_parked_stack(resumed, events).unwrap();
         assert_eq!(engine.state.players[0].hand.len(), hand_before_tail + 2);
         assert_eq!(
             engine.state.objects[&aura].zone,
@@ -6001,7 +5993,7 @@ fn compleated_grouped_entry_rejects_wrong_actor_stale_epoch_and_old_or_foreign_h
                     },
                 ]))
                 .expect("typed retention sentinel");
-            stack.replace_completed_results(results);
+            stack = stack.with_previous_result(results);
             assert_eq!(stack.previous_result().object_refs().len(), 1);
             (engine, stack)
         } else {

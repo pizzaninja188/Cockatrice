@@ -94,7 +94,7 @@ impl GameEngine {
                     }
                 })
                 .collect();
-            return self.complete_parked_stack_with_previous(
+            return self.resume_parked_stack_with_completion(
                 stack,
                 crate::state::OperationResults::from_value(
                     crate::state::ProgramValue::HandSelection(selected_hand_cards),
@@ -136,7 +136,7 @@ impl GameEngine {
         let mut events = vec![];
         if hand_entry {
             if chosen.is_empty() {
-                return self.complete_parked_stack_with_previous(
+                return self.resume_parked_stack_with_completion(
                     stack,
                     OperationResults::default(),
                     events,
@@ -165,16 +165,7 @@ impl GameEngine {
             else {
                 return Ok(finish_with_events(self, events));
             };
-            return {
-                let (parked_item, parked_resume_effect_index, parked_previous_result, _) =
-                    stack.into_parts();
-                self.complete_parked_resolution_with_previous(
-                    parked_item,
-                    parked_resume_effect_index,
-                    parked_previous_result,
-                    events,
-                )
-            };
+            return self.resume_parked_stack(stack, events);
         }
         let mut result = CardResultCohort::default();
         let mut discard_receipts = Vec::new();
@@ -196,7 +187,7 @@ impl GameEngine {
                 &mut events,
             );
         }
-        self.complete_parked_stack_with_previous(stack, result.into(), events)
+        self.resume_parked_stack_with_completion(stack, result.into(), events)
     }
 
     pub(super) fn finish_player_set_discard_choice(
@@ -339,7 +330,7 @@ impl GameEngine {
         else {
             return Ok(finish_with_events(self, events));
         };
-        self.complete_parked_stack_with_previous(stack, result.into(), events)
+        self.resume_parked_stack_with_completion(stack, result.into(), events)
     }
 
     fn player_set_discard_selections_are_current(&self, discard: &PendingPlayerSetDiscard) -> bool {
@@ -475,7 +466,7 @@ impl GameEngine {
                 return Ok(true);
             };
             let completed =
-                self.complete_parked_stack_with_previous(stack, result.into(), Vec::new())?;
+                self.resume_parked_stack_with_completion(stack, result.into(), Vec::new())?;
             events.extend(completed.events);
         }
         Ok(true)

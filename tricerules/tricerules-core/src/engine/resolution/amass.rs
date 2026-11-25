@@ -271,7 +271,7 @@ impl GameEngine {
         else {
             return Ok(finish_with_events(self, events));
         };
-        self.complete_parked_stack_with_previous(stack, result, events)
+        self.resume_parked_stack_with_completion(stack, result, events)
     }
 
     pub(in crate::engine) fn finish_amass_after_token_entry(
@@ -284,7 +284,7 @@ impl GameEngine {
         let candidates = self.amass_candidates(controller);
         match candidates.as_slice() {
             [] => {
-                self.complete_parked_stack_with_previous(stack, OperationResults::default(), events)
+                self.resume_parked_stack_with_completion(stack, OperationResults::default(), events)
             }
             [chosen] => {
                 let Some(result) = self.apply_amass(
@@ -298,7 +298,7 @@ impl GameEngine {
                 else {
                     return Ok(finish_with_events(self, events));
                 };
-                self.complete_parked_stack_with_previous(stack, result, events)
+                self.resume_parked_stack_with_completion(stack, result, events)
             }
             _ => {
                 let label = object_display_name(&self.state, self.registry, stack.item.id);

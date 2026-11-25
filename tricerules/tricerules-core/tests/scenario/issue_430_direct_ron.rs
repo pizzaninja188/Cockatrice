@@ -651,3 +651,142 @@ fn issue_430_tragedy_feaster_ward_discard_pays_or_counters() {
     assert_eq!(decline.state.objects[&spell_id].zone, Zone::Graveyard);
     assert!(on_battlefield(&decline, feaster));
 }
+
+/// A Program end-step trigger whose `no` branch sacrifices `players`/`count`, then consumes the
+/// bound receipt (+5 for at least two sacrificed cards), gains 2 in-branch, and gains 1 after the
+/// If. Issue #533: several cards entering one graveyard park the CR 404.3 order prompt.
+fn program_mass_sacrifice_registry(
+    players: &str,
+    count: u32,
+) -> &'static tricerules_cards::CardRegistry {
+    let fixture = format!(
+        r#"(id: "program_mass_sacrifice_fixture", name: "Program Mass Sacrifice Fixture",
+        face_id: "program_mass_sacrifice_fixture", types: ["Creature"], power: 1, toughness: 1,
+        triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback,
+            trigger: AtBeginningOfEndStep(),
+            program: Some((body: (steps: [
+                (id: "unless", kind: If(
+                    condition: LifeChangedThisTurn(players: Relative(Controller), change: Gain, quantifier: Any),
+                    yes: (steps: []),
+                    no: (steps: [
+                        (id: "sacrifice", bind: ["sacrificed"], input: None,
+                            kind: Perform(ChooseAndSacrifice(players: {players}, count: {count}, filter: (kind: AnyPermanent)))),
+                        (id: "receipt", kind: IfResult(
+                            condition: CardResultCount(result: "sacrificed", card_type: None, min: Some(2)),
+                            yes: (steps: [(id: "receipt_gain", kind: Perform(GainLife(amount: 5)))]),
+                            no: (),
+                        )),
+                        (id: "after_in_branch", kind: Perform(GainLife(amount: 2))),
+                    ]),
+                )),
+                (id: "after_if", kind: Perform(GainLife(amount: 1))),
+            ]))),
+        )])"#
+    );
+    let fixture: &'static str = Box::leak(fixture.into_boxed_str());
+    Box::leak(Box::new(
+        tricerules_cards::CardRegistry::from_chunks_and_tokens(
+            &[
+                fixture,
+                include_str!("../../../tricerules-cards/data/island.ron"),
+                include_str!("../../../tricerules-cards/data/swamp.ron"),
+                include_str!("../../../tricerules-cards/data/grizzly_bears.ron"),
+            ],
+            &[],
+        )
+        .expect("the Program mass-sacrifice fixture is valid card data"),
+    ))
+}
+
+fn graveyard_order_owner(e: &GameEngine) -> i32 {
+    let pending = e
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("simultaneous graveyard arrivals park the CR 404.3 order prompt");
+    assert!(pending.presentation.ordered, "the order prompt is ordered");
+    pending.deciding_player
+}
+
+#[test]
+fn issue_533_program_sacrifice_resumes_after_the_graveyard_order_prompt() {
+    let registry = program_mass_sacrifice_registry("Controller", 2);
+    let decks = Some(vec![deck_with("island", &[]), deck_with("swamp", &[])]);
+    let mut e = GameEngine::new(registry, 533_001, &[0, 1], 20, decks, true).expect("engine");
+    advance_to_main1_from_game_start(&mut e);
+    let source = inject_creature_on_battlefield(&mut e, 0, "program_mass_sacrifice_fixture");
+    let bear = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+
+    feaster_advance_to_end_step(&mut e, 0);
+    feaster_resolve_until_parked(&mut e);
+    // Exactly two candidates for two sacrifices: no choice, but both reach P0's graveyard.
+    assert_eq!(graveyard_order_owner(&e), 0);
+    assert_eq!(e.state.objects[&source].zone, Zone::Graveyard);
+    assert_eq!(e.state.objects[&bear].zone, Zone::Graveyard);
+    assert_eq!(
+        e.state.players[0].life, 20,
+        "nothing after the sacrifice ran yet"
+    );
+
+    semantic::accepted(&mut e, 0, &submit_resolution_choice(vec![bear, source]));
+    feaster_resolve_until_parked(&mut e);
+    assert!(e.state.pending_resolution.is_none());
+    assert!(e.state.stack.is_empty());
+    let graveyard = &e.state.players[0].graveyard;
+    let bear_position = graveyard.iter().position(|oid| *oid == bear).unwrap();
+    let source_position = graveyard.iter().position(|oid| *oid == source).unwrap();
+    assert!(
+        bear_position < source_position,
+        "CR 404.3: the submitted order is kept, last on top"
+    );
+    assert_eq!(
+        e.state.players[0].life, 28,
+        "the bound two-card receipt (+5), the in-branch (+2) and post-If (+1) instructions ran"
+    );
+}
+
+#[test]
+fn issue_533_order_prompt_departure_refresh_resumes_the_program() {
+    let registry = program_mass_sacrifice_registry("EachPlayer", 2);
+    let decks = Some(vec![
+        deck_with("island", &[]),
+        deck_with("swamp", &[]),
+        deck_with("island", &[]),
+    ]);
+    let mut e = GameEngine::new(registry, 533_002, &[0, 1, 2], 20, decks, true).expect("engine");
+    advance_to_main1_from_game_start(&mut e);
+    let source = inject_creature_on_battlefield(&mut e, 0, "program_mass_sacrifice_fixture");
+    let own_bear = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    let p1_bears = [
+        inject_creature_on_battlefield(&mut e, 1, "grizzly_bears"),
+        inject_creature_on_battlefield(&mut e, 1, "grizzly_bears"),
+    ];
+
+    feaster_advance_to_end_step(&mut e, 0);
+    feaster_resolve_until_parked(&mut e);
+    assert_eq!(
+        graveyard_order_owner(&e),
+        0,
+        "APNAP: the active player orders first"
+    );
+    semantic::accepted(&mut e, 0, &submit_resolution_choice(vec![own_bear, source]));
+    assert_eq!(
+        graveyard_order_owner(&e),
+        1,
+        "then P1 orders their own arrivals"
+    );
+    for bear in p1_bears {
+        assert_eq!(e.state.objects[&bear].zone, Zone::Graveyard);
+    }
+    assert_eq!(e.state.players[0].life, 20);
+
+    // P1 leaves while deciding; the departure refresh completes the order continuation.
+    semantic::accepted(&mut e, 1, &concede());
+    feaster_resolve_until_parked(&mut e);
+    assert!(e.state.pending_resolution.is_none());
+    assert!(e.state.stack.is_empty());
+    assert_eq!(
+        e.state.players[0].life, 28,
+        "the parked Program resumed with its four-card receipt after the departure refresh"
+    );
+}

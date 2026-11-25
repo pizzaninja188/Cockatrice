@@ -64,28 +64,10 @@ impl GameEngine {
                 [(kind, 1)],
                 super::continuous::CounterPlacementOrigin::Effect,
             ) else {
-                return {
-                    let (parked_item, parked_resume_effect_index, parked_previous_result, _) =
-                        stack.into_parts();
-                    self.complete_parked_resolution_with_previous(
-                        parked_item,
-                        parked_resume_effect_index,
-                        parked_previous_result,
-                        events,
-                    )
-                };
+                return self.resume_parked_stack(stack, events);
             };
             let Some(source_zone_change_generation) = source_target.zone_change_generation else {
-                return {
-                    let (parked_item, parked_resume_effect_index, parked_previous_result, _) =
-                        stack.into_parts();
-                    self.complete_parked_resolution_with_previous(
-                        parked_item,
-                        parked_resume_effect_index,
-                        parked_previous_result,
-                        events,
-                    )
-                };
+                return self.resume_parked_stack(stack, events);
             };
             proposal.counter_move_context =
                 Some(super::super::replacement::CounterMoveReplacementContext {
@@ -114,30 +96,17 @@ impl GameEngine {
                 Ok(Some(receipts)) => {
                     let mut previous_result = stack.previous_result().clone();
                     previous_result.record_counter_placements(receipts);
-                    return {
-                        let (parked_item, parked_resume_effect_index, _, _) = stack.into_parts();
-                        self.complete_parked_resolution_with_previous(
-                            parked_item,
-                            parked_resume_effect_index,
-                            previous_result,
-                            events,
-                        )
-                    };
+                    return self.resume_parked_stack_with_completion(
+                        stack,
+                        previous_result,
+                        events,
+                    );
                 }
                 Ok(None) => return Ok(finish_with_events(self, events)),
                 Err(error) => return Err(error),
             }
         }
 
-        {
-            let (parked_item, parked_resume_effect_index, parked_previous_result, _) =
-                stack.into_parts();
-            self.complete_parked_resolution_with_previous(
-                parked_item,
-                parked_resume_effect_index,
-                parked_previous_result,
-                events,
-            )
-        }
+        self.resume_parked_stack(stack, events)
     }
 }

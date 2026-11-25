@@ -71,15 +71,6 @@ impl GameEngine {
             )));
         }
         self.fire_triggers(&[GameEvent::Explored { object: explorer }], &mut events);
-        {
-            let (parked_item, parked_resume_effect_index, parked_previous_result, _) =
-                stack.into_parts();
-            self.complete_parked_resolution_with_previous(
-                parked_item,
-                parked_resume_effect_index,
-                parked_previous_result,
-                events,
-            )
-        }
+        self.resume_parked_stack(stack, events)
     }
 }

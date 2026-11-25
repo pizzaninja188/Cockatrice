@@ -234,18 +234,9 @@ impl GameEngine {
                 tricerules_card_model::primitives::CountResultKind::JoinForcesManaPaid,
                 total_paid,
             );
-            self.complete_parked_stack_with_previous(stack, operation_result, events)
+            self.resume_parked_stack_with_completion(stack, operation_result, events)
         } else {
-            {
-                let (parked_item, parked_resume_effect_index, previous_result, _) =
-                    stack.into_parts();
-                self.complete_parked_resolution_with_previous(
-                    parked_item,
-                    parked_resume_effect_index,
-                    previous_result,
-                    events,
-                )
-            }
+            self.resume_parked_stack(stack, events)
         }
     }
 }

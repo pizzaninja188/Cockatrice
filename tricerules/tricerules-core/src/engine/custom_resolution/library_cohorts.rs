@@ -169,11 +169,7 @@ impl GameEngine {
                 )? {
                     super::super::resolution::library_cohorts::ProgramPartitionMoveProgress::Parked => {}
                     super::super::resolution::library_cohorts::ProgramPartitionMoveProgress::Committed => {
-                        return self.complete_parked_stack_with_previous(
-                            stack,
-                            OperationResults::default(),
-                            events,
-                        );
+                        return self.resume_parked_stack_with_completion(stack, OperationResults::default(), events);
                     }
                 }
             }
@@ -251,7 +247,7 @@ impl GameEngine {
             pending.deciding_player,
             selected.len()
         ))];
-        self.complete_parked_stack_with_previous(
+        self.resume_parked_stack_with_completion(
             stack,
             crate::state::OperationResults::from_value(ProgramValue::CardPartition(
                 ProgramCardPartition {
@@ -269,7 +265,7 @@ impl GameEngine {
         stack: ParkedStackResolution,
         events: Vec<rv1::RuledEvent>,
     ) -> Result<RuledEventBatch, EngineError> {
-        self.complete_parked_stack_with_previous(
+        self.resume_parked_stack_with_completion(
             stack,
             crate::state::OperationResults::from_value(ProgramValue::CardPartition(
                 ProgramCardPartition {
@@ -327,7 +323,7 @@ impl GameEngine {
                 Ok(finish_with_events(self, events))
             }
             super::super::resolution::library_cohorts::ProgramPartitionMoveProgress::Committed => {
-                self.complete_parked_stack_with_previous(stack, OperationResults::default(), events)
+                self.resume_parked_stack_with_completion(stack, OperationResults::default(), events)
             }
         }
     }
@@ -356,7 +352,7 @@ impl GameEngine {
                     self.complete_empty_program_partition(stack, Vec::new())?
                 }
                 ResolutionContinuation::ProgramPartitionMove { .. } => self
-                    .complete_parked_stack_with_previous(
+                    .resume_parked_stack_with_completion(
                         stack,
                         OperationResults::default(),
                         Vec::new(),
@@ -436,11 +432,7 @@ impl GameEngine {
                         }],
                         &mut completed_events,
                     );
-                    let completed = self.complete_parked_stack_with_previous(
-                        stack.clone(),
-                        stack.previous_result().clone(),
-                        completed_events,
-                    )?;
+                    let completed = self.resume_parked_stack(stack.clone(), completed_events)?;
                     events.extend(completed.events);
                     return Ok(());
                 }
@@ -644,7 +636,7 @@ impl GameEngine {
                 }
                 *plan = refreshed;
                 if plan.partition.selected.is_empty() && plan.partition.remainder.is_empty() {
-                    let completed = self.complete_parked_stack_with_previous(
+                    let completed = self.resume_parked_stack_with_completion(
                         stack,
                         OperationResults::default(),
                         Vec::new(),
@@ -664,11 +656,7 @@ impl GameEngine {
                 )? {
                     super::super::resolution::library_cohorts::ProgramPartitionMoveProgress::Parked => {}
                     super::super::resolution::library_cohorts::ProgramPartitionMoveProgress::Committed => {
-                        let completed = self.complete_parked_stack_with_previous(
-                            stack,
-                            OperationResults::default(),
-                            std::mem::take(events),
-                        )?;
+                        let completed = self.resume_parked_stack_with_completion(stack, OperationResults::default(), std::mem::take(events))?;
                         events.extend(completed.events);
                         return Ok(());
                     }
@@ -700,7 +688,7 @@ impl GameEngine {
         } else {
             crate::state::OperationResults::from_value(ProgramValue::FoundLibraryCohort(Vec::new()))
         };
-        self.complete_parked_stack_with_previous(stack, completion_result, events)
+        self.resume_parked_stack_with_completion(stack, completion_result, events)
     }
 }
 

@@ -70,7 +70,7 @@ impl GameEngine {
             _ => unreachable!("the exact target-hand-discard continuation was checked above"),
         };
         self.state.pending_replacement_event = None;
-        let completed = self.complete_parked_stack_with_previous(
+        let completed = self.resume_parked_stack_with_completion(
             stack,
             OperationResults::default(),
             Vec::new(),
@@ -659,13 +659,13 @@ impl GameEngine {
                 .map(|definition| definition.name.clone())
                 .unwrap_or_else(|| stack.item.card_id.clone());
             self.settle_opponent_discard_round(&round, &label, &mut events)?;
-            return self.complete_parked_stack_with_previous(
+            return self.resume_parked_stack_with_completion(
                 stack,
                 OperationResults::default(),
                 events,
             );
         }
-        self.complete_parked_stack_with_previous(stack, result.into(), events)
+        self.resume_parked_stack_with_completion(stack, result.into(), events)
     }
 
     /// Continue only the still-uncommitted discard batch that was suspended by an observer

@@ -244,8 +244,7 @@ impl GameEngine {
                 reference.library_position,
             ));
         }
-        let previous = stack.previous_result().clone();
-        self.complete_parked_stack_with_previous(stack, previous, events)
+        self.resume_parked_stack(stack, events)
     }
 
     fn hand_graveyard_choice_event(&self, pending: &PendingResolution) -> rv1::RuledEvent {
@@ -304,9 +303,8 @@ impl GameEngine {
             return Ok(true);
         }
         let stack = stack.clone();
-        let previous = stack.previous_result().clone();
         self.state.pending_resolution = None;
-        let completed = self.complete_parked_stack_with_previous(stack, previous, Vec::new())?;
+        let completed = self.resume_parked_stack(stack, Vec::new())?;
         events.extend(completed.events);
         Ok(true)
     }

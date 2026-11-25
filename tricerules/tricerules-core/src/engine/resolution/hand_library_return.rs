@@ -417,7 +417,7 @@ impl GameEngine {
             self.state.pending_resolution = Some(pending);
             return Err(error);
         }
-        self.complete_parked_stack_with_previous(stack, OperationResults::default(), events)
+        self.resume_parked_stack_with_completion(stack, OperationResults::default(), events)
     }
 
     pub(in crate::engine) fn refresh_program_hand_library_return_departure(

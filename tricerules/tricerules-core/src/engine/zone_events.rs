@@ -185,19 +185,10 @@ impl GameEngine {
             program_operation_result,
         } = completion;
         if let Some(operation_result) = program_operation_result {
-            return self.complete_parked_stack_with_previous(stack, operation_result, events);
+            return self.resume_parked_stack_with_completion(stack, operation_result, events);
         }
 
-        {
-            let (parked_item, parked_resume_effect_index, parked_previous_result, _) =
-                stack.into_parts();
-            self.complete_parked_resolution_with_previous(
-                parked_item,
-                parked_resume_effect_index,
-                parked_previous_result,
-                events,
-            )
-        }
+        self.resume_parked_stack(stack, events)
     }
 
     pub(super) fn begin_zone_entry_batch(

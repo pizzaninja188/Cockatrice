@@ -94,11 +94,7 @@ impl GameEngine {
             return Ok(());
         }
         if let Some(stack) = stack {
-            let completed = self.complete_parked_stack_with_previous(
-                stack.clone(),
-                stack.previous_result().clone(),
-                Vec::new(),
-            )?;
+            let completed = self.resume_parked_stack(stack.clone(), Vec::new())?;
             events.extend(completed.events);
         }
         Ok(())

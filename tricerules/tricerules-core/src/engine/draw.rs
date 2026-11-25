@@ -2352,7 +2352,7 @@ impl GameEngine {
             DrawCompletion::ResumeEffects(resume) => {
                 let ResumeEffects { stack, mut result } = *resume;
                 result.append(crate::state::ProgramValue::DrawReceipt(completed.receipts))?;
-                self.complete_parked_stack_with_previous(stack, result, events)
+                self.resume_parked_stack_with_completion(stack, result, events)
             }
             DrawCompletion::FinishDrawStep {
                 active_player,

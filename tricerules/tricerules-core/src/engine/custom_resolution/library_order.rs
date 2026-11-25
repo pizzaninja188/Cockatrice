@@ -266,7 +266,7 @@ impl GameEngine {
         if kind == PendingLibraryPartitionKind::Surveil {
             self.fire_triggers(&[GameEvent::Surveilled { player: controller }], &mut ev);
         }
-        self.complete_parked_stack_with_previous(stack, OperationResults::default(), ev)
+        self.resume_parked_stack_with_completion(stack, OperationResults::default(), ev)
     }
 
     /// Finish either step of a bounded library look. Step 0 moves the selected cohort to hand;
@@ -364,10 +364,9 @@ impl GameEngine {
             if devotion_x as usize >= self.state.players[idx].library.len() {
                 self.state.outcome = Some(crate::state::GameOutcome::Winner(controller));
             }
-            return {
-                let (parked_item, parked_resume_effect_index, _, _) = stack.into_parts();
-                self.complete_parked_resolution(parked_item, parked_resume_effect_index, ev)
-            };
+            let mut stack = stack;
+            stack.record_operation_completion(OperationResults::default());
+            return self.resume_parked_stack(stack, ev);
         }
 
         if let PendingLibraryLookStage::Hideaway {
@@ -477,10 +476,9 @@ impl GameEngine {
                 owner,
                 rv1::permanent_moved::Destination::Exile,
             ));
-            return {
-                let (parked_item, parked_resume_effect_index, _, _) = stack.into_parts();
-                self.complete_parked_resolution(parked_item, parked_resume_effect_index, ev)
-            };
+            let mut stack = stack;
+            stack.record_operation_completion(OperationResults::default());
+            return self.resume_parked_stack(stack, ev);
         }
 
         if let PendingLibraryLookStage::ChooseBattlefield {
@@ -550,16 +548,7 @@ impl GameEngine {
             else {
                 return Ok(finish_with_events(self, ev));
             };
-            return {
-                let (parked_item, parked_resume_effect_index, parked_previous_result, _) =
-                    stack.into_parts();
-                self.complete_parked_resolution_with_previous(
-                    parked_item,
-                    parked_resume_effect_index,
-                    parked_previous_result,
-                    ev,
-                )
-            };
+            return self.resume_parked_stack(stack, ev);
         }
 
         if matches!(stage, PendingLibraryLookStage::OrderBottom) {
@@ -580,7 +569,7 @@ impl GameEngine {
                 ),
                 controller,
             ));
-            return self.complete_parked_stack_with_previous(
+            return self.resume_parked_stack_with_completion(
                 stack,
                 OperationResults::default(),
                 ev,
@@ -643,7 +632,7 @@ impl GameEngine {
             &remainder,
             crate::state::PendingHandLookRemainderDisposition::KeepPosition { .. }
         ) {
-            return self.complete_parked_stack_with_previous(
+            return self.resume_parked_stack_with_completion(
                 stack,
                 OperationResults::default(),
                 ev,
@@ -667,7 +656,7 @@ impl GameEngine {
                 remaining.len()
             )));
             // The player knows the looked-at cards, but not their new random library order.
-            return self.complete_parked_stack_with_previous(
+            return self.resume_parked_stack_with_completion(
                 stack,
                 OperationResults::default(),
                 ev,
@@ -681,7 +670,7 @@ impl GameEngine {
             for &oid in &remaining {
                 self.state.players[idx].library.push_back(oid);
             }
-            return self.complete_parked_stack_with_previous(
+            return self.resume_parked_stack_with_completion(
                 stack,
                 OperationResults::default(),
                 ev,

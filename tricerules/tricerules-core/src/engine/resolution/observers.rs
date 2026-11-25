@@ -675,7 +675,7 @@ impl GameEngine {
         }) {
             self.state.pending_resolution = None;
             self.state.pending_replacement_event = None;
-            let resumed = self.complete_parked_stack_with_previous(
+            let resumed = self.resume_parked_stack_with_completion(
                 stack,
                 OperationResults::default(),
                 Vec::new(),
@@ -733,7 +733,7 @@ impl GameEngine {
 
         self.state.pending_resolution = None;
         self.state.pending_replacement_event = None;
-        let resumed = self.complete_parked_stack_with_previous(
+        let resumed = self.resume_parked_stack_with_completion(
             retry,
             OperationResults::default(),
             Vec::new(),
@@ -915,20 +915,12 @@ impl GameEngine {
         let entered_effect = entered_effect.clone();
         effects[leaf_index as usize].effect = entered_effect;
 
-        let previous_result = stack.previous_result().clone();
         let mut retry = stack;
         retry.set_flat_tail(Some(leaf_index), retry.previous_result().clone());
         self.state.pending_resolution = None;
         self.state.pending_replacement_event = None;
-        let resume_effect_index = retry.resume_effect_index();
-        let resumed = self.complete_parked_resolution_with_effects_and_previous(
-            retry.item,
-            resume_effect_index,
-            effects,
-            spell_label,
-            previous_result,
-            Vec::new(),
-        )?;
+        let resumed =
+            self.resume_parked_stack_with_effects(retry, effects, spell_label, Vec::new())?;
         events.extend(resumed.events);
         Ok(true)
     }
@@ -1215,10 +1207,7 @@ impl GameEngine {
         let mut resumed = Vec::new();
         if !self.drain_immediate_observer_actions(stack.clone(), &mut resumed)? {
             if let Some(stack) = stack {
-                let previous_result = stack.previous_result().clone();
-                resumed = self
-                    .complete_parked_stack_with_previous(stack, previous_result, resumed)?
-                    .events;
+                resumed = self.resume_parked_stack(stack, resumed)?.events;
             }
         }
         events.extend(resumed);

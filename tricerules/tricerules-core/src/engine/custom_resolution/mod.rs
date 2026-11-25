@@ -736,13 +736,8 @@ impl GameEngine {
                     }
                     return Ok(false);
                 }
-                let (item, index, previous, _) = stack.into_parts();
-                let batch = self.complete_parked_resolution_with_previous(
-                    item,
-                    index,
-                    previous,
-                    Vec::new(),
-                )?;
+
+                let batch = self.resume_parked_stack(stack, Vec::new())?;
                 events.extend(batch.events);
                 Ok(true)
             }
@@ -783,16 +778,7 @@ impl GameEngine {
                 )? {
                     return Ok(true);
                 }
-                let completed = {
-                    let (parked_item, parked_resume_effect_index, parked_previous_result, _) =
-                        stack.into_parts();
-                    self.complete_parked_resolution_with_previous(
-                        parked_item,
-                        parked_resume_effect_index,
-                        parked_previous_result,
-                        Vec::new(),
-                    )
-                }?;
+                let completed = { self.resume_parked_stack(stack, Vec::new()) }?;
                 events.extend(completed.events);
                 Ok(true)
             }
@@ -832,16 +818,7 @@ impl GameEngine {
                     stack.clone(),
                     events,
                 )? {
-                    let completed = {
-                        let (parked_item, parked_resume_effect_index, parked_previous_result, _) =
-                            stack.into_parts();
-                        self.complete_parked_resolution_with_previous(
-                            parked_item,
-                            parked_resume_effect_index,
-                            parked_previous_result,
-                            Vec::new(),
-                        )
-                    }?;
+                    let completed = { self.resume_parked_stack(stack, Vec::new()) }?;
                     events.extend(completed.events);
                 }
                 Ok(true)
@@ -1904,7 +1881,7 @@ impl GameEngine {
             });
             return Err(EngineError::Illegal("stale Equipment receipt choice"));
         }
-        self.complete_parked_stack_with_previous(
+        self.resume_parked_stack_with_completion(
             attachment.stack,
             OperationResults::default(),
             events,
@@ -2108,13 +2085,11 @@ impl GameEngine {
             }
         };
         {
-            let (parked_item, _, parked_previous_result, _) = stack.into_parts();
-            self.complete_parked_resolution_with_previous(
-                parked_item,
-                resume_index,
-                parked_previous_result,
-                events,
-            )
+            let mut stack = stack;
+            {
+                stack.set_resume_effect_index(resume_index);
+                self.resume_parked_stack(stack, events)
+            }
         }
     }
 
@@ -2355,8 +2330,7 @@ impl GameEngine {
             return Ok(finish_with_events(self, events));
         }
         if let Some(stack) = stack {
-            let previous_result = stack.previous_result().clone();
-            return self.complete_parked_stack_with_previous(stack, previous_result, events);
+            return self.resume_parked_stack(stack, events);
         }
         self.apply_sbas(&mut events)?;
         if let Some(index) = self.state.player_idx(self.state.active_player_id()) {
@@ -2524,16 +2498,7 @@ impl GameEngine {
         if self.finish_special_cast_completion(&completion, false, stack.clone(), &mut events)? {
             return Ok(finish_with_events(self, events));
         }
-        {
-            let (parked_item, parked_resume_effect_index, parked_previous_result, _) =
-                stack.into_parts();
-            self.complete_parked_resolution_with_previous(
-                parked_item,
-                parked_resume_effect_index,
-                parked_previous_result,
-                events,
-            )
-        }
+        self.resume_parked_stack(stack, events)
     }
 
     /// The parent special-cast offer is suspended while its accepted child cast is being paid.
@@ -2624,16 +2589,7 @@ impl GameEngine {
         )? {
             return Ok(finish_with_events(self, events));
         }
-        {
-            let (parked_item, parked_resume_effect_index, parked_previous_result, _) =
-                stack.into_parts();
-            self.complete_parked_resolution_with_previous(
-                parked_item,
-                parked_resume_effect_index,
-                parked_previous_result,
-                events,
-            )
-        }
+        self.resume_parked_stack(stack, events)
     }
 
     /// Display names for `oids`, in order (registry lookup, never Oracle).
@@ -2643,28 +2599,17 @@ impl GameEngine {
             .collect()
     }
 
-    /// Close out a parked *primitive* resolution once its choice has been applied.
-    ///
-    /// CR 608.2: a spell resolves its whole effect list. When the parked effect was not the last
-    /// one, `resume_effect_index` says where to pick the list back up — `build_resolution_effects`
-    /// re-derives it from the stack item, so nothing had to be stored across the park. Running the
-    /// tail is also what emits the closing "resolves." log and seats the spell in the graveyard
-    /// (CR 608.2m), which is why the `finish_*` callers do not log that themselves.
-    ///
-    /// Priority returns to the active player only if the tail did not park again (a second
-    /// suspending effect in the same list, e.g. a hypothetical `[Scry, ChooseHandCards]`).
-    pub(super) fn complete_parked_resolution(
+    /// CR 608.2: once a permanent spell has entered the battlefield, run its whole effect list
+    /// from the start. Running the tail is also what emits the closing "resolves." log, which is
+    /// why the entry completion does not log that itself.
+    pub(super) fn resume_permanent_spell_tail(
         &mut self,
-        item: StackItem,
-        resume_effect_index: Option<u32>,
+        mut stack: ParkedStackResolution,
         ev: Vec<rv1::RuledEvent>,
     ) -> Result<RuledEventBatch, EngineError> {
-        self.complete_parked_resolution_with_previous(
-            item,
-            resume_effect_index,
-            OperationResults::default(),
-            ev,
-        )
+        stack.set_resume_effect_index(Some(0));
+        stack.record_operation_completion(OperationResults::default());
+        self.resume_parked_stack(stack, ev)
     }
 
     fn finish_permanent_choice(
@@ -2739,7 +2684,7 @@ impl GameEngine {
             pending.deciding_player,
             names.join(", ")
         ))];
-        self.complete_parked_stack_with_previous(
+        self.resume_parked_stack_with_completion(
             stack,
             crate::state::OperationResults::from_value(
                 crate::state::ProgramValue::PermanentSelection(produced_objects),
@@ -2893,7 +2838,7 @@ impl GameEngine {
         } else {
             format!("P{controller} chooses {} to phase out.", names.join(", "))
         })];
-        self.complete_parked_stack_with_previous(
+        self.resume_parked_stack_with_completion(
             stack,
             crate::state::OperationResults::from_value(
                 ProgramValue::ProliferatedPermanentSelection(selected),
@@ -3092,7 +3037,7 @@ impl GameEngine {
                 names.join(", ")
             ))]
         };
-        self.complete_parked_stack_with_previous(
+        self.resume_parked_stack_with_completion(
             stack,
             crate::state::OperationResults::from_value(
                 crate::state::ProgramValue::PermanentSelection(produced_objects),
@@ -3110,7 +3055,7 @@ impl GameEngine {
             ResolutionContinuation::TargetedPlayerPermanentChoice { stack, .. } => stack.clone(),
             _ => unreachable!("targeted-player permanent-choice continuation"),
         };
-        self.complete_parked_stack_with_previous(
+        self.resume_parked_stack_with_completion(
             stack,
             OperationResults::default(),
             vec![ev_log(message.to_string())],
@@ -3365,7 +3310,7 @@ impl GameEngine {
             attachment.equipment.object_id,
             attachment.equipment.zone_change_generation,
         ) else {
-            let completed = self.complete_parked_stack_with_previous(
+            let completed = self.resume_parked_stack_with_completion(
                 attachment.stack,
                 OperationResults::default(),
                 Vec::new(),
@@ -3380,7 +3325,7 @@ impl GameEngine {
             &attachment.created_tokens,
         );
         if candidates.is_empty() {
-            let completed = self.complete_parked_stack_with_previous(
+            let completed = self.resume_parked_stack_with_completion(
                 attachment.stack,
                 OperationResults::default(),
                 Vec::new(),
@@ -3397,7 +3342,7 @@ impl GameEngine {
                 &source_label,
                 &mut attach_events,
             );
-            let completed = self.complete_parked_stack_with_previous(
+            let completed = self.resume_parked_stack_with_completion(
                 attachment.stack,
                 OperationResults::default(),
                 attach_events,
@@ -3542,14 +3487,14 @@ impl GameEngine {
             )
         {
             self.state.pending_replacement_event = None;
-            let completed = self.complete_parked_stack_with_previous(
-                stack,
-                crate::state::OperationResults::from_value(ProgramValue::ProliferatedPermanentSelection(Vec::new())),
+            let completed = self.resume_parked_stack_with_completion(stack,
+                    crate::state::OperationResults::from_value(
+                        ProgramValue::ProliferatedPermanentSelection(Vec::new()),
+                    ),
                 vec![ev_log(
                     "The departed Proliferate controller has no permanents available for its choice."
                         .into(),
-                )],
-            )?;
+                )])?;
             events.extend(completed.events);
             return Ok(());
         }
@@ -3581,7 +3526,7 @@ impl GameEngine {
             .retry_program_instruction(next_instruction)
             .expect("active program frame checked");
         self.state.pending_resolution = None;
-        let completed = self.complete_parked_stack_with_previous(
+        let completed = self.resume_parked_stack_with_completion(
             retry,
             OperationResults::default(),
             Vec::new(),
@@ -3692,25 +3637,28 @@ impl GameEngine {
             self.execute_program_behold_untap(&stack, &mut events)?;
         }
 
-        let previous_result = stack.previous_result().clone();
-        self.complete_parked_stack_with_previous(stack, previous_result, events)
+        self.resume_parked_stack(stack, events)
     }
 
-    pub(super) fn complete_parked_resolution_with_previous(
+    /// Record the parked operation's receipt and resume; see `resume_parked_stack`.
+    pub(in crate::engine) fn resume_parked_stack_with_completion(
+        &mut self,
+        mut stack: ParkedStackResolution,
+        completion: OperationResults,
+        ev: Vec<rv1::RuledEvent>,
+    ) -> Result<RuledEventBatch, EngineError> {
+        stack.record_operation_completion(completion);
+        self.resume_parked_stack(stack, ev)
+    }
+
+    /// The flat half of `resume_parked_stack`, after its linked-play root check.
+    fn resume_flat_resolution(
         &mut self,
         item: StackItem,
         resume_effect_index: Option<u32>,
         previous_result: OperationResults,
         ev: Vec<rv1::RuledEvent>,
     ) -> Result<RuledEventBatch, EngineError> {
-        if self.is_pending_linked_exile_play_root(&item) {
-            return self.resume_pending_linked_exile_play_root(
-                item,
-                resume_effect_index,
-                previous_result,
-                ev,
-            );
-        }
         let (effects, spell_label) = if resume_effect_index.is_some() {
             self.build_resolution_effects(&item)
         } else {
@@ -3726,18 +3674,27 @@ impl GameEngine {
         )
     }
 
-    /// Resume a standard effect list from an already captured list. Observer restoration uses
-    /// this when it must replace the exact chooser that already began resolving, while preserving
-    /// that entry's target bindings and keeping the normal tail and cleanup path.
-    pub(super) fn complete_parked_resolution_with_effects_and_previous(
+    /// Resume a flat effect list from an already captured list. Observer restoration uses this
+    /// when it must replace the exact chooser that already began resolving, while preserving
+    /// that entry's target bindings and keeping the normal tail and cleanup path. A Program
+    /// stack has no captured effect list, so it is rejected rather than silently flattened.
+    pub(in crate::engine) fn resume_parked_stack_with_effects(
         &mut self,
-        item: StackItem,
-        resume_effect_index: Option<u32>,
+        stack: ParkedStackResolution,
         effects: Vec<ResolutionEffect>,
         spell_label: String,
-        previous_result: OperationResults,
         ev: Vec<rv1::RuledEvent>,
     ) -> Result<RuledEventBatch, EngineError> {
+        let crate::state::ParkedResume::Flat {
+            item,
+            resume_effect_index,
+            previous_result,
+        } = stack.into_resume()
+        else {
+            return Err(EngineError::ProgramInvariant(
+                "a captured flat effect list cannot resume a Program stack",
+            ));
+        };
         if self.is_pending_linked_exile_play_root(&item) {
             return self.resume_pending_linked_exile_play_root(
                 item,
@@ -3827,29 +3784,59 @@ impl GameEngine {
 
     /// Resume a standard effect list or a finite authored program using the exact parked cursor.
     /// Program continuations keep their immutable definition in the registry and carry only the
-    /// entered frame path, slot values, and operation awaiting its domain completion.
-    pub(super) fn complete_parked_stack_with_previous(
+    /// entered frame path, slot values, and operation awaiting its domain completion. The parked
+    /// operation's receipt is whatever the continuation recorded with
+    /// `ParkedStackResolution::record_operation_completion`.
+    pub(in crate::engine) fn resume_parked_stack(
         &mut self,
         stack: ParkedStackResolution,
-        previous_result: OperationResults,
         mut ev: Vec<rv1::RuledEvent>,
     ) -> Result<RuledEventBatch, EngineError> {
-        let (item, resume_effect_index, saved_previous_result, program) = stack.into_parts();
-        let Some(program) = program else {
-            return self.complete_parked_resolution_with_previous(
-                item,
+        // The root of an unfinished linked-exile play occurrence (for example an authored
+        // Program Play) first finishes or advances that occurrence, which owns its saved stack
+        // and resumes it once no linked card remains to offer.
+        if self.is_pending_linked_exile_play_root(&stack.item) {
+            let previous_result = stack
+                .recorded_completion()
+                .unwrap_or(stack.previous_result())
+                .clone();
+            let resume_effect_index = stack.resume_effect_index();
+            return self.resume_pending_linked_exile_play_root(
+                stack.item,
                 resume_effect_index,
                 previous_result,
                 ev,
             );
+        }
+        let (item, program, saved_previous_result, completion) = match stack.into_resume() {
+            crate::state::ParkedResume::Flat {
+                item,
+                resume_effect_index,
+                previous_result,
+            } => {
+                return self.resume_flat_resolution(item, resume_effect_index, previous_result, ev);
+            }
+            crate::state::ParkedResume::Program {
+                item,
+                program,
+                saved_previous_result,
+                completion,
+            } => (item, *program, saved_previous_result, completion),
         };
         let operation_result = if program.in_flight.is_some() {
+            // A continuation that records no receipt hands the saved results through unchanged.
+            let completion = completion.unwrap_or_else(|| saved_previous_result.clone());
             Some(
                 program
                     .in_flight_results
                     .clone()
-                    .with_completion(previous_result)?,
+                    .with_completion(completion)?,
             )
+        } else if completion.is_some_and(|completion| !completion.is_empty()) {
+            // A receipt with no operation to receive it would silently disappear.
+            return Err(EngineError::ProgramInvariant(
+                "a parked Program recorded a receipt with no operation in flight",
+            ));
         } else {
             None
         };

@@ -219,23 +219,22 @@ impl GameEngine {
                         .ok_or(EngineError::Illegal(
                             "resolution branch continuation missing",
                         ))?;
-                    let mut item = stack.item.clone();
+                    let mut retry = stack.clone();
                     if let ResolutionContinuation::AuthoredBranch { branch, .. } =
                         &pending.continuation
                     {
                         if branch.optional {
-                            item.resolution_branch_choices.insert(effect_index, None);
+                            retry
+                                .item
+                                .resolution_branch_choices
+                                .insert(effect_index, None);
                         } else {
                             // Cancelling a payment is not permission to omit a mandatory choice.
-                            item.resolution_branch_choices.remove(&effect_index);
+                            retry.item.resolution_branch_choices.remove(&effect_index);
                         }
                     }
-                    return self.complete_parked_resolution_with_previous(
-                        item,
-                        Some(effect_index),
-                        stack.previous_result().clone(),
-                        events,
-                    );
+                    retry.set_resume_effect_index(Some(effect_index));
+                    return self.resume_parked_stack(retry, events);
                 } else if program_choose_payment {
                     events.push(ev_log(format!(
                         "P{player} declines the program Choose payment."
@@ -327,8 +326,7 @@ impl GameEngine {
             }
         };
         self.enter_program_choose_body(&mut stack, &choose.occurrence, branch_id.as_ref())?;
-        let previous_result = stack.previous_result().clone();
-        self.complete_parked_stack_with_previous(stack, previous_result, events)
+        self.resume_parked_stack(stack, events)
     }
 
     /// A departed payer cannot answer or delegate a standalone pay-or-decline choice. Once the
@@ -391,35 +389,30 @@ impl GameEngine {
         counter_payment_outcome: Option<tricerules_card_model::primitives::CounterPaymentOutcome>,
         events: Vec<rv1::RuledEvent>,
     ) -> Result<RuledEventBatch, EngineError> {
-        let stack = pending
+        let mut stack = pending
             .continuation
             .stack()
             .expect("mana payment has a stack continuation")
             .clone();
-        let resume = if matches!(
-            pending.continuation,
-            ResolutionContinuation::AuthoredBranch { .. }
-        ) {
-            stack
-                .resume_effect_index()
-                .and_then(|next| next.checked_sub(1))
-        } else {
-            stack.resume_effect_index()
-        };
-        let mut previous_result = stack.previous_result().clone();
-        if let Some(outcome) = counter_payment_outcome {
-            previous_result.set(crate::state::ProgramValue::CounterPaymentOutcome(outcome));
-        }
-        if stack.program().is_some() {
-            self.complete_parked_stack_with_previous(stack, previous_result, events)
-        } else {
-            self.complete_parked_resolution_with_previous(
-                stack.item,
-                resume,
-                previous_result,
-                events,
+        if stack.program().is_none()
+            && matches!(
+                pending.continuation,
+                ResolutionContinuation::AuthoredBranch { .. }
             )
+        {
+            // A flat authored branch re-enters the effect that offered the payment.
+            stack.set_resume_effect_index(
+                stack
+                    .resume_effect_index()
+                    .and_then(|next| next.checked_sub(1)),
+            );
         }
+        if let Some(outcome) = counter_payment_outcome {
+            let mut completion = stack.previous_result().clone();
+            completion.set(crate::state::ProgramValue::CounterPaymentOutcome(outcome));
+            stack.record_operation_completion(completion);
+        }
+        self.resume_parked_stack(stack, events)
     }
 
     pub(in crate::engine) fn resolution_cost_candidates(
@@ -712,8 +705,7 @@ impl GameEngine {
             destination,
         ));
         self.enter_program_choose_body(&mut stack, &choose.occurrence, Some(&branch_id))?;
-        let previous_result = stack.previous_result().clone();
-        self.complete_parked_stack_with_previous(stack, previous_result, events)
+        self.resume_parked_stack(stack, events)
     }
 
     pub(super) fn finish_program_choose_blight_object(
@@ -1067,8 +1059,7 @@ impl GameEngine {
         }
         let mut stack = stack;
         self.enter_program_choose_body(&mut stack, &choose.occurrence, Some(&branch_id))?;
-        let previous_result = stack.previous_result().clone();
-        self.complete_parked_stack_with_previous(stack, previous_result, events)
+        self.resume_parked_stack(stack, events)
     }
 
     pub(super) fn finish_program_choose_discard_card_cost(
@@ -1269,8 +1260,7 @@ impl GameEngine {
         }
         let mut stack = stack;
         self.enter_program_choose_body(&mut stack, &choose.occurrence, Some(&branch_id))?;
-        let previous_result = stack.previous_result().clone();
-        self.complete_parked_stack_with_previous(stack, previous_result, events)
+        self.resume_parked_stack(stack, events)
     }
 
     pub(super) fn finish_program_choose_permanent_cost(
@@ -1474,8 +1464,7 @@ impl GameEngine {
         }
         let mut stack = stack;
         self.enter_program_choose_body(&mut stack, &choose.occurrence, Some(&branch_id))?;
-        let previous_result = stack.previous_result().clone();
-        self.complete_parked_stack_with_previous(stack, previous_result, events)
+        self.resume_parked_stack(stack, events)
     }
 
     pub(in crate::engine) fn finish_program_choose_blight_payment(
@@ -1543,8 +1532,7 @@ impl GameEngine {
         )));
         stack.item.blight_receipts.extend(payment.blight_receipts);
         self.enter_program_choose_body(&mut stack, &choose.occurrence, Some(&branch_id))?;
-        let previous_result = stack.previous_result().clone();
-        self.complete_parked_stack_with_previous(stack, previous_result, events)
+        self.resume_parked_stack(stack, events)
     }
 
     pub(super) fn finish_program_choose_hand_bottom_object(
@@ -1844,9 +1832,8 @@ impl GameEngine {
             }
             let mut stack = stack;
             self.enter_program_choose_body(&mut stack, &choose_state.occurrence, None)?;
-            return self.complete_parked_stack_with_previous(
+            return self.resume_parked_stack(
                 stack.clone(),
-                stack.previous_result().clone(),
                 vec![ev_log(format!(
                     "P{} declines the optional resolution choice.",
                     pending.deciding_player
@@ -1887,11 +1874,7 @@ impl GameEngine {
                     &choose_state.occurrence,
                     Some(&branch.branch_id),
                 )?;
-                self.complete_parked_stack_with_previous(
-                    stack.clone(),
-                    stack.previous_result().clone(),
-                    events,
-                )
+                self.resume_parked_stack(stack.clone(), events)
             }
             ResolutionCost::Mana(cost) | ResolutionCost::Waterbend(cost) => {
                 pending.presentation.choice_kind = rv1::ChoiceKind::ManaPayment;
@@ -2232,16 +2215,12 @@ impl GameEngine {
             };
             let mut stack = stack;
             self.enter_program_choose_body(&mut stack, &choose.occurrence, None)?;
-            return self.complete_parked_stack_with_previous(
-                stack.clone(),
-                stack.previous_result().clone(),
-                {
-                    events.push(ev_log(
-                        "No cost-free resolution option remains for the departed chooser.".into(),
-                    ));
-                    events
-                },
-            );
+            return self.resume_parked_stack(stack.clone(), {
+                events.push(ev_log(
+                    "No cost-free resolution option remains for the departed chooser.".into(),
+                ));
+                events
+            });
         }
         self.state.pending_resolution = Some(pending);
         events.push(
@@ -2318,17 +2297,21 @@ impl GameEngine {
                 self.state.pending_resolution = Some(pending);
                 return Err(EngineError::Illegal("resolution branch is not optional"));
             }
-            let (mut item, _, parked_previous_result, _) = stack.into_parts();
-            item.resolution_branch_choices.insert(effect_index, None);
-            return self.complete_parked_resolution_with_previous(
-                item,
-                Some(effect_index),
-                parked_previous_result,
-                vec![ev_log(format!(
-                    "P{} declines the optional resolution choice.",
-                    pending.deciding_player
-                ))],
-            );
+            let mut stack = stack;
+            stack
+                .item
+                .resolution_branch_choices
+                .insert(effect_index, None);
+            return {
+                stack.set_resume_effect_index(Some(effect_index));
+                self.resume_parked_stack(
+                    stack,
+                    vec![ev_log(format!(
+                        "P{} declines the optional resolution choice.",
+                        pending.deciding_player
+                    ))],
+                )
+            };
         }
         if decision != rv1::ResolutionChoiceDecision::SelectBranch {
             self.state.pending_resolution = Some(pending);
@@ -2393,13 +2376,11 @@ impl GameEngine {
                     .expect("authored branch has a stack continuation")
                     .clone();
                 return {
-                    let (parked_item, _, parked_previous_result, _) = stack.into_parts();
-                    self.complete_parked_resolution_with_previous(
-                        parked_item,
-                        Some(effect_index),
-                        parked_previous_result,
-                        ev,
-                    )
+                    let mut stack = stack;
+                    {
+                        stack.set_resume_effect_index(Some(effect_index));
+                        self.resume_parked_stack(stack, ev)
+                    }
                 };
             }
             ResolutionCost::Mana(mana_cost) | ResolutionCost::Waterbend(mana_cost) => {
@@ -2658,14 +2639,15 @@ impl GameEngine {
             .ok_or(EngineError::Illegal(
                 "resolution branch effect index missing",
             ))?;
-        let (mut item, _, parked_previous_result, _) = stack.into_parts();
-        item.resolution_branch_choices.insert(effect_index, None);
-        self.complete_parked_resolution_with_previous(
-            item,
-            Some(effect_index),
-            parked_previous_result,
-            vec![ev_log(log)],
-        )
+        let mut stack = stack;
+        stack
+            .item
+            .resolution_branch_choices
+            .insert(effect_index, None);
+        {
+            stack.set_resume_effect_index(Some(effect_index));
+            self.resume_parked_stack(stack, vec![ev_log(log)])
+        }
     }
 
     fn complete_program_choose_otherwise(
@@ -2694,8 +2676,7 @@ impl GameEngine {
         log: String,
     ) -> Result<RuledEventBatch, EngineError> {
         self.enter_program_choose_body(&mut stack, &choose.occurrence, None)?;
-        let previous_result = stack.previous_result().clone();
-        self.complete_parked_stack_with_previous(stack, previous_result, vec![ev_log(log)])
+        self.resume_parked_stack(stack, vec![ev_log(log)])
     }
 
     /// Reconcile a program Choose occurrence when its chooser, selected delegate, or source
@@ -3529,17 +3510,21 @@ impl GameEngine {
                     "resolution branch payment is required",
                 ));
             }
-            let (mut item, _, parked_previous_result, _) = stack.into_parts();
-            item.resolution_branch_choices.insert(effect_index, None);
-            return self.complete_parked_resolution_with_previous(
-                item,
-                Some(effect_index),
-                parked_previous_result,
-                vec![ev_log(format!(
-                    "P{} declines the optional resolution choice.",
-                    pending.deciding_player
-                ))],
-            );
+            let mut stack = stack;
+            stack
+                .item
+                .resolution_branch_choices
+                .insert(effect_index, None);
+            return {
+                stack.set_resume_effect_index(Some(effect_index));
+                self.resume_parked_stack(
+                    stack,
+                    vec![ev_log(format!(
+                        "P{} declines the optional resolution choice.",
+                        pending.deciding_player
+                    ))],
+                )
+            };
         }
         let result = (|| {
             let selected = chosen
@@ -3606,13 +3591,11 @@ impl GameEngine {
         }
         stack.item.blight_receipts.extend(receipt.blight_receipts);
         {
-            let (parked_item, _, parked_previous_result, _) = stack.into_parts();
-            self.complete_parked_resolution_with_previous(
-                parked_item,
-                Some(effect_index),
-                parked_previous_result,
-                ev,
-            )
+            let mut stack = stack;
+            {
+                stack.set_resume_effect_index(Some(effect_index));
+                self.resume_parked_stack(stack, ev)
+            }
         }
     }
 }

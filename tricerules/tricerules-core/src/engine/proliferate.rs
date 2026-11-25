@@ -354,7 +354,7 @@ impl GameEngine {
         events: Vec<rv1::RuledEvent>,
     ) -> Result<rv1::RuledEventBatch, EngineError> {
         if stack.program().is_some() {
-            self.complete_parked_stack_with_previous(
+            self.resume_parked_stack_with_completion(
                 stack,
                 OperationResults::default().with_counter_placements(transaction.counter_placements),
                 events,
@@ -362,15 +362,7 @@ impl GameEngine {
         } else {
             let mut previous_result = stack.previous_result().clone();
             previous_result.record_counter_placements(transaction.counter_placements);
-            {
-                let (parked_item, parked_resume_effect_index, _, _) = stack.into_parts();
-                self.complete_parked_resolution_with_previous(
-                    parked_item,
-                    parked_resume_effect_index,
-                    previous_result,
-                    events,
-                )
-            }
+            self.resume_parked_stack_with_completion(stack, previous_result, events)
         }
     }
 

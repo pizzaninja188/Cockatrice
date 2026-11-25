@@ -286,11 +286,9 @@ impl GameEngine {
         let ResolutionContinuation::LegendarySpellCast { stack, .. } = pending.continuation else {
             unreachable!()
         };
-        let (item, index, previous, _) = stack.into_parts();
-        self.complete_parked_resolution_with_previous(
-            item,
-            index,
-            previous,
+
+        self.resume_parked_stack(
+            stack,
             vec![ev_log(format!(
                 "P{} declines the legendary cast.",
                 pending.deciding_player

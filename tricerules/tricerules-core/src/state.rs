@@ -1325,6 +1325,32 @@ pub struct ParkedStackResolution {
     /// blocks and typed slots needed to resume one exact operation after a private choice.
     #[serde(default)]
     program: Option<ProgramRunState>,
+    /// Program stacks only: the receipt of the in-flight operation, recorded by the domain
+    /// continuation that finished it. It is kept apart from `previous_result` (the Program's
+    /// saved outer context) and merged into the in-flight results exactly once on resume. Flat
+    /// stacks record their receipt directly as the next primitive's `previous_result`.
+    #[serde(default)]
+    completion: Option<OperationResults>,
+}
+
+/// How a parked stack resumes. Callers must handle both shapes, so a continuation cannot
+/// silently discard an authored Program and skip its remaining instructions.
+pub(crate) enum ParkedResume {
+    /// A primitive effect list: resume at `resume_effect_index` with `previous_result` as the
+    /// next primitive's `PreviousEffect`.
+    Flat {
+        item: StackItem,
+        resume_effect_index: Option<u32>,
+        previous_result: OperationResults,
+    },
+    /// An authored Program: `completion` is the parked operation's recorded receipt (`None`
+    /// when the continuation recorded none), and `saved_previous_result` is its outer context.
+    Program {
+        item: StackItem,
+        program: Box<ProgramRunState>,
+        saved_previous_result: OperationResults,
+        completion: Option<OperationResults>,
+    },
 }
 
 /// One exact physical card looked at by Manifest Dread before any entry replacements run.
@@ -1352,6 +1378,7 @@ impl ParkedStackResolution {
             resume_effect_index: None,
             previous_result: OperationResults::default(),
             program: None,
+            completion: None,
         }
     }
 
@@ -1370,6 +1397,7 @@ impl ParkedStackResolution {
             resume_effect_index,
             previous_result,
             program: None,
+            completion: None,
         }
     }
 
@@ -1384,6 +1412,7 @@ impl ParkedStackResolution {
             resume_effect_index,
             previous_result,
             program: Some(program),
+            completion: None,
         }
     }
 
@@ -1399,20 +1428,42 @@ impl ParkedStackResolution {
         self.program.as_ref()
     }
 
-    pub(crate) fn into_parts(
-        self,
-    ) -> (
-        StackItem,
-        Option<u32>,
-        OperationResults,
-        Option<ProgramRunState>,
-    ) {
-        (
-            self.item,
-            self.resume_effect_index,
-            self.previous_result,
-            self.program,
-        )
+    /// The receipt recorded for a Program stack's in-flight operation, if any.
+    pub(crate) fn recorded_completion(&self) -> Option<&OperationResults> {
+        self.completion.as_ref()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn program_mut(&mut self) -> Option<&mut ProgramRunState> {
+        self.program.as_mut()
+    }
+
+    /// Decompose for resumption by the engine's single resume entry point.
+    pub(crate) fn into_resume(self) -> ParkedResume {
+        match self.program {
+            None => ParkedResume::Flat {
+                item: self.item,
+                resume_effect_index: self.resume_effect_index,
+                previous_result: self.previous_result,
+            },
+            Some(program) => ParkedResume::Program {
+                item: self.item,
+                program: Box::new(program),
+                completion: self.completion,
+                saved_previous_result: self.previous_result,
+            },
+        }
+    }
+
+    /// Record the receipt of the operation that parked this stack. A flat stack makes it the
+    /// next primitive's `PreviousEffect`; a Program stack keeps its outer `previous_result` and
+    /// carries the receipt as the in-flight completion. Recording again replaces the receipt.
+    pub(crate) fn record_operation_completion(&mut self, results: OperationResults) {
+        if self.program.is_some() {
+            self.completion = Some(results);
+        } else {
+            self.previous_result = results;
+        }
     }
 
     /// A replacement may change the stack item while preserving the parent's exact execution.
@@ -1420,21 +1471,24 @@ impl ParkedStackResolution {
         self.resume_effect_index = source.resume_effect_index;
         self.previous_result = source.previous_result.clone();
         self.program = source.program.clone();
+        self.completion = source.completion.clone();
     }
 
     pub(crate) fn restore_execution_from_owned(&mut self, source: Self) {
         self.resume_effect_index = source.resume_effect_index;
         self.previous_result = source.previous_result;
         self.program = source.program;
+        self.completion = source.completion;
+    }
+
+    /// Choose where a flat effect list resumes (a Program resumes from its own cursor).
+    pub(crate) fn set_resume_effect_index(&mut self, next: Option<u32>) {
+        self.resume_effect_index = next;
     }
 
     /// Shared paths retain their owning Program even when they also update a flat fallback tail.
     pub(crate) fn set_flat_tail(&mut self, next: Option<u32>, results: OperationResults) {
         self.resume_effect_index = next;
-        self.previous_result = results;
-    }
-
-    pub(crate) fn replace_completed_results(&mut self, results: OperationResults) {
         self.previous_result = results;
     }
 

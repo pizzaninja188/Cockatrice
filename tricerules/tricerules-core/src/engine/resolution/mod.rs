@@ -3552,19 +3552,22 @@ mod attached_subject_tests {
             "the admitted alternate owner must share the same target-hand-discard continuation profile"
         );
 
-        let (item, next, results, program) = parked.clone().into_parts();
-        let mut program = program.unwrap();
-        program.in_flight = Some(compiled.body.steps[0].outputs.clone());
-        let wrong_output = ParkedStackResolution::for_program(item, next, results, program);
+        let mut wrong_output = parked.clone();
+        wrong_output.program_mut().unwrap().in_flight =
+            Some(compiled.body.steps[0].outputs.clone());
         assert!(
             !engine.is_target_hand_discard_program(&wrong_output),
             "a current hand-discard leaf with another instruction's result must fail closed"
         );
 
-        let (item, next, results, program) = parked.clone().into_parts();
-        let mut program = program.unwrap();
-        program.frames.last_mut().unwrap().next_instruction = 1;
-        let wrong_cursor = ParkedStackResolution::for_program(item, next, results, program);
+        let mut wrong_cursor = parked.clone();
+        wrong_cursor
+            .program_mut()
+            .unwrap()
+            .frames
+            .last_mut()
+            .unwrap()
+            .next_instruction = 1;
         assert!(
             !engine.is_target_hand_discard_program(&wrong_cursor),
             "the typed discard output cannot classify a different current operation"

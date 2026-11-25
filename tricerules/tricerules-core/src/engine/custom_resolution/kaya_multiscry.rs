@@ -741,8 +741,7 @@ impl GameEngine {
                 "Kaya Scry1 continuation is missing",
             ));
         };
-        let previous = stack.previous_result().clone();
-        self.complete_parked_stack_with_previous(stack, previous, events)
+        self.resume_parked_stack(stack, events)
     }
 
     pub(in crate::engine) fn refresh_each_opponent_scry_departure(

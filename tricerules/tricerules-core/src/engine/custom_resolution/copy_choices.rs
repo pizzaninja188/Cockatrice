@@ -61,7 +61,7 @@ impl GameEngine {
                 self.state.stack_presentations.remove(&copy.item.id);
             }
             let parent = *progress.parent.take().expect("parent was checked above");
-            let completed = self.complete_parked_stack_with_previous(
+            let completed = self.resume_parked_stack_with_completion(
                 parent,
                 OperationResults::default(),
                 std::mem::take(events),
@@ -954,7 +954,7 @@ impl GameEngine {
             self.begin_copy_target_choices(remaining, copy_source_object_id, parent, &mut ev)?;
         } else if let Some(parent) = parent {
             self.fire_triggers(&trigger_events, &mut ev);
-            return self.complete_parked_stack_with_previous(
+            return self.resume_parked_stack_with_completion(
                 *parent,
                 OperationResults::default(),
                 ev,

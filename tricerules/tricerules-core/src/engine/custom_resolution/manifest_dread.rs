@@ -159,7 +159,7 @@ impl GameEngine {
                         .next(),
                     ),
                 );
-                self.complete_parked_stack_with_previous(stack, previous_result, events)
+                self.resume_parked_stack_with_completion(stack, previous_result, events)
             }
         }
     }
@@ -205,7 +205,7 @@ impl GameEngine {
                     reference.library_position,
                 ));
             }
-            return self.complete_parked_stack_with_previous(
+            return self.resume_parked_stack_with_completion(
                 stack,
                 OperationResults::default(),
                 events,
@@ -213,7 +213,7 @@ impl GameEngine {
         }
 
         let Ok(cohort): Result<[ManifestDreadLibraryRef; 2], _> = library_refs.try_into() else {
-            return self.complete_parked_stack_with_previous(
+            return self.resume_parked_stack_with_completion(
                 stack,
                 OperationResults::default(),
                 events,
@@ -230,7 +230,7 @@ impl GameEngine {
                 .player_idx(owner)
                 .is_none_or(|idx| self.state.players[idx].has_lost)
         {
-            return self.complete_parked_stack_with_previous(
+            return self.resume_parked_stack_with_completion(
                 stack,
                 OperationResults::default(),
                 events,
@@ -367,7 +367,7 @@ impl GameEngine {
                 reference.library_position,
             ));
         }
-        self.complete_parked_stack_with_previous(stack, OperationResults::default(), events)
+        self.resume_parked_stack_with_completion(stack, OperationResults::default(), events)
     }
 
     pub(in crate::engine) fn refresh_manifest_dread_graveyard_order_departure(
@@ -390,7 +390,7 @@ impl GameEngine {
         }
 
         self.state.pending_resolution = None;
-        let completed = self.complete_parked_stack_with_previous(
+        let completed = self.resume_parked_stack_with_completion(
             order.stack.clone(),
             OperationResults::default(),
             Vec::new(),

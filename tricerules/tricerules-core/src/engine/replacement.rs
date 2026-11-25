@@ -1669,16 +1669,14 @@ impl GameEngine {
     ) -> Result<RuledEventBatch, EngineError> {
         let batch = match entry.completion {
             BattlefieldEntryCompletion::PermanentSpell { .. } => {
-                let (parked_item, _, parked_previous_result, _) = stack.into_parts();
-                self.complete_parked_resolution_with_previous(
-                    parked_item,
-                    Some(0),
-                    parked_previous_result,
-                    Vec::new(),
-                )
+                let mut stack = stack;
+                {
+                    stack.set_resume_effect_index(Some(0));
+                    self.resume_parked_stack(stack, Vec::new())
+                }
             }?,
             BattlefieldEntryCompletion::ResolutionEffect { .. } if stack.program().is_some() => {
-                self.complete_parked_stack_with_previous(
+                self.resume_parked_stack_with_completion(
                     stack,
                     OperationResults::default(),
                     Vec::new(),
@@ -1686,15 +1684,8 @@ impl GameEngine {
             }
             BattlefieldEntryCompletion::ResolutionEffect { .. }
             | BattlefieldEntryCompletion::Ninjutsu { .. } => {
-                let (parked_item, parked_resume_effect_index, parked_previous_result, _) =
-                    stack.into_parts();
-                self.complete_parked_resolution_with_previous(
-                    parked_item,
-                    parked_resume_effect_index,
-                    parked_previous_result,
-                    Vec::new(),
-                )
-            }?,
+                { self.resume_parked_stack(stack, Vec::new()) }?
+            }
             BattlefieldEntryCompletion::ZoneEntryBatch(mut batch) => {
                 self.reconcile_departed_zone_entry_members(&mut batch, departed_objects);
                 let mut resumed_events = Vec::new();
@@ -2788,21 +2779,14 @@ impl GameEngine {
                     None,
                 )?;
                 self.clear_rebound_grant_for_stack_item(&stack.item);
-                self.complete_parked_resolution(stack.item, Some(0), events)
+                self.resume_permanent_spell_tail(stack, events)
             }
             BattlefieldEntryCompletion::ResolutionEffect { .. } if stack.program().is_some() => {
-                self.complete_parked_stack_with_previous(stack, OperationResults::default(), events)
+                self.resume_parked_stack_with_completion(stack, OperationResults::default(), events)
             }
             BattlefieldEntryCompletion::ResolutionEffect { .. }
             | BattlefieldEntryCompletion::Ninjutsu { .. } => {
-                let (parked_item, parked_resume_effect_index, parked_previous_result, _) =
-                    stack.into_parts();
-                self.complete_parked_resolution_with_previous(
-                    parked_item,
-                    parked_resume_effect_index,
-                    parked_previous_result,
-                    events,
-                )
+                self.resume_parked_stack(stack, events)
             }
             BattlefieldEntryCompletion::LibrarySearch { progress, .. } => {
                 self.continue_library_search_battlefield_entries(stack, progress, events)
@@ -2829,16 +2813,7 @@ impl GameEngine {
                     return Ok(finish_with_events(self, events));
                 }
                 if resume_original_stack {
-                    {
-                        let (parked_item, parked_resume_effect_index, parked_previous_result, _) =
-                            stack.into_parts();
-                        self.complete_parked_resolution_with_previous(
-                            parked_item,
-                            parked_resume_effect_index,
-                            parked_previous_result,
-                            events,
-                        )
-                    }
+                    self.resume_parked_stack(stack, events)
                 } else {
                     self.apply_sbas(&mut events)?;
                     if let Some(index) = self.state.player_idx(self.state.active_player_id()) {
@@ -2861,16 +2836,7 @@ impl GameEngine {
             BattlefieldEntryCompletion::LandPlay { resume_stack, .. } => {
                 self.state.passes_since_stack_change = 0;
                 if let Some(stack) = resume_stack {
-                    {
-                        let (parked_item, parked_resume_effect_index, parked_previous_result, _) =
-                            stack.into_parts();
-                        self.complete_parked_resolution_with_previous(
-                            parked_item,
-                            parked_resume_effect_index,
-                            parked_previous_result,
-                            events,
-                        )
-                    }
+                    self.resume_parked_stack(*stack, events)
                 } else {
                     Ok(finish_with_events(self, events))
                 }
@@ -2973,7 +2939,7 @@ impl GameEngine {
         previous_result.set(crate::state::ProgramValue::CreatedTokenBatch(
             self.token_entry_object_refs(&created_ids),
         ));
-        self.complete_parked_stack_with_previous(stack, previous_result, events)
+        self.resume_parked_stack_with_completion(stack, previous_result, events)
     }
 
     fn park_copy_source_choice(
@@ -4241,16 +4207,7 @@ impl GameEngine {
                 self.state.passes_since_stack_change = 0;
                 events.push(ev_log(format!("P{player} played {land_name}")));
                 if let Some(resume_stack) = resume_stack {
-                    {
-                        let (parked_item, parked_resume_effect_index, parked_previous_result, _) =
-                            resume_stack.into_parts();
-                        self.complete_parked_resolution_with_previous(
-                            parked_item,
-                            parked_resume_effect_index,
-                            parked_previous_result,
-                            events,
-                        )
-                    }
+                    self.resume_parked_stack(*resume_stack, events)
                 } else {
                     Ok(finish_with_events(self, events))
                 }
@@ -4269,7 +4226,7 @@ impl GameEngine {
                 });
                 self.commit_battlefield_entry(event, attached_to, &mut events)?;
                 self.finish_permanent_spell_entry(&stack.item, &mut events);
-                self.complete_parked_resolution(stack.item, Some(0), events)
+                self.resume_permanent_spell_tail(stack, events)
             }
             BattlefieldEntryCompletion::ResolutionEffect {
                 owner,
@@ -4306,22 +4263,9 @@ impl GameEngine {
                     owner,
                     rv1::permanent_moved::Destination::Battlefield,
                 ));
-                if stack.program().is_some() {
-                    self.complete_parked_stack_with_previous(
-                        stack,
-                        OperationResults::default(),
-                        events,
-                    )
-                } else {
-                    {
-                        let (parked_item, parked_resume_effect_index, _, _) = stack.into_parts();
-                        self.complete_parked_resolution(
-                            parked_item,
-                            parked_resume_effect_index,
-                            events,
-                        )
-                    }
-                }
+                let mut stack = stack;
+                stack.record_operation_completion(OperationResults::default());
+                self.resume_parked_stack(stack, events)
             }
             BattlefieldEntryCompletion::Ninjutsu {
                 owner,
@@ -4347,10 +4291,9 @@ impl GameEngine {
                         })),
                     });
                 }
-                {
-                    let (parked_item, parked_resume_effect_index, _, _) = stack.into_parts();
-                    self.complete_parked_resolution(parked_item, parked_resume_effect_index, events)
-                }
+                let mut stack = stack;
+                stack.record_operation_completion(OperationResults::default());
+                self.resume_parked_stack(stack, events)
             }
             BattlefieldEntryCompletion::ObserverReturn {
                 owner,
@@ -4379,16 +4322,7 @@ impl GameEngine {
                     return Ok(finish_with_events(self, events));
                 }
                 if resume_original_stack {
-                    {
-                        let (parked_item, parked_resume_effect_index, parked_previous_result, _) =
-                            stack.into_parts();
-                        self.complete_parked_resolution_with_previous(
-                            parked_item,
-                            parked_resume_effect_index,
-                            parked_previous_result,
-                            events,
-                        )
-                    }
+                    self.resume_parked_stack(stack, events)
                 } else {
                     self.apply_sbas(&mut events)?;
                     if let Some(index) = self.state.player_idx(self.state.active_player_id()) {
@@ -4427,7 +4361,7 @@ impl GameEngine {
                     if let Some(object) = self.state.objects.get_mut(&object_id) {
                         object.face_down = false;
                     }
-                    return self.complete_parked_stack_with_previous(
+                    return self.resume_parked_stack_with_completion(
                         stack,
                         OperationResults::default(),
                         events,
@@ -4483,7 +4417,7 @@ impl GameEngine {
                         .next(),
                     ),
                 );
-                self.complete_parked_stack_with_previous(stack, previous_result, events)
+                self.resume_parked_stack_with_completion(stack, previous_result, events)
             }
             BattlefieldEntryCompletion::TokenBatch(batch) => {
                 let amass = batch.options.amass;
@@ -4514,7 +4448,7 @@ impl GameEngine {
                 previous_result.set(crate::state::ProgramValue::CreatedTokenBatch(
                     self.token_entry_object_refs(&created_ids),
                 ));
-                self.complete_parked_stack_with_previous(stack, previous_result, events)
+                self.resume_parked_stack_with_completion(stack, previous_result, events)
             }
             BattlefieldEntryCompletion::ZoneEntryBatch(mut batch) => {
                 batch.ready.push(event);

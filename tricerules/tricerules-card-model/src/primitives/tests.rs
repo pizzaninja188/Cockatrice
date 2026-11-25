@@ -2052,22 +2052,58 @@ fn choose_and_sacrifice_is_a_program_leaf_with_an_unbounded_sacrifice_receipt() 
         }
     );
 
-    // Multi-card shapes could reach the graveyard-order continuation, which does not resume a
-    // parked Program, so they stay legacy-only for now.
-    for (players, count) in [("EachOpponent", 1), ("EachPlayer", 1), ("Controller", 2)] {
+    // Multi-card shapes resume through the CR 404.3 graveyard-order continuation, so every
+    // validator-accepted player set and count is a Program leaf with an unbounded receipt.
+    for (players, recipient, count) in [
+        (
+            "EachOpponent",
+            crate::primitives::PlayerRecipient::EachOpponent,
+            1,
+        ),
+        (
+            "EachPlayer",
+            crate::primitives::PlayerRecipient::EachPlayer,
+            1,
+        ),
+        (
+            "Controller",
+            crate::primitives::PlayerRecipient::Controller,
+            2,
+        ),
+    ] {
         let body = format!(
             r#"(steps: [
-                (id: "sacrifice", kind: Perform(ChooseAndSacrifice(
+                (id: "sacrifice", bind: ["sacrificed"], kind: Perform(ChooseAndSacrifice(
                     players: {players}, count: {count}, filter: (kind: AnyPermanent)))),
             ], yields: [])"#
         );
-        let error = ability_program_fixture("choose_and_sacrifice_rejected_fixture", &body)
-            .expect_err("only the single-card controller sacrifice is a Program leaf");
-        assert!(
-            error.contains("requires players: Controller and count: 1"),
-            "unexpected error for {players}/{count}: {error}"
+        let program = ability_program_fixture("choose_and_sacrifice_shape_fixture", &body)
+            .unwrap_or_else(|error| panic!("{players}/{count} is a Program leaf: {error}"));
+        let [sacrifice] = program.body.steps.as_slice() else {
+            panic!("one sacrifice instruction")
+        };
+        let [sacrificed] = sacrifice.outputs.as_slice() else {
+            panic!("the sacrifice binds its receipt")
+        };
+        assert_eq!(
+            program.slots[sacrificed.0 as usize].result_type,
+            crate::primitives::ResultType::CardResultCohort {
+                action: crate::primitives::CardResultAction::Sacrifice,
+                who: recipient,
+                cardinality: crate::primitives::Cardinality { min: 0, max: None },
+            },
+            "{players}/{count}"
         );
     }
+
+    // The ordinary effect validator still governs the leaf.
+    let body = r#"(steps: [
+        (id: "sacrifice", kind: Perform(ChooseAndSacrifice(
+            players: Controller, count: 0, filter: (kind: AnyPermanent)))),
+    ], yields: [])"#;
+    let error = ability_program_fixture("choose_and_sacrifice_zero_fixture", body)
+        .expect_err("a zero-count sacrifice is invalid");
+    assert!(error.contains("count must be positive"), "{error}");
 }
 
 #[test]

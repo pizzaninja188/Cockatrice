@@ -137,6 +137,11 @@ pub(crate) struct OperationResults {
 }
 
 impl OperationResults {
+    /// True when the operation published no facts at all.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.values.is_empty()
+    }
+
     /// Start the actual primitive's empty facts. Publication into Program slots still occurs
     /// only after that primitive (and any parked domain transaction) has completed.
     pub(crate) fn begin_effect(

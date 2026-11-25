@@ -127,7 +127,7 @@ impl GameEngine {
         let GameEvent::ZoneChanges(zone) = self.finish_zone_event(snapshot) else {
             unreachable!()
         };
-        stack.replace_completed_results(effect_result.clone());
+        stack.record_operation_completion(effect_result.clone());
         Ok(self.begin_mass_sacrifice_order_with_stack(stack, zone, departures, events))
     }
 
@@ -472,7 +472,7 @@ impl GameEngine {
         }
         // A Program-parked choice resumes its remaining instructions and fills the bound
         // sacrifice receipt; a legacy parked list falls back to the flat continuation.
-        self.complete_parked_stack_with_previous(stack, effect_result, events)
+        self.resume_parked_stack_with_completion(stack, effect_result, events)
     }
 
     pub(super) fn refresh_player_set_sacrifice_departure(
@@ -512,7 +512,7 @@ impl GameEngine {
             return Ok(());
         }
         let completed =
-            self.complete_parked_stack_with_previous(stack, effect_result, std::mem::take(events))?;
+            self.resume_parked_stack_with_completion(stack, effect_result, std::mem::take(events))?;
         events.extend(completed.events);
         Ok(())
     }
@@ -1015,15 +1015,7 @@ impl GameEngine {
         )? {
             return Ok(events::finish_with_events(self, events));
         }
-        {
-            let (parked_item, parked_resume_effect_index, _, _) = stack.into_parts();
-            self.complete_parked_resolution_with_previous(
-                parked_item,
-                parked_resume_effect_index,
-                effect_result,
-                events,
-            )
-        }
+        self.resume_parked_stack_with_completion(stack, effect_result, events)
     }
 
     pub(super) fn finish_type_choice_sacrifice_choice(
@@ -1241,15 +1233,8 @@ impl GameEngine {
         if self.commit_player_set_sacrifice(stack.clone(), &victims, &mut effect_result, events)? {
             return Ok(());
         }
-        let completed = {
-            let (parked_item, parked_resume_effect_index, _, _) = stack.into_parts();
-            self.complete_parked_resolution_with_previous(
-                parked_item,
-                parked_resume_effect_index,
-                effect_result,
-                std::mem::take(events),
-            )
-        }?;
+        let completed =
+            self.resume_parked_stack_with_completion(stack, effect_result, std::mem::take(events))?;
         events.extend(completed.events);
         Ok(())
     }
@@ -1408,16 +1393,7 @@ impl GameEngine {
             return Ok(events::finish_with_events(self, events));
         }
         if let Some(stack) = stack {
-            {
-                let (parked_item, parked_resume_effect_index, parked_previous_result, _) =
-                    stack.into_parts();
-                self.complete_parked_resolution_with_previous(
-                    parked_item,
-                    parked_resume_effect_index,
-                    parked_previous_result,
-                    events,
-                )
-            }
+            self.resume_parked_stack(stack, events)
         } else {
             Ok(events::finish_with_events(self, events))
         }

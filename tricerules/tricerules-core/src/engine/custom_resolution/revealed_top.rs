@@ -111,8 +111,7 @@ impl GameEngine {
                 "P{owner} keeps the revealed card on top of their library."
             )));
         }
-        let previous = stack.previous_result().clone();
-        self.complete_parked_stack_with_previous(stack, previous, events)
+        self.resume_parked_stack(stack, events)
     }
 
     pub(in crate::engine) fn refresh_revealed_top_bottom_departure(
@@ -144,8 +143,7 @@ impl GameEngine {
             self.state.pending_resolution = Some(pending);
             return Ok(());
         }
-        let previous = stack.previous_result().clone();
-        let completed = self.complete_parked_stack_with_previous(stack, previous, Vec::new())?;
+        let completed = self.resume_parked_stack(stack, Vec::new())?;
         events.extend(completed.events);
         Ok(())
     }

@@ -166,7 +166,7 @@ impl GameEngine {
                 &mut events,
             );
         }
-        self.complete_parked_stack_with_previous(stack, OperationResults::default(), events)
+        self.resume_parked_stack_with_completion(stack, OperationResults::default(), events)
     }
 
     pub(super) fn finish_search_zone_scope(
@@ -246,8 +246,7 @@ impl GameEngine {
             .as_mut()
             .and_then(|pending| pending.continuation.stack_mut())
             .ok_or(EngineError::Illegal("zone search failed to park"))?;
-        let (_, saved_index, saved_results, _) = stack.into_parts();
-        next.set_flat_tail(saved_index, saved_results);
+        next.set_flat_tail(stack.resume_effect_index(), stack.previous_result().clone());
         Ok(finish_with_events(self, events))
     }
 
@@ -309,16 +308,7 @@ impl GameEngine {
             events.push(ev_log(format!(
                 "P{searcher} declines to search their library."
             )));
-            return {
-                let (parked_item, parked_resume_effect_index, parked_previous_result, _) =
-                    stack.into_parts();
-                self.complete_parked_resolution_with_previous(
-                    parked_item,
-                    parked_resume_effect_index,
-                    parked_previous_result,
-                    events,
-                )
-            };
+            return self.resume_parked_stack(stack, events);
         }
         let outcome = resolution::zones::begin_search_request(
             self,
@@ -341,7 +331,7 @@ impl GameEngine {
             },
         )?;
         if let resolution::zones::SearchRequestOutcome::Completed(result) = outcome {
-            return self.complete_parked_stack_with_previous(stack, *result, events);
+            return self.resume_parked_stack_with_completion(stack, *result, events);
         }
         let Some(next) = self
             .state
@@ -351,8 +341,7 @@ impl GameEngine {
         else {
             return Err(EngineError::Illegal("optional search failed to park"));
         };
-        let (_, saved_index, saved_results, _) = stack.into_parts();
-        next.set_flat_tail(saved_index, saved_results);
+        next.set_flat_tail(stack.resume_effect_index(), stack.previous_result().clone());
         Ok(finish_with_events(self, events))
     }
 
@@ -393,8 +382,7 @@ impl GameEngine {
         let mut events = Vec::new();
         let Some(&oid) = chosen.first() else {
             events.push(ev_log(format!("P{chooser} declines to choose a card.")));
-            let previous = stack.previous_result().clone();
-            return self.complete_parked_stack_with_previous(stack, previous, events);
+            return self.resume_parked_stack(stack, events);
         };
         let Some(candidate) = candidates
             .iter()
@@ -692,9 +680,8 @@ impl GameEngine {
                 }
             }
         }
-        let previous = stack.previous_result().clone();
         events.push(ev_log(format!("P{chooser} chooses {card_label}.")));
-        self.complete_parked_stack_with_previous(stack, previous, events)
+        self.resume_parked_stack(stack, events)
     }
 
     pub(super) fn finish_different_named_graveyard_return(
@@ -724,16 +711,7 @@ impl GameEngine {
             events.push(ev_log(format!(
                 "P{controller} chooses no permanent cards to return."
             )));
-            return {
-                let (parked_item, parked_resume_effect_index, parked_previous_result, _) =
-                    stack.into_parts();
-                self.complete_parked_resolution_with_previous(
-                    parked_item,
-                    parked_resume_effect_index,
-                    parked_previous_result,
-                    events,
-                )
-            };
+            return self.resume_parked_stack(stack, events);
         }
 
         let mut entries = Vec::with_capacity(chosen.len());
@@ -773,16 +751,7 @@ impl GameEngine {
         else {
             return Ok(finish_with_events(self, events));
         };
-        {
-            let (parked_item, parked_resume_effect_index, parked_previous_result, _) =
-                stack.into_parts();
-            self.complete_parked_resolution_with_previous(
-                parked_item,
-                parked_resume_effect_index,
-                parked_previous_result,
-                events,
-            )
-        }
+        self.resume_parked_stack(stack, events)
     }
 
     pub(super) fn select_linked_exile_delegate(
@@ -912,7 +881,6 @@ impl GameEngine {
             self.is_mandatory_program_linked_owner_graveyard_choice(&stack, &key, action);
         let mut events = Vec::new();
         let Some(&object_id) = chosen.first() else {
-            let mut matched_linked_play = false;
             if matches!(action, PendingLinkedExileAction::Play { .. }) {
                 if let Some(cohort) =
                     self.state
@@ -928,25 +896,14 @@ impl GameEngine {
                     // Declining the next-card prompt ends this occurrence. The persistent linked
                     // record remains available to later trigger occurrences.
                     cohort.remaining.clear();
-                    matched_linked_play = true;
                 }
             }
             events.push(ev_log(format!(
                 "P{controller} declines the linked Exile choice."
             )));
             let previous_result = crate::state::OperationResults::default();
-            if matched_linked_play && stack.program().is_some() {
-                return {
-                    let (parked_item, parked_resume_effect_index, _, _) = stack.into_parts();
-                    self.complete_parked_resolution_with_previous(
-                        parked_item,
-                        parked_resume_effect_index,
-                        previous_result,
-                        events,
-                    )
-                };
-            }
-            return self.complete_parked_stack_with_previous(stack, previous_result, events);
+            // A matched linked-play root advances its occurrence inside `resume_parked_stack`.
+            return self.resume_parked_stack_with_completion(stack, previous_result, events);
         };
         let expected_generation = generations
             .iter()
@@ -1031,13 +988,13 @@ impl GameEngine {
                     owner,
                     rv1::permanent_moved::Destination::Graveyard,
                 ));
-                self.complete_parked_stack_with_previous(stack, previous_result, events)
+                self.resume_parked_stack_with_completion(stack, previous_result, events)
             }
             PendingLinkedExileAction::Move {
                 destination: tricerules_card_model::primitives::LinkedExiledCardDestination::ControllerBattlefield,
                 ..
             } => {
-                stack.replace_completed_results(previous_result);
+                stack.record_operation_completion(previous_result);
                 let entry = BattlefieldEntryEvent::new(
                     object_id,
                     controller,
@@ -1052,13 +1009,8 @@ impl GameEngine {
                     &mut events,
                 )? {
                     {
-let (parked_item, parked_resume_effect_index, parked_previous_result, _) = completed.into_parts();
-self.complete_parked_resolution_with_previous(
-                        parked_item,
-                        parked_resume_effect_index,
-                        parked_previous_result,
-                        events,
-                    )
+
+self.resume_parked_stack(completed, events)
 }
                 } else {
                     Ok(finish_with_events(self, events))
@@ -1276,7 +1228,7 @@ ResolutionContinuation::SpecialCast {
             );
             let mut previous = stack.previous_result().clone();
             previous.set(crate::state::ProgramValue::FoundLibraryCohort(cohort));
-            return self.complete_parked_stack_with_previous(stack, previous, ev);
+            return self.resume_parked_stack_with_completion(stack, previous, ev);
         }
 
         if reveal {
@@ -1541,22 +1493,14 @@ ResolutionContinuation::SpecialCast {
             );
         }
         if is_resultless_program_search(&stack) || self.is_typed_resultful_library_search(&stack) {
-            return self.complete_parked_stack_with_previous(
-                stack,
-                crate::state::OperationResults::default(),
-                ev,
-            );
+            return {
+                let mut resumed_stack = stack;
+                resumed_stack
+                    .record_operation_completion(crate::state::OperationResults::default());
+                self.resume_parked_stack(resumed_stack, ev)
+            };
         }
-        {
-            let (parked_item, parked_resume_effect_index, parked_previous_result, _) =
-                stack.into_parts();
-            self.complete_parked_resolution_with_previous(
-                parked_item,
-                parked_resume_effect_index,
-                parked_previous_result,
-                ev,
-            )
-        }
+        self.resume_parked_stack(stack, ev)
     }
 
     fn offer_search_library_commander_choice(
@@ -1749,11 +1693,7 @@ ResolutionContinuation::SpecialCast {
             }],
             &mut events,
         );
-        self.complete_parked_stack_with_previous(
-            stack.clone(),
-            stack.previous_result().clone(),
-            events,
-        )
+        self.resume_parked_stack(stack.clone(), events)
     }
 
     fn exact_card_choice_candidate_is_current(
@@ -3004,7 +2944,7 @@ mod tests {
                     tricerules_card_model::primitives::SpellEffectKind::ChooseLinkedExiledCard { .. }
                 )
             ));
-            let parked =
+            let mut parked =
                 ParkedStackResolution::for_program(item.clone(), None, Default::default(), program);
             assert!(parked.previous_result().card_entries().is_empty());
             let selected_object_id = 99_991;
@@ -3021,8 +2961,9 @@ mod tests {
             }
             .into();
 
+            parked.record_operation_completion(previous_result);
             let batch = engine
-                .complete_parked_stack_with_previous(parked, previous_result, Vec::new())
+                .resume_parked_stack(parked, Vec::new())
                 .expect("resume the bound Program's typed result branch");
 
             assert!(!engine.state.objects.contains_key(&selected_object_id));
@@ -3354,7 +3295,7 @@ mod tests {
                     provenance: crate::state::CardResultProvenance::ActionFacts,
                 }])
                 .expect("typed fixture facts");
-            saved.replace_completed_results(results);
+            saved.record_operation_completion(results);
             let selected = if count == 0 {
                 Vec::new()
             } else {

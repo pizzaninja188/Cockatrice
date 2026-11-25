@@ -1976,9 +1976,13 @@ pub(super) fn select_hand_cards_for_program(
         .ok_or(EngineError::ProgramInvariant(
             "hand selection has no owning program frame",
         ))?;
-    let (item, resume_effect_index, previous_result, _) = cx.parked_stack().into_parts();
-    let stack =
-        ParkedStackResolution::for_program(item, resume_effect_index, previous_result, program);
+    // The owning frame is retained as-is: this choice publishes its own selection on resume.
+    let stack = ParkedStackResolution::for_program(
+        cx.top.clone(),
+        None,
+        cx.resume_previous_result.cloned().unwrap_or_default(),
+        program,
+    );
     let engine = &mut *cx.engine;
     let top = cx.top;
     let result = &mut *cx.effect_result;
@@ -3121,11 +3125,12 @@ impl GameEngine {
                 "No offered linked Exile card remains for {spell_label}; the mandatory instruction continues with an empty cohort."
             )));
             events.extend(
-                self.complete_parked_stack_with_previous(
-                    stack,
-                    crate::state::OperationResults::default(),
-                    Vec::new(),
-                )?
+                {
+                    let mut resumed_stack = stack;
+                    resumed_stack
+                        .record_operation_completion(crate::state::OperationResults::default());
+                    self.resume_parked_stack(resumed_stack, Vec::new())
+                }?
                 .events,
             );
             return Ok(true);
@@ -3167,11 +3172,12 @@ impl GameEngine {
                     "No live player can make P{chooser}'s linked Exile choice; the mandatory instruction continues with an empty cohort."
                 )));
                 events.extend(
-                    self.complete_parked_stack_with_previous(
-                        stack,
-                        crate::state::OperationResults::default(),
-                        Vec::new(),
-                    )?
+                    {
+                        let mut resumed_stack = stack;
+                        resumed_stack
+                            .record_operation_completion(crate::state::OperationResults::default());
+                        self.resume_parked_stack(resumed_stack, Vec::new())
+                    }?
                     .events,
                 );
                 return Ok(true);
@@ -3440,34 +3446,21 @@ impl GameEngine {
     }
 
     /// Continue a linked play occurrence after a card's play/cast transaction, an explicit
-    /// decline, or departure cleanup. An authored Program Play resumes through its saved stack
-    /// cursor; legacy Cast and effect-list paths keep the legacy resolution finalizer.
+    /// decline, or departure cleanup. The occurrence finishes through its saved stack cursor,
+    /// so an authored Program resumes its remaining instructions and a flat list its tail.
     pub(in crate::engine) fn advance_pending_linked_exile_play(
         &mut self,
         cohort: crate::state::PendingLinkedExilePlay,
         events: Vec<rv1::RuledEvent>,
     ) -> Result<RuledEventBatch, EngineError> {
-        let complete_parked_stack = cohort.stack.program().is_some()
-            && cohort.kind == tricerules_card_model::primitives::LinkedExiledCardPlayKind::Play;
-        self.advance_pending_linked_exile_play_with_finalizer(cohort, events, complete_parked_stack)
+        self.advance_pending_linked_exile_play_through_stack(cohort, events)
     }
 
     /// Finish a normal linked-play root continuation through its complete parked-stack cursor.
-    /// This preserves authored Program retirement while observer/departure callers continue to
-    /// use the legacy resolution finalizer above.
     pub(in crate::engine) fn advance_pending_linked_exile_play_through_stack(
-        &mut self,
-        cohort: crate::state::PendingLinkedExilePlay,
-        events: Vec<rv1::RuledEvent>,
-    ) -> Result<RuledEventBatch, EngineError> {
-        self.advance_pending_linked_exile_play_with_finalizer(cohort, events, true)
-    }
-
-    fn advance_pending_linked_exile_play_with_finalizer(
         &mut self,
         mut cohort: crate::state::PendingLinkedExilePlay,
         mut events: Vec<rv1::RuledEvent>,
-        complete_parked_stack: bool,
     ) -> Result<RuledEventBatch, EngineError> {
         cohort.in_flight = None;
         let chooser = cohort.stack.item.controller;
@@ -3595,13 +3588,7 @@ impl GameEngine {
         if cohort.any_cast_committed && cohort.return_source_to_owner_hand_if_cast {
             self.return_linked_cast_source_to_owner_hand(&cohort.stack.item, &mut events)?;
         }
-        if complete_parked_stack {
-            let previous_result = cohort.stack.previous_result().clone();
-            self.complete_parked_stack_with_previous(cohort.stack, previous_result, events)
-        } else {
-            let (item, next, previous_result, _) = cohort.stack.into_parts();
-            self.complete_parked_resolution_with_previous(item, next, previous_result, events)
-        }
+        self.resume_parked_stack(cohort.stack, events)
     }
 }
 
@@ -5708,7 +5695,7 @@ pub(super) fn explore(
     }
 
     let mut stack = ParkedStackResolution::dedicated(cx.top.clone());
-    stack.replace_completed_results(cx.resume_previous_result.cloned().unwrap_or_default());
+    stack.record_operation_completion(cx.resume_previous_result.cloned().unwrap_or_default());
     if explorer_is_current_battlefield_incarnation {
         if let Some(proposal) = cx.engine.proposed_object_counter_placement(
             controller,
