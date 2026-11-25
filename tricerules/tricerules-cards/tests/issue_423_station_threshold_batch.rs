@@ -9,8 +9,8 @@
 //! abilities (CR 611.3/613), with CR 721.2a base P/T for the animation.
 //!
 //! The excluded cohort identities (Adagia, Entropic Battlecruiser, Susurian
-//! Dirgecraft, The Seriema) intentionally have no
-//! registry entry here; their unsupported clauses stay fail-closed.
+//! Dirgecraft) intentionally have no registry entry here; their unsupported
+//! clauses stay fail-closed. The Seriema shipped with #434's tapped legendary scope.
 
 use tricerules_cards::primitives::{
     AbilityCost, AbilitySourceZone, ActivationTiming, Amount, BattlefieldQuantityCharacteristic,
@@ -750,7 +750,7 @@ fn issue_423_excluded_cohort_identities_have_no_registry_entry() {
         "entropic_battlecruiser",
         // Infinite Guideline Station shipped with #433's color-count filter.
         "susurian_dirgecraft",
-        "the_seriema",
+        // The Seriema shipped with #434's tapped legendary creature scope.
     ] {
         assert!(
             tricerules_cards::registry::global().get(id).is_none(),

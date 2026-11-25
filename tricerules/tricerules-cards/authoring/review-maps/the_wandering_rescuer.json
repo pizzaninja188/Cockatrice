@@ -1,0 +1,80 @@
+{
+  "format_version": 1,
+  "oracle_id": "b8ef65df-f8e7-44e3-9864-9c127232a2b6",
+  "spans": [
+    {
+      "face_id": "the_wandering_rescuer",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "the_wandering_rescuer",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "the_wandering_rescuer",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "the_wandering_rescuer",
+      "start_line": 4,
+      "end_line": 4,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flash",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "Keyword::Convoke",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "Keyword::DoubleStrike",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "StaticAbilityDef::AnthemKeyword",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "CreatureScopeFilter.exclude_self",
+      "typed_path": "/faces/0/static_abilities/0/definition/AnthemKeyword/filter/exclude_self"
+    },
+    {
+      "symbol": "TargetFilter::tapped",
+      "typed_path": "/faces/0/static_abilities/0/definition/AnthemKeyword/filter/matching/tapped"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_434_tapped_scopes::issue_434_wandering_rescuer_grants_hexproof_to_other_tapped_creatures",
+      "covers": "only other tapped creatures you control gain hexproof; re-evaluated on tap/untap; ends on ability removal"
+    },
+    {
+      "test": "mechanic_registry::issue_434_tapped_supertype_scopes::issue_434_tapped_anthems_use_the_shared_tapped_predicate",
+      "covers": "typed anthem definition"
+    },
+    {
+      "test": "mechanic_registry::issue_434_tapped_supertype_scopes::issue_434_registers_the_three_complete_identities",
+      "covers": "reviewed identity, characteristics and supertypes"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

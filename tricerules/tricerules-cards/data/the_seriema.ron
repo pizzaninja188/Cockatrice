@@ -1,0 +1,75 @@
+// Oracle a6bcec1f-f515-4e63-9e84-8eb04cc582ff; source checked 2026-11-25 against the pinned Scryfall
+// oracle_cards snapshot. Scryfall rulings could not be fetched (HTTP 403); none are relied on.
+// CR 603.6a (entry trigger), 701.23 (search; a card with a stated quality may be left unfound),
+// 702.184a (station), 722.2/722.2a/722.2b (both the Flying line and the anthem are printed in the
+// 7+ striation, so each applies only at seven or more charge counters), 613.1f (layer 6),
+// 110.5 (tapped is a status), 205.4 (legendary supertype), 702.12b (indestructible).
+(
+  id: "the_seriema",
+  name: "The Seriema",
+  face_id: "the_seriema",
+  mana_cost: "{1}{W}{W}",
+  supertypes: ["Legendary"],
+  types: ["Artifact", "Spacecraft"],
+  power: 5,
+  toughness: 5,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [
+      SearchLibrary(
+        filter: Some((card_type: Some(Creature), required_supertypes: ["Legendary"])),
+        reveal: true,
+      ),
+    ],
+  )],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [
+        TapPermanents(constraint: ExactCount(1), filter: (kind: Creature, controller: You), exclude_source: true),
+      ],
+      effect: [
+        PutCounters(
+          counter: Charge,
+          count: Count(
+            CardResultCharacteristicSum(
+              filter: (source: Payment, action: Tap, players: Controller, card_type: Some(Creature)),
+              characteristic: Power,
+            ),
+          ),
+          subject: Source,
+        ),
+      ],
+      timing: SorcerySpeed,
+    ),
+  ],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([3]),
+      definition: ConditionalSelfModifier(
+        condition: SourceCounterCount(counter: Charge, min: Some(7)),
+        add_types: (card_types: [Creature]),
+        base_power: Some(5),
+        base_toughness: Some(5),
+        keywords: [Flying],
+      ),
+    ),
+    (
+      ability_id: "static_02",
+      presentation: OracleLines([4]),
+      definition: AnthemKeyword(
+        filter: (
+          controller: Some(YouControl),
+          exclude_self: true,
+          matching: (kind: Creature, tapped: Some(true), required_supertypes: ["Legendary"]),
+        ),
+        condition: Some(SourceCounterCount(counter: Charge, min: Some(7))),
+        keyword: Indestructible,
+      ),
+    ),
+  ],
+)

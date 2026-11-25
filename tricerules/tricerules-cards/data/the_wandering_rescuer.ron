@@ -1,0 +1,23 @@
+// Oracle b8ef65df-f8e7-44e3-9864-9c127232a2b6; source checked 2026-11-25 against the pinned Scryfall
+// oracle_cards snapshot. Scryfall rulings could not be fetched (HTTP 403); none are relied on.
+// CR 702.8a (flash), 702.51a (convoke), 702.4b (double strike), 604.1/611.3a and 613.1f (static
+// layer-6 grant), 110.5 (tapped is a status), 702.11b (hexproof).
+(
+  id: "the_wandering_rescuer",
+  name: "The Wandering Rescuer",
+  face_id: "the_wandering_rescuer",
+  mana_cost: "{3}{W}{W}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Human", "Samurai", "Noble"],
+  power: 3,
+  toughness: 4,
+  keywords: [Flash, Convoke, DoubleStrike],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([4]),
+    definition: AnthemKeyword(
+      filter: (controller: Some(YouControl), exclude_self: true, matching: (kind: Creature, tapped: Some(true))),
+      keyword: Hexproof,
+    ),
+  )],
+)

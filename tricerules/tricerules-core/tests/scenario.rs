@@ -1117,6 +1117,8 @@ mod issue_429_aura_restriction;
 mod issue_430_direct_ron;
 #[path = "scenario/issue_433_multicolored_count.rs"]
 mod issue_433_multicolored_count;
+#[path = "scenario/issue_434_tapped_scopes.rs"]
+mod issue_434_tapped_scopes;
 #[path = "scenario/issue_444_commands.rs"]
 mod issue_444_commands;
 #[path = "scenario/issue_452_direct_ron.rs"]

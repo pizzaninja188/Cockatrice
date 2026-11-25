@@ -1,0 +1,88 @@
+{
+  "format_version": 1,
+  "oracle_id": "a6bcec1f-f515-4e63-9e84-8eb04cc582ff",
+  "spans": [
+    {
+      "face_id": "the_seriema",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "the_seriema",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "the_seriema",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "the_seriema",
+      "start_line": 4,
+      "end_line": 4,
+      "typed_paths": [
+        "/faces/0/static_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::TapPermanents",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::ConditionalSelfModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "StaticAbilityDef::AnthemKeyword",
+      "typed_path": "/faces/0/static_abilities/1/definition"
+    },
+    {
+      "symbol": "CreatureScopeFilter.exclude_self",
+      "typed_path": "/faces/0/static_abilities/1/definition/AnthemKeyword/filter/exclude_self"
+    },
+    {
+      "symbol": "TargetFilter::tapped",
+      "typed_path": "/faces/0/static_abilities/1/definition/AnthemKeyword/filter/matching/tapped"
+    },
+    {
+      "symbol": "TargetFilter::required_supertypes",
+      "typed_path": "/faces/0/static_abilities/1/definition/AnthemKeyword/filter/matching/required_supertypes"
+    },
+    {
+      "symbol": "GameCondition::SourceCounterCount",
+      "typed_path": "/faces/0/static_abilities/1/definition/AnthemKeyword/condition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_434_tapped_scopes::issue_434_the_seriema_searches_and_protects_tapped_legends_at_seven_counters",
+      "covers": "mandatory legendary-creature search; 7+ animation and Flying; anthem only for other tapped legendary creatures you control at 7+ counters"
+    },
+    {
+      "test": "mechanic_registry::issue_434_tapped_supertype_scopes::issue_434_the_seriema_gates_flying_and_its_legendary_anthem_at_seven",
+      "covers": "typed entry search, station, 7+ animation and gated anthem"
+    },
+    {
+      "test": "mechanic_registry::issue_434_tapped_supertype_scopes::issue_434_registers_the_three_complete_identities",
+      "covers": "reviewed identity, characteristics and supertypes"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -173,6 +173,8 @@ mod issue_428_choose_two;
 mod issue_429_aura_restriction;
 #[path = "../issue_430_direct_ron.rs"]
 mod issue_430_direct_ron;
+#[path = "../issue_434_tapped_supertype_scopes.rs"]
+mod issue_434_tapped_supertype_scopes;
 #[path = "../issue_444_commands.rs"]
 mod issue_444_commands;
 #[path = "../issue_448_semantic_mapping.rs"]

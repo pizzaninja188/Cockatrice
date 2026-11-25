@@ -1,0 +1,21 @@
+// Oracle 602cce3e-7033-47d6-aec1-d755f234f270; source checked 2026-11-25 against the pinned Scryfall
+// oracle_cards snapshot. Scryfall rulings could not be fetched (HTTP 403); none are relied on.
+// CR 604.1/611.3a (static continuous ability), 613.1f (layer 6), 110.5 (tapped is a status),
+// 702.12b (indestructible).
+(
+  id: "adept_watershaper",
+  name: "Adept Watershaper",
+  face_id: "adept_watershaper",
+  mana_cost: "{2}{W}",
+  types: ["Creature", "Merfolk", "Cleric"],
+  power: 3,
+  toughness: 4,
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: AnthemKeyword(
+      filter: (controller: Some(YouControl), exclude_self: true, matching: (kind: Creature, tapped: Some(true))),
+      keyword: Indestructible,
+    ),
+  )],
+)
