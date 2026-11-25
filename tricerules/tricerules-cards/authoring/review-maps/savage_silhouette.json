@@ -1,0 +1,65 @@
+{
+  "format_version": 1,
+  "oracle_id": "bc243497-d95a-44e0-b7e3-c56b4ff7cd69",
+  "spans": [
+    {
+      "face_id": "savage_silhouette",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "savage_silhouette",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0",
+        "/faces/0/static_abilities/0/definition/AttachedModifier/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::AuraAttach",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "SpellEffectKind::Regenerate",
+      "typed_path": "/faces/0/static_abilities/0/definition/AttachedModifier/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/static_abilities/0/definition/AttachedModifier/activated_abilities/0/costs/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_522_granted_regenerate_auras::issue_522_auras_pump_and_publish_the_printed_regenerate_line",
+      "covers": "actual savage_silhouette attaches, applies its pump and publishes the exact granted activation line"
+    },
+    {
+      "test": "scenario issue_522_granted_regenerate_auras::issue_522_granted_regenerate_shield_replaces_one_destruction",
+      "covers": "actual savage_silhouette's granted ability pays its printed mana, shields the enchanted creature and the shield replaces one destruction"
+    },
+    {
+      "test": "scenario issue_522_granted_regenerate_auras::issue_522_granted_regenerate_rejects_insufficient_mana_without_state_change",
+      "covers": "actual savage_silhouette's granted ability is rejected without its printed mana and leaves state unchanged"
+    },
+    {
+      "test": "scenario issue_522_granted_regenerate_auras::issue_522_granted_regenerate_leaves_with_the_aura",
+      "covers": "actual savage_silhouette's pump, granted ability and annotation disappear when the Aura leaves"
+    },
+    {
+      "test": "mechanic_registry::issue_522_granted_regenerate_auras::issue_522_registers_granted_regenerate_auras",
+      "covers": "exact Oracle identity, mana, type and AttachedModifier with granted Regenerate of savage_silhouette"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

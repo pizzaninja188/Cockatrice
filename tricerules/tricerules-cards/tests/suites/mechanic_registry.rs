@@ -235,6 +235,8 @@ mod issue_510_war_room;
 mod issue_511_maze_of_ith;
 #[path = "../issue_512_standstill.rs"]
 mod issue_512_standstill;
+#[path = "../issue_522_granted_regenerate_auras.rs"]
+mod issue_522_granted_regenerate_auras;
 #[path = "../issue_523_regenerate_spell.rs"]
 mod issue_523_regenerate_spell;
 #[path = "../issue_524_color_graveyard.rs"]

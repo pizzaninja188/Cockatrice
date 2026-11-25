@@ -1,0 +1,24 @@
+// Pinned Oracle bc243497-d95a-44e0-b7e3-c56b4ff7cd69 (pinned oracle-cards bulk).
+// CR 303.4a (Aura target and attach), 613.4c (attached P/T modifier), 613.1f (granted ability),
+// 602.2 (the enchanted creature activates the granted ability) and 701.19a-b (regeneration
+// shield). 704.5m removes the grant with the Aura.
+(
+  id: "savage_silhouette",
+  name: "Savage Silhouette",
+  face_id: "savage_silhouette",
+  mana_cost: "{2}{G}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach()],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([2]),
+      definition: AttachedModifier(delta_power: 2, delta_toughness: 2, activated_abilities: [(
+        ability_id: "activated_01",
+        presentation: Fallback,
+        costs: [Mana("{1}{G}")],
+        effect: [Regenerate(subject: Source)],
+      )]),
+    ),
+  ],
+)

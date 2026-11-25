@@ -6802,6 +6802,29 @@ fn regenerate_chosen_creature_loads_as_spell_source_subject_does_not() {
     assert_eq!(source.validate(EffectContext::Ability), Ok(()));
 }
 
+/// Issue #522: Aura-granted "{cost}: Regenerate this creature." abilities use fallback
+/// presentation, so the source-subject effect renders its printed sentence. A chosen subject
+/// keeps the identified fallback rather than a plausible but incomplete label.
+#[test]
+fn regenerate_source_subject_renders_printed_sentence() {
+    assert_eq!(
+        super::presentation::simple_effects(&[SpellEffectKind::Regenerate {
+            subject: EffectSubject::Source,
+        }])
+        .as_deref(),
+        Some("Regenerate this creature.")
+    );
+    assert_eq!(
+        super::presentation::simple_effects(&[SpellEffectKind::Regenerate {
+            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                kind: TargetKind::Creature,
+                ..Default::default()
+            })),
+        }]),
+        None
+    );
+}
+
 #[test]
 fn combat_restriction_scopes_validate_by_context_and_subject_kind() {
     let cant_block = CombatRestriction {

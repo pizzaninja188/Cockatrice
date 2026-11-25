@@ -808,6 +808,8 @@ mod issue_284_generated_optional_basic_land_to_top;
 mod issue_485_run_away_together;
 #[path = "scenario/issue_507_replicating_ring_program.rs"]
 mod issue_507_replicating_ring_program;
+#[path = "scenario/issue_522_granted_regenerate_auras.rs"]
+mod issue_522_granted_regenerate_auras;
 #[path = "scenario/issue_523_regenerate_spell.rs"]
 mod issue_523_regenerate_spell;
 #[path = "scenario/issue_524_color_graveyard.rs"]

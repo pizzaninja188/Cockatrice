@@ -1,0 +1,65 @@
+{
+  "format_version": 1,
+  "oracle_id": "1a668556-da98-4f1e-b1f7-26b7d63357a1",
+  "spans": [
+    {
+      "face_id": "molting_snakeskin",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "molting_snakeskin",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0",
+        "/faces/0/static_abilities/0/definition/AttachedModifier/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::AuraAttach",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "SpellEffectKind::Regenerate",
+      "typed_path": "/faces/0/static_abilities/0/definition/AttachedModifier/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/static_abilities/0/definition/AttachedModifier/activated_abilities/0/costs/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_522_granted_regenerate_auras::issue_522_auras_pump_and_publish_the_printed_regenerate_line",
+      "covers": "actual molting_snakeskin attaches, applies its pump and publishes the exact granted activation line"
+    },
+    {
+      "test": "scenario issue_522_granted_regenerate_auras::issue_522_granted_regenerate_shield_replaces_one_destruction",
+      "covers": "actual molting_snakeskin's granted ability pays its printed mana, shields the enchanted creature and the shield replaces one destruction"
+    },
+    {
+      "test": "scenario issue_522_granted_regenerate_auras::issue_522_granted_regenerate_rejects_insufficient_mana_without_state_change",
+      "covers": "actual molting_snakeskin's granted ability is rejected without its printed mana and leaves state unchanged"
+    },
+    {
+      "test": "scenario issue_522_granted_regenerate_auras::issue_522_granted_regenerate_leaves_with_the_aura",
+      "covers": "actual molting_snakeskin's pump, granted ability and annotation disappear when the Aura leaves"
+    },
+    {
+      "test": "mechanic_registry::issue_522_granted_regenerate_auras::issue_522_registers_granted_regenerate_auras",
+      "covers": "exact Oracle identity, mana, type and AttachedModifier with granted Regenerate of molting_snakeskin"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

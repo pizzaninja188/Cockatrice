@@ -320,6 +320,11 @@ pub(super) fn simple_effects(effects: &[SpellEffectKind]) -> Option<String> {
                 SpellEffectKind::Sacrifice {
                     subject: EffectSubject::Source,
                 } => "Sacrifice this permanent.".into(),
+                // CR 701.19: only creatures can be regenerated, so a Source subject is always
+                // "this creature" (printed abilities and Aura-granted ones alike).
+                SpellEffectKind::Regenerate {
+                    subject: EffectSubject::Source,
+                } => "Regenerate this creature.".into(),
                 SpellEffectKind::PutCounters {
                     counter,
                     count: Amount::Fixed(count),
