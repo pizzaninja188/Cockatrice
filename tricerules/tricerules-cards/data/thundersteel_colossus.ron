@@ -1,0 +1,29 @@
+// Oracle 9cef3013-6a84-4edd-9a47-e842df2200e3; source/rulings checked 2026-11-25 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 301.7/301.7a and 208.3 (a noncreature Vehicle has no body), 702.122a-e (crew),
+// 702.19 (trample), 702.10 (haste) and 611.2a/514.2 (the
+// type change ends at cleanup). The card has no pinned ruling; the shared 2017-09-29 Vehicle
+// rulings apply. Copy of Consulate Dreadnought's crew ability with Brute Suit's printed-keyword
+// layout.
+(
+  id: "thundersteel_colossus",
+  name: "Thundersteel Colossus",
+  face_id: "thundersteel_colossus",
+  mana_cost: "{7}",
+  types: ["Artifact", "Vehicle"],
+  power: 7,
+  toughness: 7,
+  keywords: [Trample, Haste],
+  activated_abilities: [
+    (
+      ability_id: "crew",
+      presentation: OracleLines([2]),
+      costs: [TapPermanents(
+        constraint: AggregateMinimum(minimum: 2, contribution: CurrentPower),
+        filter: (kind: Creature, controller: You),
+        exclude_source: true,
+      )],
+      effect: [AddTypes(subject: Source, addition: (card_types: [Creature]))],
+    ),
+  ],
+)

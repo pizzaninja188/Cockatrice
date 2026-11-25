@@ -1,0 +1,29 @@
+// Oracle 133f5d30-d883-493e-93a1-cf9583db460b; source/rulings checked 2026-11-25 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.7 (first strike), 702.20 (vigilance), 603.6a (the entry watcher includes this creature
+// or another Ally), 603.5 (the controller may decline the optional ability) and 122.1 (the
+// +1/+1 counter). Pinned ruling 2009-10-01: the ability triggers on this creature entering, so it
+// enters with its unmodified power and toughness and receives the counter only after the trigger
+// resolves. Copy of Silver Raven's printed-keyword-plus-trigger layout with Hada Freeblade's
+// reviewed Ally entry counter.
+(
+  id: "kazandu_blademaster",
+  name: "Kazandu Blademaster",
+  face_id: "kazandu_blademaster",
+  mana_cost: "{W}{W}",
+  types: ["Creature", "Human", "Soldier", "Ally"],
+  power: 1,
+  toughness: 1,
+  keywords: [FirstStrike, Vigilance],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      filter: (permanent_type: Some(Creature)),
+      creature_filter: Some((required_subtypes: ["Ally"])),
+    ),
+    effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
+    may: true,
+  )],
+)

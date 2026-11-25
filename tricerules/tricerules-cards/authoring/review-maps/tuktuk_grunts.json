@@ -1,0 +1,76 @@
+{
+  "format_version": 1,
+  "oracle_id": "200ce414-8583-4bbd-88a6-ca30babb613d",
+  "spans": [
+    {
+      "face_id": "tuktuk_grunts",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "tuktuk_grunts",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverPermanentEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "PermanentTypeFilter::Creature",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "CounterKind::PlusOnePlusOne",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Source",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "Keyword::Haste",
+      "typed_path": "/faces/0/keywords"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q86_batch_a::q86_ally_cards_decline_leaves_the_printed_body",
+      "covers": "shared 01-ally-entry-counter evidence"
+    },
+    {
+      "test": "scenario q86_batch_a::q86_ally_cards_trigger_for_another_ally_you_control",
+      "covers": "shared 01-ally-entry-counter evidence"
+    },
+    {
+      "test": "scenario q86_batch_a::q86_ally_cards_ignore_non_allies_and_opposing_allies",
+      "covers": "shared 01-ally-entry-counter evidence"
+    },
+    {
+      "test": "scenario q86_batch_a::q86_ally_cards_carry_their_exact_printed_characteristics",
+      "covers": "shared 01-ally-entry-counter evidence"
+    },
+    {
+      "test": "mechanic_registry::q86_batch_a::q86_ally_entry_counter_map_definitions",
+      "covers": "actual tuktuk_grunts registry identity and fingerprint"
+    },
+    {
+      "test": "mechanic_registry::q86_batch_a::q86_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual tuktuk_grunts registry identity and fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

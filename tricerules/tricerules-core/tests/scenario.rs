@@ -2696,3 +2696,12 @@ mod q84_etb_gain_life_riders;
 
 #[path = "scenario/q85_batch_a.rs"]
 mod q85_batch_a;
+
+#[path = "scenario/q86_batch_a.rs"]
+mod q86_batch_a;
+
+#[path = "scenario/q86_batch_b.rs"]
+mod q86_batch_b;
+
+#[path = "scenario/q86_batch_c.rs"]
+mod q86_batch_c;

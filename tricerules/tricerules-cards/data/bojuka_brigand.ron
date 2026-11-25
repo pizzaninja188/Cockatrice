@@ -1,0 +1,33 @@
+// Oracle a1d82070-3198-4ead-9431-d90661e29741; source/rulings checked 2026-11-25 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 509.1b (the source-only blocking restriction), 603.6a (the entry watcher includes this
+// creature or another Ally), 603.5 (the controller may decline the optional ability) and 122.1
+// (the +1/+1 counter). The card has no pinned ruling. Copy of Craven Giant's can't-block static
+// plus Hada Freeblade's Ally entry counter.
+(
+  id: "bojuka_brigand",
+  name: "Bojuka Brigand",
+  face_id: "bojuka_brigand",
+  mana_cost: "{1}{B}",
+  types: ["Creature", "Human", "Warrior", "Ally"],
+  power: 1,
+  toughness: 1,
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: SelfCombatRestriction(restriction: (cant_block: true)),
+    ),
+  ],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      filter: (permanent_type: Some(Creature)),
+      creature_filter: Some((required_subtypes: ["Ally"])),
+    ),
+    effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
+    may: true,
+  )],
+)
