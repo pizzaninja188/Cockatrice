@@ -2730,3 +2730,6 @@ mod q86_batch_b;
 
 #[path = "scenario/q86_batch_c.rs"]
 mod q86_batch_c;
+
+#[path = "scenario/issue_535_bounty_hunter.rs"]
+mod issue_535_bounty_hunter;

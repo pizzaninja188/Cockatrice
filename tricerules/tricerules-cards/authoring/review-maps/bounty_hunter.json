@@ -1,0 +1,84 @@
+{
+  "format_version": 1,
+  "oracle_id": "2fd1cfc5-fbcd-4d31-ba8b-759d8c41b435",
+  "spans": [
+    {
+      "face_id": "bounty_hunter",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "bounty_hunter",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "CounterKind::Bounty",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/PutCounters/counter"
+    },
+    {
+      "symbol": "TargetGroupDef",
+      "typed_path": "/faces/0/activated_abilities/0/targeting/groups/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/1/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    },
+    {
+      "symbol": "TargetGroupDef",
+      "typed_path": "/faces/0/activated_abilities/1/targeting/groups/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_535_bounty_hunter::issue_535_puts_exactly_one_bounty_counter_with_no_other_effect",
+      "covers": "Line 1 taps the source and adds exactly one bounty counter to a nonblack creature, with no other counters or P/T change."
+    },
+    {
+      "test": "scenario issue_535_bounty_hunter::issue_535_bounty_counter_cannot_target_a_black_creature",
+      "covers": "Line 1 rejects a black creature target and pays no cost."
+    },
+    {
+      "test": "scenario issue_535_bounty_hunter::issue_535_destroy_requires_a_bounty_counter",
+      "covers": "Line 2 rejects a creature without a bounty counter and pays no cost."
+    },
+    {
+      "test": "scenario issue_535_bounty_hunter::issue_535_destroys_a_creature_with_a_bounty_counter",
+      "covers": "Line 2 destroys a creature carrying a bounty counter placed by line 1."
+    },
+    {
+      "test": "scenario issue_535_bounty_hunter::issue_535_destroy_fizzles_when_the_bounty_counter_is_removed",
+      "covers": "Line 2's target becomes illegal when its bounty counter leaves before resolution, so nothing is destroyed."
+    },
+    {
+      "test": "mechanic_registry::issue_535_bounty_hunter::bounty_hunter_has_its_printed_identity_and_two_tap_abilities",
+      "covers": "Exact identity, mana, types, P/T, both {T} costs, presentation lines, target groups and filters."
+    },
+    {
+      "test": "mechanic_registry::issue_535_bounty_hunter::bounty_hunter_fingerprint_matches_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

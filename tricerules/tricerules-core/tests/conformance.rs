@@ -562,13 +562,14 @@ fn rich_board(e: &mut GameEngine, case: &Case) {
     permanent(e, 0, "treasure");
     permanent(e, 0, "clue");
     let gnomes = creature(e, 0, "bottle_gnomes");
-    // Player 1: a flier, a tapped black creature with a stun counter, an enchantment and a
-    // nonbasic land.
+    // Player 1: a flier, a tapped black creature with stun and bounty counters, an enchantment
+    // and a nonbasic land.
     creature(e, 1, "air_elemental");
     let raiders = creature(e, 1, "bog_raiders");
     let raiders = e.state.objects.get_mut(&raiders).unwrap();
     raiders.tapped = true;
     raiders.set_counter(CounterKind::Stun, 1);
+    raiders.set_counter(CounterKind::Bounty, 1);
     permanent(e, 1, "banishing_light");
     permanent(e, 1, "vivid_grove");
     // Both graveyards: one card of each relevant type plus a Goblin, Elf, multicolored,

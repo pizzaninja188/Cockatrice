@@ -2167,7 +2167,7 @@ pub struct ObjectFilter {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dealt_damage_this_turn: Option<bool>,
     /// A permanent must currently carry at least one counter of this kind. Floodpits Drowner and
-    /// Bounty Hunter-style targeting use the same physical counter predicate as event filters.
+    /// Bounty Hunter targeting use the same physical counter predicate as event filters.
     #[serde(default)]
     pub required_counter: Option<super::CounterKind>,
     /// A permanent must currently carry at least one physical counter of any kind. It is

@@ -23967,6 +23967,14 @@ fn ghostform_counter_is_ordinary_and_round_trips() {
 }
 
 #[test]
+fn bounty_counter_is_ordinary_and_round_trips() {
+    let counter: super::CounterKind = ron::from_str("Bounty").expect("bounty counter parses");
+    assert_eq!(counter.label(), "bounty");
+    assert_eq!(ron::to_string(&counter).unwrap(), "Bounty");
+    assert!(counter.validate().is_ok());
+}
+
+#[test]
 fn ghostform_indefinite_trigger_grant_preserves_default_end_of_turn_and_rejects_other_durations() {
     let base = r#"GrantTriggeredAbility(subject:Chosen((kind:Creature)),ability:(
         ability_id:"granted_01",presentation:Fallback,

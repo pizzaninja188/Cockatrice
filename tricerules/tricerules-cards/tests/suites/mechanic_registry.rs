@@ -1506,3 +1506,6 @@ mod q84_batch_a;
 mod q85_batch_a;
 #[path = "../q86_batch_a.rs"]
 mod q86_batch_a;
+
+#[path = "../issue_535_bounty_hunter.rs"]
+mod issue_535_bounty_hunter;

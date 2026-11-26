@@ -1,0 +1,35 @@
+// Oracle 2fd1cfc5-fbcd-4d31-ba8b-759d8c41b435; source checked 2026-11-26 against the local Scryfall bulk
+// SHA-256 0516f05397c02e093ec03c9cd02bcf4d8d629f1678e7ec8f4b016df7a01d86de (no rulings published).
+// CR 602.2 (activate), 118.3 (costs), 115.1 (one target each), 122.1 (bounty is an ordinary named
+// counter), 608.2b (target re-checked on resolution) and 701.8 (destroy).
+(
+  id: "bounty_hunter",
+  name: "Bounty Hunter",
+  face_id: "bounty_hunter",
+  mana_cost: "{2}{B}{B}",
+  types: ["Creature", "Human", "Archer", "Minion"],
+  power: 2,
+  toughness: 2,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [PutCounters(counter: Bounty, count: 1,
+        subject: Chosen((kind: Creature, not_color: Black)))],
+      targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([2]),
+      costs: [Tap],
+      effect: [Destroy(subject: Chosen((kind: Creature, required_counter: Bounty)))],
+      targeting: Some((groups: [(
+        min: 1,
+        max: 1,
+        prompt: "Choose target creature with a bounty counter on it",
+        effect_indices: [0],
+      )])),
+    ),
+  ],
+)

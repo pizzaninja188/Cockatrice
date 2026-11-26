@@ -121,6 +121,9 @@ pub enum CounterKind {
     Luck,
     /// Kaya the Inexorable's reminder counter. The granted ability has an independent lifetime.
     Ghostform,
+    /// Bounty Hunter's ordinary named counter (CR 122.1). It has no rules of its own; only
+    /// targeting filters such as `ObjectFilter.required_counter` read it.
+    Bounty,
 }
 
 impl CounterKind {
@@ -146,6 +149,7 @@ impl CounterKind {
             CounterKind::Time => "time".into(),
             CounterKind::Luck => "luck".into(),
             CounterKind::Ghostform => "ghostform".into(),
+            CounterKind::Bounty => "bounty".into(),
         }
     }
 
