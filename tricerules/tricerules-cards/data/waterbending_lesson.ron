@@ -13,7 +13,6 @@
       optional: true,
       branches: [(
         branch_id: "waterbend_2",
-        presentation: Fallback,
         cost: Waterbend("{2}"),
         body: (),
       )],

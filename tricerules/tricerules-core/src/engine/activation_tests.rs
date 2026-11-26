@@ -103,7 +103,7 @@ const RESTRICTED_PAYMENT_LAND: &str = r#"(
     id: "restricted_payment_land", name: "Restricted Payment Land", face_id: "restricted_payment_land", types: ["Land"],
     activated_abilities: [(ability_id: "activated_01", presentation: Fallback, costs: [Tap],
         effect: [ProduceMana(options: [(c: 3)], restriction: Some((
-            restriction_id: "restriction_01", presentation: Fallback, activate_any_ability: true,
+            restriction_id: "restriction_01", activate_any_ability: true,
         )))],
     )],
 )"#;
@@ -112,7 +112,7 @@ const SPELL_PAYMENT_LAND: &str = r#"(
     id: "spell_payment_land", name: "Spell Payment Land", face_id: "spell_payment_land", types: ["Land"],
     activated_abilities: [(ability_id: "activated_01", presentation: Fallback, costs: [Tap],
         effect: [ProduceMana(options: [(c: 3)], restriction: Some((
-            restriction_id: "restriction_01", presentation: Fallback, cast_spell: [(card_type: Some(Creature))],
+            restriction_id: "restriction_01", cast_spell: [(card_type: Some(Creature))],
         )))],
     )],
 )"#;
@@ -122,7 +122,7 @@ const CAPTURED_ARTIFACT_PAYMENT_LAND: &str = r#"(
     face_id: "captured_artifact_payment_land", types: ["Land"],
     activated_abilities: [(ability_id: "activated_01", presentation: Fallback,
         costs: [Tap], effect: [ProduceMana(options: [(c: 1)], restriction: Some((
-            restriction_id: "restriction_01", presentation: Fallback,
+            restriction_id: "restriction_01",
             activate_ability: [(card_type: Some(Artifact))],
         )))],
     )],
@@ -133,7 +133,7 @@ const CAPTURED_ARTIFACT_SPELL_PAYMENT_LAND: &str = r#"(
     face_id: "captured_artifact_spell_payment_land", types: ["Land"],
     activated_abilities: [(ability_id: "activated_01", presentation: Fallback,
         costs: [Tap], effect: [ProduceMana(options: [(c: 1)], restriction: Some((
-            restriction_id: "restriction_01", presentation: Fallback,
+            restriction_id: "restriction_01",
             cast_spell: [(card_type: Some(Artifact))],
         )))],
     )],

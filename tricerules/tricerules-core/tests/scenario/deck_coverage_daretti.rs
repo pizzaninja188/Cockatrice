@@ -438,7 +438,7 @@ fn daretti_graveyard_entry_program_resumes_its_tail_once_after_copy_choice() {
                 (id: "choose_sacrifice", kind: Choose(
                     choice: "sacrifice", chooser: Controller, optional: false,
                     branches: [(
-                        branch_id: "sacrifice", presentation: Fallback,
+                        branch_id: "sacrifice",
                         cost: SacrificePermanent(filter: (
                             kind: AnyPermanent, controller: You, permanent_types: [Artifact],
                         )),
@@ -646,7 +646,7 @@ fn assert_emblem_stack_presentation(
         .expect("captured presentation");
     assert_eq!(presentation.card_id, DARETTI);
     assert_eq!(presentation.face_id, "daretti_scrap_savant");
-    assert_eq!(presentation.oracle_line_indices, [3]);
+    assert_eq!(presentation.whole_oracle_lines(), [3]);
     assert_eq!(
         presentation
             .path

@@ -15,7 +15,7 @@
       subject: Some(Chosen((kind: Creature))),
       ability: (
         ability_id: "triggered_01",
-        presentation: Fallback,
+        presentation: OracleFragment(line: 1, part: Sentence(3)),
         trigger: WhenControllerLosesControlOf,
         effect: [Tap(subject: TriggerObject)],
       ),

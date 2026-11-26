@@ -456,7 +456,7 @@ fn path_of_ancestry_triggers_once_for_each_mana_spent_to_cast_the_commander() {
         .as_ref()
         .expect("Path of Ancestry rider presentation");
     assert_eq!(presentation.fallback_text, RIDER);
-    assert_eq!(presentation.oracle_line_indices, vec![2]);
+    assert_eq!(presentation.whole_oracle_lines(), vec![2]);
     assert_eq!(
         engine.state.objects[&commander].zone,
         tricerules_core::Zone::Stack
@@ -889,8 +889,8 @@ fn identical_path_groups_publish_distinct_source_labels() {
         .presentation
         .as_ref()
         .expect("source-bound presentation");
-    assert!(first_presentation.oracle_line_indices.is_empty());
-    assert!(second_presentation.oracle_line_indices.is_empty());
+    assert!(first_presentation.oracle_spans.is_empty());
+    assert!(second_presentation.oracle_spans.is_empty());
     assert_ne!(
         first_presentation.fallback_text,
         second_presentation.fallback_text

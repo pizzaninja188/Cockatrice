@@ -966,7 +966,7 @@ fn issue_240_damage_replacement_resumes_one_paid_branch_and_lexical_tail() {
                 (id: "bottom_choice", kind: Choose(
                     choice: "bottom_choice", chooser: Controller, optional: true,
                     branches: [(
-                        branch_id: "bottom", presentation: Fallback,
+                        branch_id: "bottom",
                         cost: PutHandCardOnLibraryBottom, requirement: Always,
                         body: (steps: [(id: "draw_one", kind: Perform(Draw(
                             who: Controller, count: 1

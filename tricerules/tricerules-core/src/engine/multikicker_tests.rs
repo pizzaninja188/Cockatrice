@@ -4,7 +4,7 @@ const REPEATED_ENTRY: &str = r#"(
     id: "repeated_entry", name: "Repeated Entry", face_id: "repeated_entry",
     mana_cost: "{0}", types: ["Artifact"],
     cast_cost_groups: [(group_id: "multikicker", presentation: Fallback,
-        options: [Mana(option_id: "kick", presentation: Fallback,
+        options: [Mana(option_id: "kick",
             kind: Multikicker, cost: "{2}")])],
     static_abilities: [(ability_id: "entry", presentation: Fallback,
         definition: EntersWithCounters(affected: Self_, counter: Charge,
@@ -579,7 +579,7 @@ fn multikicker_locked_count_survives_failed_payment_and_cancellation_retries() {
 fn multikicker_stack_presentation_keeps_the_dynamic_count_visible() {
     let mut e = engine();
     let ron = REPEATED_ENTRY.replace(
-        "option_id: \"kick\", presentation: Fallback,",
+        "option_id: \"kick\",",
         "option_id: \"kick\", presentation: OracleLines([1]),",
     );
     e.registry = Box::leak(Box::new(
@@ -600,7 +600,7 @@ fn multikicker_stack_presentation_keeps_the_dynamic_count_visible() {
     let presentation = &pushed.chosen_cast_cost_presentations[0];
     assert_eq!(presentation.fallback_text, "Multikicker {2} × 3");
     assert!(
-        presentation.oracle_line_indices.is_empty(),
+        presentation.oracle_spans.is_empty(),
         "a resolved static Oracle line cannot replace the dynamic paid count"
     );
 }

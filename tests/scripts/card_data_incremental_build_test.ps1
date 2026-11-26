@@ -32,7 +32,8 @@ try {
     $null = Invoke-MeasuredBuild 'baseline'
     $card = Get-ChildItem -LiteralPath (Join-Path $repo 'tricerules/tricerules-cards/data') -Filter '*.ron' -Recurse |
         Sort-Object FullName | Select-Object -First 1
-    foreach ($path in @($card.FullName, (Join-Path $repo 'tricerules/tricerules-cards/presentation/oracle_fingerprints.tsv'))) {
+    foreach ($path in @($card.FullName, (Join-Path $repo 'tricerules/tricerules-cards/presentation/oracle_fingerprints.tsv'),
+            (Join-Path $repo 'tricerules/tricerules-cards/presentation/oracle_fragments.tsv'))) {
         $bytes = [IO.File]::ReadAllBytes($path)
         try {
             [IO.File]::WriteAllBytes($path, [byte[]] ($bytes + [byte]10))

@@ -461,7 +461,7 @@ fn issue_424_gearbane_modes_bind_the_up_to_one_destroy_and_mandatory_sacrifice()
     assert_eq!(branch.branch_id.as_str(), "sacrifice_an_artifact");
     assert_eq!(
         branch.presentation,
-        tricerules_cards::AbilityPresentation::OracleLines(vec![4])
+        tricerules_cards::ChoicePresentation::OracleLines(vec![4])
     );
     assert!(matches!(
         &branch.requirement,
@@ -671,7 +671,7 @@ fn issue_424_butcher_modes_bind_the_rat_token_another_sacrifice_and_team_menace(
     assert_eq!(branch.branch_id.as_str(), "sacrifice_another_creature");
     assert_eq!(
         branch.presentation,
-        tricerules_cards::AbilityPresentation::OracleLines(vec![3])
+        tricerules_cards::ChoicePresentation::OracleLines(vec![3])
     );
     assert!(matches!(
         &branch.requirement,

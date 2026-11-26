@@ -5,8 +5,8 @@
 
 use super::{
     AbilityCost, Amount, CardTypeFilter, EffectSubject, LibraryPartitionKind, LifeAmount,
-    ManaAmount, ManaRetention, ObjectFilter, PlayerRecipient, SpellEffectKind, TargetController,
-    TargetKind,
+    ManaAmount, ManaRetention, ObjectFilter, PlayerRecipient, SearchDestination,
+    SearchZoneSelection, SpellEffectKind, TargetController, TargetKind, ZoneCardFilter,
 };
 
 fn mana_text(amount: &ManaAmount) -> String {
@@ -111,6 +111,71 @@ pub(super) fn simple_costs(costs: &[AbilityCost], source: &str) -> Option<String
         })
         .collect::<Option<Vec<_>>>()
         .map(|parts| parts.join(", "))
+}
+
+/// A single-card library tutor whose every field is the plain default except the card type and
+/// a hand or battlefield destination. Lander and Evolving Wilds style searches; anything else
+/// (optional, counted, slotted, revealed, other zones, conditional placement) is None.
+fn simple_search(effect: &SpellEffectKind) -> Option<String> {
+    let SpellEffectKind::SearchLibrary {
+        who: PlayerRecipient::Controller,
+        optional: false,
+        count: 1,
+        count_by_cast_cost: None,
+        filter,
+        selection_constraint: None,
+        slots,
+        zones,
+        destination,
+        conditional_destination: None,
+        shuffle: true,
+        reveal: false,
+        selection_bounds: None,
+    } = effect
+    else {
+        return None;
+    };
+    if !slots.is_empty() || *zones != SearchZoneSelection::default() {
+        return None;
+    }
+    let card = match filter {
+        None => "a card".to_string(),
+        Some(filter) => {
+            let card_type = filter.card_type?;
+            let only_type = ZoneCardFilter {
+                card_type: Some(card_type),
+                ..ZoneCardFilter::default()
+            };
+            if *filter != only_type {
+                return None;
+            }
+            let label = card_type_label(card_type);
+            let article = if label.starts_with(['a', 'e', 'i', 'o', 'u']) {
+                "an"
+            } else {
+                "a"
+            };
+            format!("{article} {label} card")
+        }
+    };
+    let placement = match destination {
+        SearchDestination::Hand => "put it into your hand",
+        SearchDestination::Battlefield { tapped: false } => "put it onto the battlefield",
+        SearchDestination::Battlefield { tapped: true } => "put it onto the battlefield tapped",
+        _ => return None,
+    };
+    Some(format!(
+        "Search your library for {card}, {placement}, then shuffle."
+    ))
+}
+
+/// A resolution-branch button label. A branch that only searches is the option "Search" (issue
+/// #284): a button names the choice, while ability text must stay a complete sentence.
+pub(super) fn branch_label(effects: &[SpellEffectKind]) -> Option<String> {
+    if let [SpellEffectKind::SearchLibrary { .. }] = effects {
+        return Some("Search".into());
+    }
+    simple_effects(effects)
 }
 
 pub(super) fn simple_effects(effects: &[SpellEffectKind]) -> Option<String> {
@@ -297,7 +362,7 @@ pub(super) fn simple_effects(effects: &[SpellEffectKind]) -> Option<String> {
                 } => "Discard any number of cards.".into(),
                 SpellEffectKind::Proliferate => "Proliferate.".into(),
                 SpellEffectKind::Blight { count } => format!("Blight {count}."),
-                SpellEffectKind::SearchLibrary { .. } => "Search".into(),
+                SpellEffectKind::SearchLibrary { .. } => simple_search(effect)?,
                 SpellEffectKind::ReturnAllToOwnersHand { kind } => {
                     let color = kind.is_color?;
                     let exact = ObjectFilter {
@@ -367,4 +432,49 @@ pub(super) fn simple_effects(effects: &[SpellEffectKind]) -> Option<String> {
         })
         .collect::<Option<Vec<_>>>()
         .map(|parts| parts.join(" "))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn search(ron_text: &str) -> Option<String> {
+        let effect: SpellEffectKind = ron::from_str(ron_text).expect("search fixture parses");
+        simple_effects(&[effect])
+    }
+
+    #[test]
+    fn simple_search_renders_a_complete_sentence() {
+        assert_eq!(
+            search("SearchLibrary(filter: Some((card_type: Some(BasicLand))), destination: Battlefield(tapped: true))"),
+            Some("Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.".into())
+        );
+        assert_eq!(
+            search("SearchLibrary(filter: Some((card_type: Some(Artifact))))"),
+            Some(
+                "Search your library for an artifact card, put it into your hand, then shuffle."
+                    .into()
+            )
+        );
+        assert_eq!(
+            search("SearchLibrary()"),
+            Some("Search your library for a card, put it into your hand, then shuffle.".into())
+        );
+    }
+
+    #[test]
+    fn search_that_cannot_be_fully_described_is_none_not_a_bare_verb() {
+        for unsupported in [
+            "SearchLibrary(optional: true, filter: Some((card_type: Some(BasicLand))))",
+            "SearchLibrary(count: 2, filter: Some((card_type: Some(BasicLand))))",
+            "SearchLibrary(reveal: true, filter: Some((card_type: Some(Creature))))",
+            "SearchLibrary(shuffle: false)",
+            "SearchLibrary(destination: Graveyard)",
+            "SearchLibrary(destination: TopOfLibrary)",
+            "SearchLibrary(filter: Some((card_type: Some(Creature), max_mana_value: Some(3))))",
+            "SearchLibrary(filter: Some((required_subtypes: [\"Forest\"])))",
+        ] {
+            assert_eq!(search(unsupported), None, "{unsupported}");
+        }
+    }
 }

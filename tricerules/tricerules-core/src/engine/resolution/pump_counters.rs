@@ -850,7 +850,7 @@ pub(super) fn grant_keyword_choice(
                         tricerules_card_model::slugify(&label),
                     )
                     .expect("keyword names produce stable choice ids"),
-                    presentation: tricerules_card_model::AbilityPresentation::Fallback,
+                    presentation: tricerules_card_model::ChoicePresentation::Generated,
                     runtime_fallback: Some(label),
                     cost: ResolutionCost::None,
                     requirement: Default::default(),
@@ -897,7 +897,7 @@ pub(super) fn grant_protection(
                                 tricerules_card_model::slugify(&label),
                             )
                             .expect("protection qualities produce stable choice ids"),
-                            presentation: tricerules_card_model::AbilityPresentation::Fallback,
+                            presentation: tricerules_card_model::ChoicePresentation::Generated,
                             runtime_fallback: Some(label),
                             cost: ResolutionCost::None,
                             requirement: Default::default(),

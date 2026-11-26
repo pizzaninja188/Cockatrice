@@ -5,7 +5,8 @@ use tricerules_cards::primitives::{
     SearchZoneSelection, SpellEffectKind, TriggerCondition, TriggeredAbilityDef, ZoneCardFilter,
 };
 use tricerules_cards::{
-    AbilityDefinitionId, AbilityPresentation, CardFace, CardRegistry, ManaCost, ProgramOwnerId,
+    AbilityDefinitionId, AbilityPresentation, CardFace, CardRegistry, ChoicePresentation, ManaCost,
+    ProgramOwnerId,
 };
 
 fn program_for_ability<'a>(
@@ -76,7 +77,7 @@ fn assert_single_perform(branch: &CompiledChooseBranch, expected: SpellEffectKin
 
 fn assert_worldwagon_battlefield_search(branch: &CompiledChooseBranch) {
     assert_eq!(branch.cost, ResolutionCost::None);
-    assert_eq!(branch.presentation, AbilityPresentation::Fallback);
+    assert_eq!(branch.presentation, ChoicePresentation::Generated);
     let [instruction] = branch.body.steps.as_slice() else {
         panic!("a Worldwagon search branch has one SearchLibrary operation");
     };
@@ -169,7 +170,7 @@ fn ant_mans_army_registry_has_mandatory_food_or_treasure_choose() {
         &["create_food", "create_treasure"],
     );
     assert_eq!(branches[0].cost, ResolutionCost::None);
-    assert_eq!(branches[0].presentation, AbilityPresentation::Fallback);
+    assert_eq!(branches[0].presentation, ChoicePresentation::Generated);
     assert_eq!(branches[0].fallback_label(), "Choice (create_food)");
     assert_single_perform(
         &branches[0],
@@ -182,7 +183,7 @@ fn ant_mans_army_registry_has_mandatory_food_or_treasure_choose() {
         },
     );
     assert_eq!(branches[1].cost, ResolutionCost::None);
-    assert_eq!(branches[1].presentation, AbilityPresentation::Fallback);
+    assert_eq!(branches[1].presentation, ChoicePresentation::Generated);
     assert_eq!(branches[1].fallback_label(), "Choice (create_treasure)");
     assert_single_perform(
         &branches[1],
@@ -227,7 +228,7 @@ fn consecrated_sphinx_registry_keeps_the_optional_free_draw_two_branch() {
     assert_eq!(branches[0].cost, ResolutionCost::None);
     assert_eq!(
         branches[0].presentation,
-        AbilityPresentation::OracleLines(vec![2])
+        ChoicePresentation::OracleLines(vec![2])
     );
     assert_single_perform(
         &branches[0],
@@ -268,7 +269,7 @@ fn mentor_of_the_meek_registry_keeps_its_event_filter_and_optional_paid_draw() {
         &branches[0].cost,
         ResolutionCost::Mana(cost) if cost == &ManaCost::parse("{1}").unwrap()
     ));
-    assert_eq!(branches[0].presentation, AbilityPresentation::Fallback);
+    assert_eq!(branches[0].presentation, ChoicePresentation::Generated);
     assert_eq!(branches[0].fallback_label(), "Pay {1}");
     assert_single_perform(
         &branches[0],
@@ -313,7 +314,7 @@ fn minds_eye_registry_keeps_the_optional_paid_draw_and_oracle_presentation() {
     ));
     assert_eq!(
         branches[0].presentation,
-        AbilityPresentation::OracleLines(vec![1])
+        ChoicePresentation::OracleLines(vec![1])
     );
     assert_single_perform(
         &branches[0],
@@ -359,12 +360,13 @@ fn icewrought_sentry_and_sparktongue_compile_their_paid_reflexive_programs() {
         sentry_branch.cost,
         ResolutionCost::Mana(ManaCost::parse("{1}{U}").unwrap())
     );
-    assert_eq!(sentry_branch.presentation, AbilityPresentation::Fallback);
+    assert_eq!(sentry_branch.presentation, ChoicePresentation::Generated);
     assert_single_perform(
         sentry_branch,
         ron::from_str::<SpellEffectKind>(
             r#"CreateReflexiveTrigger(ability: (
-                ability_id: "reflexive_01", presentation: Fallback,
+                ability_id: "reflexive_01",
+                presentation: OracleFragment(line: 2, part: Sentence(2)),
                 effect: [Tap(subject: Chosen((kind: Creature, controller: Opponent)))],
             ))"#,
         )
@@ -399,12 +401,13 @@ fn icewrought_sentry_and_sparktongue_compile_their_paid_reflexive_programs() {
         dragon_branch.cost,
         ResolutionCost::Mana(ManaCost::parse("{2}{R}").unwrap())
     );
-    assert_eq!(dragon_branch.presentation, AbilityPresentation::Fallback);
+    assert_eq!(dragon_branch.presentation, ChoicePresentation::Generated);
     assert_single_perform(
         dragon_branch,
         ron::from_str::<SpellEffectKind>(
             r#"CreateReflexiveTrigger(ability: (
-                ability_id: "reflexive_01", presentation: Fallback,
+                ability_id: "reflexive_01",
+                presentation: OracleFragment(line: 2, part: Sentence(2)),
                 effect: [DamageTarget(amount: 3, target: (kind: AnyTarget))],
             ))"#,
         )
@@ -480,7 +483,7 @@ fn solemn_simulacrum_registry_programs_the_search_and_death_draw_owners() {
     assert_eq!(branches[0].cost, ResolutionCost::None);
     assert_eq!(
         branches[0].presentation,
-        AbilityPresentation::OracleLines(vec![2])
+        ChoicePresentation::OracleLines(vec![2])
     );
     assert_single_perform(
         &branches[0],

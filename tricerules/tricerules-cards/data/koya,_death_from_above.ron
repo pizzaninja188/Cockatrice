@@ -35,8 +35,6 @@
                   choice: "pay_or_return", chooser: Controller, optional: true,
                   branches: [(
                     branch_id: "pay",
-                    // The choice is only the payment fragment of the printed delayed instruction.
-                    presentation: Fallback,
                     cost: Mana("{3}{B}"),
                     body: (),
                   )],

@@ -17,7 +17,7 @@
       (id: "choose_tap", kind: Choose(
         choice: "tap_permanent", chooser: Controller, optional: true,
         branches: [(
-          branch_id: "tap_another_untapped_creature_you_control", presentation: Fallback,
+          branch_id: "tap_another_untapped_creature_you_control",
           cost: TapPermanents(
             count: 1,
             filter: (kind: Creature, controller: You),

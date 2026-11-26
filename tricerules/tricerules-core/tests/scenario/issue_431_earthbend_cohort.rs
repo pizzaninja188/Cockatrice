@@ -108,7 +108,7 @@ fn assert_return_trigger_text(push: &StackPushed, source_name: &str) {
         .as_ref()
         .expect("return trigger presentation");
     assert_eq!(presentation.fallback_text, EARTHBEND_RETURN_TEXT);
-    assert!(presentation.oracle_line_indices.is_empty());
+    assert!(presentation.oracle_spans.is_empty());
     assert_eq!(presentation.external_card_name, source_name);
     assert_eq!(
         presentation

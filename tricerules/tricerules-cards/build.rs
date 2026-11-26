@@ -25,6 +25,7 @@ fn main() {
     // Directory-level: re-runs on file adds, removes, and edits anywhere under data/.
     println!("cargo:rerun-if-changed=data");
     println!("cargo:rerun-if-changed=presentation/oracle_fingerprints.tsv");
+    println!("cargo:rerun-if-changed=presentation/oracle_fragments.tsv");
 
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR"));
     let mut files = Vec::new();
@@ -98,6 +99,45 @@ fn main() {
         generated.push_str(&format!(
             "    ({:?}, {:?}, {:?}, {:?}, {:?}),\n",
             fields[0], fields[1], fields[2], fields[3], fields[4]
+        ));
+    }
+    generated.push_str("];\n");
+
+    let fragment_source =
+        fs::read_to_string(manifest_dir.join("presentation/oracle_fragments.tsv"))
+            .expect("read generated presentation fragments");
+    generated.push_str(
+        "/// Generated Oracle fragment offsets (card, face, line, part, start, end). No prose.\n\
+         const EMBEDDED_PRESENTATION_FRAGMENTS: &[(&str, &str, u16, &str, u32, u32)] = &[\n",
+    );
+    for (line_number, line) in fragment_source.lines().enumerate() {
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let fields: Vec<_> = line.split('\t').collect();
+        assert_eq!(
+            fields.len(),
+            6,
+            "presentation fragment line {} must have six tab-separated fields",
+            line_number + 1
+        );
+        let number = |index: usize| -> u32 {
+            fields[index].parse().unwrap_or_else(|_| {
+                panic!(
+                    "presentation fragment line {} field {} must be a number",
+                    line_number + 1,
+                    index + 1
+                )
+            })
+        };
+        generated.push_str(&format!(
+            "    ({:?}, {:?}, {}, {:?}, {}, {}),\n",
+            fields[0],
+            fields[1],
+            u16::try_from(number(2)).expect("fragment line fits u16"),
+            fields[3],
+            number(4),
+            number(5)
         ));
     }
     generated.push_str("];\n");

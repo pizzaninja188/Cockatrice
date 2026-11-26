@@ -390,7 +390,10 @@ fn issue_429_new_horizons_counters_and_grants_two_mana_of_one_color() {
             activated_abilities: vec![ActivatedAbilityDef {
                 intrinsic_land_mana: false,
                 ability_id: tricerules_cards::AbilityId::new("activated_01").unwrap(),
-                presentation: AbilityPresentation::Fallback,
+                presentation: AbilityPresentation::OracleFragment {
+                    line: 3,
+                    part: tricerules_cards::OracleFragmentPart::Quote(1),
+                },
                 cost_modifiers: Vec::new(),
                 source_zone: AbilitySourceZone::Battlefield,
                 costs: vec![AbilityCost::Tap],
@@ -413,7 +416,13 @@ fn issue_429_new_horizons_counters_and_grants_two_mana_of_one_color() {
         }
     );
     let granted = granted_ability(definition);
-    assert_eq!(granted.presentation, AbilityPresentation::Fallback);
+    assert_eq!(
+        granted.presentation,
+        AbilityPresentation::OracleFragment {
+            line: 3,
+            part: tricerules_cards::OracleFragmentPart::Quote(1),
+        }
+    );
     assert_eq!(granted.costs, [AbilityCost::Tap]);
 }
 
@@ -464,7 +473,10 @@ fn issue_429_friendly_neighborhood_creates_citizens_and_pumps_per_creature() {
             activated_abilities: vec![ActivatedAbilityDef {
                 intrinsic_land_mana: false,
                 ability_id: tricerules_cards::AbilityId::new("activated_01").unwrap(),
-                presentation: AbilityPresentation::Fallback,
+                presentation: AbilityPresentation::OracleFragment {
+                    line: 3,
+                    part: tricerules_cards::OracleFragmentPart::Quote(1),
+                },
                 cost_modifiers: Vec::new(),
                 source_zone: AbilitySourceZone::Battlefield,
                 costs: vec![

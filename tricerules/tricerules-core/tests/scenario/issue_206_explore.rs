@@ -306,7 +306,7 @@ fn issue_206_spyglass_siren_creates_a_map_whose_atomic_activation_explores() {
     assert_eq!(presentation.prefix, "Triggered: Spyglass Siren — ");
     let ability = presentation.ability.as_ref().expect("ability reference");
     assert_eq!(ability.external_card_name, "Spyglass Siren");
-    assert_eq!(ability.oracle_line_indices, vec![2]);
+    assert_eq!(ability.whole_oracle_lines(), vec![2]);
     let siren = battlefield_object_for_card(&engine, 0, "spyglass_siren");
     assert!(engine
         .state

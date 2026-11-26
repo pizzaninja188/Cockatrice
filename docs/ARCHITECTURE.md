@@ -209,9 +209,12 @@ ordinary display text. Source URL/version remain in the database's existing `<in
 `CardInfo` owns a `RuledOracleText` object, and the XML reader, writer, and card clone preserve it.
 `RuledPresentationResolver` queries the currently loaded database through `RuledClientHost`,
 checks the exact external card/face identity and normalized text fingerprint supplied by the
-engine, and selects the one-based Oracle lines. It never parses combined display text to guess
-face boundaries. Missing, malformed, or incompatible face data returns the engine fallback as
-one unit; explicit `Fallback` mappings still bypass external text.
+engine, and selects the published Oracle spans: whole one-based lines, or Unicode-scalar ranges of
+one line for a quoted grant, single sentence or single keyword. Fragment offsets are generated in
+Rust at refresh time, so the client never parses quotes, sentences or keywords. It never parses
+combined display text to guess face boundaries. Missing, malformed, or incompatible face data, or
+any out-of-range span, returns the engine fallback as one unit; explicit `Fallback` mappings and
+generated choice labels still bypass external text.
 
 There is no companion `cards.ruled-oracle.json` file or separate file watcher. Reimport with
 the fork's Oracle and reload the card database after upgrading an old installation; an old

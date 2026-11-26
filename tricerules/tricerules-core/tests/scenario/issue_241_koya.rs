@@ -45,7 +45,7 @@ const NON_KOYA_EXILE_SPELL_FIXTURE: &str = r#"(id: "spell_exile_reuse_fixture", 
                         (id: "choose_return", kind: Choose(
                             choice: "pay_or_return", chooser: Controller,
                             optional: true,
-                            branches: [(branch_id: "pay", presentation: Fallback,
+                            branches: [(branch_id: "pay",
                                 cost: Mana("{1}"), requirement: Always,
                                 body: (steps: [], yields: []))],
                             otherwise: (steps: [

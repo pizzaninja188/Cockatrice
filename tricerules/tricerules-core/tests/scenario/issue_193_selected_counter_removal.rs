@@ -238,7 +238,7 @@ fn issue_193_sage_of_fables_supplies_a_counter_then_spends_it_from_the_other_wiz
         .expect("Sage activation presentation");
     assert_eq!(presentation.external_card_name, "Sage of Fables");
     assert_eq!(presentation.external_face_name, "Sage of Fables");
-    assert_eq!(presentation.oracle_line_indices, [2]);
+    assert_eq!(presentation.whole_oracle_lines(), [2]);
     assert_eq!(presentation.oracle_text_sha256.len(), 64);
     ensure_card_in_hand(&mut engine, 0, "fugitive_wizard");
     give_mana(

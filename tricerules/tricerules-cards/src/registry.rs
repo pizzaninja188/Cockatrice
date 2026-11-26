@@ -1,5 +1,5 @@
 //! Production embedded card corpus; the model crate owns parsing and validation.
-use crate::PresentationFaceMetadata;
+use crate::{OracleFragmentPart, PresentationFaceMetadata};
 use once_cell::sync::Lazy;
 pub use tricerules_card_model::registry::{CardRegistry, RegistryError};
 
@@ -22,6 +22,16 @@ pub fn from_embedded() -> Result<CardRegistry, RegistryError> {
                             face_name: face_name.to_string(),
                             oracle_text_sha256: oracle_text_sha256.to_string(),
                         },
+                    )
+                },
+            ))
+            .with_presentation_fragments(EMBEDDED_PRESENTATION_FRAGMENTS.iter().map(
+                |&(card_id, face_id, line, part, start, end)| {
+                    let part = OracleFragmentPart::decode(part)
+                        .expect("generated fragment table uses canonical part encoding");
+                    (
+                        (card_id.to_string(), face_id.to_string(), line, part),
+                        (start, end),
                     )
                 },
             )),
@@ -71,6 +81,53 @@ mod tests {
     use ron::{extensions::Extensions, Options};
     static RON_OPTS: Lazy<Options> =
         Lazy::new(|| Options::default().with_default_extension(Extensions::IMPLICIT_SOME));
+    /// Generated ability text is the safety net when no Oracle span applies. It must be a complete
+    /// sentence or the identified generic label, never a truncated phrase such as Lander's former
+    /// `{2}, {T}, Sacrifice Lander: Search`.
+    #[test]
+    fn every_generated_ability_fallback_is_complete_or_identified() {
+        let tokens = super::EMBEDDED_TOKEN_CHUNKS.iter().map(|chunk| {
+            RON_OPTS
+                .from_str::<TokenDefinition>(chunk)
+                .expect("embedded token parses")
+                .to_card_def()
+        });
+        let cards = super::global().definitions().cloned();
+        let mut checked = 0;
+        for definition in cards.chain(tokens) {
+            for face in &definition.faces {
+                let texts = face
+                    .activated_abilities
+                    .iter()
+                    .map(|ability| ability.fallback_text(&face.name))
+                    .chain(
+                        face.triggered_abilities
+                            .iter()
+                            .map(|ability| ability.fallback_text(&face.name)),
+                    );
+                for text in texts {
+                    let identified = text.starts_with(&format!("{} — ", face.name));
+                    assert!(
+                        identified || text.ends_with('.') || text.ends_with('"'),
+                        "{} / {}: incomplete generated text {text:?}",
+                        definition.id,
+                        face.face_id
+                    );
+                    checked += 1;
+                }
+            }
+        }
+        assert!(
+            checked > 1000,
+            "the corpus scan covered {checked} abilities"
+        );
+        let lander = super::global().get("lander").expect("Lander token");
+        assert_eq!(
+            lander.faces[0].activated_abilities[0].fallback_text("Lander"),
+            "{2}, {T}, Sacrifice Lander: Search your library for a basic land card, put it onto the battlefield tapped, then shuffle."
+        );
+    }
+
     #[test]
     fn commander_color_identity_counts_mana_symbols_but_not_any_color_output() {
         let registry = super::global();
@@ -1008,7 +1065,7 @@ mod tests {
                     presentation: Fallback,
                     min: 1,
                     max: 1,
-                    options: [DiscardCard(option_id: "discard", presentation: Fallback)],
+                    options: [DiscardCard(option_id: "discard")],
                 )],
                 spell_effect:"#,
             );

@@ -816,7 +816,7 @@ message ResolutionPromptState {
 
 // Stable authored presentation identity. Positional command coordinates such as face_index,
 // ability_index, option_index, and branch_index never appear in this path. Oracle text remains
-// external and optional: clients may select oracle_line_indices only when the complete normalized
+// external and optional: clients may select oracle_spans only when the complete normalized
 // external face matches oracle_text_sha256, otherwise they must use fallback_text verbatim.
 enum PresentationPathKind {
   PRESENTATION_PATH_KIND_UNSPECIFIED = 0;
@@ -836,11 +836,21 @@ message PresentationPathComponent {
   string id = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
+// One selected piece of the normalized external face: a whole one-based line when start and end
+// are absent, otherwise the Unicode-scalar [start, end) range of that line (a quoted grant, one
+// sentence or one keyword). Offsets are generated from the pinned face the fingerprint names.
+message OracleSpan {
+  uint32 line = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  optional uint32 start = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  optional uint32 end = 3 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+}
+
 message PresentationRef {
+  reserved 4;
+  reserved "oracle_line_indices";
   string card_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   string face_id = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   repeated PresentationPathComponent path = 3 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
-  repeated uint32 oracle_line_indices = 4 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   string fallback_text = 5 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   // Engine-supplied display lookup names. They do not define card_id or face_id and are never
   // consulted for rules, legality, identity, or command validation.
@@ -849,6 +859,9 @@ message PresentationRef {
   // Lowercase SHA-256 of the normalized full external face (trimmed nonempty LF-separated lines).
   // Empty means external rendering is intentionally unavailable and forces fallback_text.
   string oracle_text_sha256 = 8 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // Ordered by (line, start), non-overlapping, joined with LF. Empty forces fallback_text; any
+  // invalid span forces fallback_text for the whole reference.
+  repeated OracleSpan oracle_spans = 9 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 // Engine-computed targeting data for one spell or activated ability. Clients use this

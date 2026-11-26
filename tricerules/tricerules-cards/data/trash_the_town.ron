@@ -54,7 +54,7 @@
           subject: Chosen((kind: Creature)),
           ability: (
             ability_id: "granted_01",
-            presentation: Fallback,
+            presentation: OracleFragment(line: 4, part: Quote(1)),
             trigger: WheneverSelfDealsCombatDamageToPlayer,
             effect: [Draw(count: 2)],
           ),

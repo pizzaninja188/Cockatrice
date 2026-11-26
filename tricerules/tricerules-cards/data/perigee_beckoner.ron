@@ -18,7 +18,7 @@
         subject: Chosen((kind: Creature, controller: You, excluded_objects: [Source])),
         ability: (
           ability_id: "triggered_01",
-          presentation: Fallback,
+          presentation: OracleFragment(line: 1, part: Quote(1)),
           trigger: WhenSelfDies,
           effect: [ReturnTriggeredCard(from: [Graveyard], reference: AbilitySource, tapped: true)],
         ),

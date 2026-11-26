@@ -21,8 +21,6 @@
             commander_color_identity: true,
             restriction: Some((
                 restriction_id: "commander_creature_scry",
-                // This structured restriction is a child of the single printed mana ability; its wording is already mapped on the parent.
-                presentation: Fallback,
                 unrestricted: true,
                 spending_effects: [Scry1IfSpellSharesCreatureTypeWithCommander],
             )),

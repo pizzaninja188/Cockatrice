@@ -36,7 +36,7 @@
             (id: "sacrifice", kind: Choose(
                 choice: "sacrifice_artifact", chooser: Controller, optional: false,
                 branches: [(
-                    branch_id: "sacrifice", presentation: Fallback,
+                    branch_id: "sacrifice",
                     cost: SacrificePermanent(filter: (
                         kind: AnyPermanent, controller: You, permanent_types: [Artifact],
                     )),

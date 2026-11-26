@@ -5,8 +5,8 @@ use tricerules_cards::primitives::{
     SpellEffectKind, TargetKind, TriggerCondition,
 };
 use tricerules_cards::{
-    AbilityDefinitionId, AbilityPresentation, EffectContext, Keyword, Layout, ManaCost,
-    ProgramOwnerId,
+    AbilityDefinitionId, AbilityPresentation, ChoicePresentation, EffectContext, Keyword, Layout,
+    ManaCost, ProgramOwnerId,
 };
 
 #[test]
@@ -89,7 +89,7 @@ fn combustible_gearhulk_registers_its_exact_identity_and_etb_choice() {
     assert_eq!(draw_branch.branch_id.as_str(), "draw_three");
     assert_eq!(
         draw_branch.presentation,
-        AbilityPresentation::OracleLines(vec![2])
+        ChoicePresentation::OracleLines(vec![2])
     );
     assert_eq!(draw_branch.requirement, CompiledChooseRequirement::Always);
     assert_eq!(draw_branch.cost, ResolutionCost::None);

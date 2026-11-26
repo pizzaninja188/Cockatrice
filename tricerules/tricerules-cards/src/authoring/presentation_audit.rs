@@ -129,6 +129,51 @@ fn report_node(
     reason: Option<&str>,
 ) -> (String, bool) {
     let mapping = &node["presentation"];
+    if mapping == "Generated" {
+        // Only choice labels (branches, cast-cost options, search slots, mana restrictions,
+        // draw-count choices) can carry this value; the type system rules it out elsewhere.
+        if reason.is_some() {
+            return (
+                format!("  {path}: UNNEEDED EXCEPTION — generated choice labels need no row\n"),
+                true,
+            );
+        }
+        return (format!("  {path}: generated choice label\n"), false);
+    }
+    if let Some(fragment) = mapping.get("OracleFragment") {
+        let resolved = serde_json::from_value::<crate::AbilityPresentation>(mapping.clone())
+            .ok()
+            .and_then(|presentation| match presentation {
+                crate::AbilityPresentation::OracleFragment { line, part } => Some((line, part)),
+                _ => None,
+            })
+            .ok_or_else(|| "malformed selector".to_string())
+            .and_then(|(line, part)| {
+                let lines = lines.ok_or_else(|| "no face data".to_string())?;
+                let text = usize::from(line)
+                    .checked_sub(1)
+                    .and_then(|index| lines.get(index))
+                    .ok_or_else(|| format!("line {line} of {} available", lines.len()))?;
+                let (start, end) = crate::resolve_oracle_fragment(text, part)
+                    .map_err(|error| error.to_string())?;
+                Ok(crate::oracle_fragment::slice_scalars(text, start, end)
+                    .expect("resolved offsets are in range"))
+            });
+        return match resolved {
+            Ok(text) => (
+                format!("  {path}: mapped fragment {fragment} → {text}\n"),
+                reason.is_some(),
+            ),
+            Err(error) if lines.is_none() => (
+                format!("  {path}: MISSING FACE DATA {fragment} ({error})\n"),
+                true,
+            ),
+            Err(error) => (
+                format!("  {path}: INVALID FRAGMENT {fragment} — {error}\n"),
+                true,
+            ),
+        };
+    }
     if mapping == "Fallback" {
         if let Some(reason) = reason {
             return (
@@ -292,7 +337,10 @@ pub fn run(
                 );
                 report.push_str(&entry);
                 problems += usize::from(problem);
-                if reason.is_some() && node["presentation"] != "Fallback" {
+                if reason.is_some()
+                    && node["presentation"] != "Fallback"
+                    && node["presentation"] != "Generated"
+                {
                     report.push_str("    STALE EXCEPTION: node is now mapped.\n");
                 }
             }
@@ -395,7 +443,7 @@ mod tests {
                     (id: "choose_child", kind: Choose(
                         choice: "nested_choice", chooser: Controller, optional: false,
                         branches: [(
-                            branch_id: "child", presentation: Fallback, cost: None,
+                            branch_id: "child", cost: None,
                             requirement: Always,
                             body: (steps: [(id: "draw", kind: Perform(Draw(who: Controller, count: 1)))], yields: []),
                         )],
@@ -461,6 +509,61 @@ mod tests {
             )
             .1
         );
+    }
+
+    #[test]
+    fn generated_choice_labels_pass_without_a_row_and_reject_an_exception() {
+        let branch: crate::primitives::ResolutionBranchDef =
+            ron::from_str(r#"(branch_id: "draw", cost: None, effects: [Draw(count: 1)])"#)
+                .expect("label presentation defaults to Generated");
+        let node = serde_json::to_value(branch).unwrap();
+        assert_eq!(node["presentation"], "Generated");
+        let (report, problem) = report_node("branches/draw", &node, "Face", None, None);
+        assert!(!problem, "{report}");
+        assert!(report.contains("generated choice label"), "{report}");
+        let (report, problem) =
+            report_node("branches/draw", &node, "Face", None, Some("old exception"));
+        assert!(problem);
+        assert!(report.contains("UNNEEDED EXCEPTION"), "{report}");
+    }
+
+    #[test]
+    fn fragment_mapping_resolves_against_the_face_line_or_is_a_problem() {
+        let lines: Vec<String> = vec![
+            "Enchant creature".into(),
+            "Enchanted creature has \"{T}: Draw a card.\"".into(),
+        ];
+        let fragment = |line: u16, part: &str| json!({"presentation": {"OracleFragment": {"line": line, "part": {part: 1}}}});
+        let (report, problem) =
+            report_node("grant", &fragment(2, "Quote"), "Face", Some(&lines), None);
+        assert!(!problem, "{report}");
+        assert!(report.contains("→ {T}: Draw a card."), "{report}");
+        assert!(
+            report_node(
+                "grant",
+                &fragment(2, "Quote"),
+                "Face",
+                Some(&lines),
+                Some("row")
+            )
+            .1,
+            "a mapped fragment with an exception row is stale"
+        );
+        for (node, expected) in [
+            (fragment(1, "Quote"), "INVALID FRAGMENT"),
+            (fragment(3, "Quote"), "INVALID FRAGMENT"),
+            (
+                json!({"presentation": {"OracleFragment": {"line": 2, "part": {"Quote": 0}}}}),
+                "INVALID FRAGMENT",
+            ),
+        ] {
+            let (report, problem) = report_node("grant", &node, "Face", Some(&lines), None);
+            assert!(problem, "{report}");
+            assert!(report.contains(expected), "{report}");
+        }
+        let (report, problem) = report_node("grant", &fragment(2, "Quote"), "Face", None, None);
+        assert!(problem);
+        assert!(report.contains("MISSING FACE DATA"), "{report}");
     }
 
     #[test]

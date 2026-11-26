@@ -29,7 +29,7 @@
         triggered_abilities: [
           (
             ability_id: "triggered_01",
-            presentation: Fallback,
+            presentation: OracleFragment(line: 1, part: Quote(1)),
             trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
             effect: [LibraryPartition(count: 2, top_min: 0, kind: Surveil)],
           ),

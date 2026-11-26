@@ -16,7 +16,7 @@
       delta_toughness: 1,
       triggered_abilities: [(
         ability_id: "triggered_01",
-        presentation: Fallback,
+        presentation: OracleFragment(line: 2, part: Quote(1)),
         trigger: WheneverSelfDealsCombatDamageToPlayer,
         effect: [Investigate(count: 1)],
       )],

@@ -1327,7 +1327,7 @@ const TAIL_FIXTURE: &str = r#"(
     trigger: WheneverControllerActivatesNonManaAbility,
     program: Some((body: (steps: [
       (id: "choose", kind: Choose(choice: "copy", chooser: Controller, optional: true,
-        branches: [(branch_id: "pay", presentation: Fallback, cost: Mana("{2}"),
+        branches: [(branch_id: "pay", cost: Mana("{2}"),
           body: (steps: [(id: "copy", kind: Perform(CopyTriggeringActivatedAbility))]))],
         otherwise: (),
       )),
@@ -1996,7 +1996,7 @@ const DEPARTURE_TAIL_FIXTURE: &str = r#"(
     trigger: WheneverControllerActivatesNonManaAbility,
     program: Some((body: (steps: [
       (id: "choose", kind: Choose(choice: "copy", chooser: Controller, optional: true,
-        branches: [(branch_id: "pay", presentation: Fallback, cost: Mana("{2}"),
+        branches: [(branch_id: "pay", cost: Mana("{2}"),
           body: (steps: [(id: "copy", kind: Perform(CopyTriggeringActivatedAbility))]))],
         otherwise: (),
       )),

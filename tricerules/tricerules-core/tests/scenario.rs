@@ -816,6 +816,8 @@ mod issue_523_regenerate_spell;
 mod issue_524_color_graveyard;
 #[path = "scenario/issue_529_counter_drain.rs"]
 mod issue_529_counter_drain;
+#[path = "scenario/issue_531_oracle_fragments.rs"]
+mod issue_531_oracle_fragments;
 #[path = "scenario/luxior_runtime.rs"]
 mod luxior_runtime;
 

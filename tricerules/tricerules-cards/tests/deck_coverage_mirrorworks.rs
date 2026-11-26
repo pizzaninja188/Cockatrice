@@ -2,7 +2,7 @@ use tricerules_cards::primitives::{
     CastTriggerPlayer, CompiledInstructionKind, InstructionKind, PermanentTypeFilter,
     PlayerRecipient, ProgramRequiredInput, ResolutionCost, TokenCopySource, TriggerCondition,
 };
-use tricerules_cards::{AbilityPresentation, Layout, ManaCost};
+use tricerules_cards::{AbilityPresentation, ChoicePresentation, Layout, ManaCost};
 
 #[test]
 fn mirrorworks_is_registered_as_a_complete_card() {
@@ -70,7 +70,7 @@ fn mirrorworks_is_registered_as_a_complete_card() {
     assert_eq!(branch.branch_id.as_str(), "pay_to_copy");
     assert!(matches!(
         &branch.presentation,
-        AbilityPresentation::OracleLines(lines) if lines == &[1]
+        ChoicePresentation::OracleLines(lines) if lines == &[1]
     ));
     assert!(matches!(
         &branch.cost,

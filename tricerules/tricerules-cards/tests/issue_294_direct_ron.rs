@@ -12,7 +12,7 @@ use tricerules_cards::primitives::{
     ManaCostChoiceKind, ObjectFilter, PermanentTypeFilter, PlayerRecipient, SpellEffectKind,
     TargetGroupDef, TargetKind, TargetingDef,
 };
-use tricerules_cards::{AbilityPresentation, ChoiceId, Color, Layout};
+use tricerules_cards::{AbilityPresentation, ChoiceId, ChoicePresentation, Color, Layout};
 
 const KICKER_FINGERPRINT: &str = "5208c66a815c11c01911fafbfcfcf17083f66d8863963c892844b7e2167d6c1f";
 
@@ -69,7 +69,7 @@ fn issue_294_direct_ron_registers_both_reviewed_handwritten_cards() {
             panic!("{name} has exactly one printed mana kicker option");
         };
         assert_eq!(option_id, &kicker);
-        assert_eq!(*presentation, AbilityPresentation::OracleLines(vec![1]));
+        assert_eq!(*presentation, ChoicePresentation::OracleLines(vec![1]));
         assert_eq!(*kind, ManaCostChoiceKind::Kicker);
         assert_eq!(cost.to_string(), "{1}{U}");
 

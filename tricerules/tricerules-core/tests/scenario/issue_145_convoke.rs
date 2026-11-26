@@ -395,7 +395,7 @@ fn convoke_combines_restricted_mana_and_refreshes_unavailable_group_amounts() {
         .push(tricerules_core::state::ManaRestrictionGroup {
             restriction: ManaSpendingRestriction {
                 restriction_id: tricerules_cards::ChoiceId::new("restriction_01").unwrap(),
-                presentation: tricerules_cards::AbilityPresentation::Fallback,
+                presentation: tricerules_cards::ChoicePresentation::Generated,
                 unrestricted: false,
                 cast_spell: vec![ManaSpendFilter {
                     card_type: Some(CardTypeFilter::InstantOrSorcery),

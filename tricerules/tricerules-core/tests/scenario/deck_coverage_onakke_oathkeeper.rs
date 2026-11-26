@@ -702,7 +702,7 @@ fn onakke_graveyard_activation_pays_exact_cost_and_returns_own_planeswalker_at_i
         .unwrap();
     assert_eq!(presentation.card_id, OATHKEEPER);
     assert_eq!(presentation.path[0].id, "activated_01");
-    assert_eq!(presentation.oracle_line_indices, [2]);
+    assert_eq!(presentation.whole_oracle_lines(), [2]);
     let targets =
         &offer.legal_by_player[&1].valid_targets_by_ability[&key].groups[0].valid_graveyard_ids;
     assert!(targets.contains(&walker));

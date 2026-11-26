@@ -102,12 +102,12 @@ fn noncreature_endure_engine_with_counter(
                 program: Some((body: (steps: [(id: "choose_endure", kind: Choose(
                     choice: "endure", chooser: SourceController, optional: false,
                     branches: [
-                        (branch_id: "counters", presentation: Fallback, cost: None,
+                        (branch_id: "counters", cost: None,
                             requirement: EffectsApplicable,
                             body: (steps: [(id: "put_counter", kind: Perform(PutCounters(
                                 counter: {counter}, count: 1, subject: Source,
                             )))], yields: [])),
-                        (branch_id: "spirit", presentation: Fallback, cost: None,
+                        (branch_id: "spirit", cost: None,
                             requirement: Always,
                             body: (steps: [(id: "create_spirit", kind: Perform(CreateTokens(
                                 token: "spirit_w_1_1", count: 1, who: SourceController,
@@ -150,12 +150,12 @@ fn zombie_endure_reanimation_engine(seed: u64) -> GameEngine {
                 program: Some((body: (steps: [(id: "choose_endure", kind: Choose(
                     choice: "endure", chooser: SourceController, optional: false,
                     branches: [
-                        (branch_id: "counters", presentation: Fallback, cost: None,
+                        (branch_id: "counters", cost: None,
                             requirement: EffectsApplicable,
                             body: (steps: [(id: "put_counter", kind: Perform(PutCounters(
                                 counter: PlusOnePlusOne, count: 1, subject: Source,
                             )))], yields: [])),
-                        (branch_id: "spirit", presentation: Fallback, cost: None,
+                        (branch_id: "spirit", cost: None,
                             requirement: Always,
                             body: (steps: [(id: "create_spirit", kind: Perform(CreateTokens(
                                 token: "spirit_w_1_1", count: 1, who: SourceController,

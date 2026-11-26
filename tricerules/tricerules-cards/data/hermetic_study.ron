@@ -8,7 +8,7 @@
   spell_effect: [AuraAttach()],
   static_abilities: [(ability_id: "static_01", presentation: OracleLines([2]), definition: AttachedModifier(activated_abilities: [(
     ability_id: "activated_01",
-    presentation: Fallback,
+    presentation: OracleFragment(line: 2, part: Quote(1)),
     costs: [Tap],
     effect: [DamageTarget(amount: 1, target: (kind: AnyTarget))],
   )]))],

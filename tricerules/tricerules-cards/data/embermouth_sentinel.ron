@@ -14,7 +14,7 @@
     program: Some((body: (steps: [
       (id: "search_choice", kind: Choose(
         choice: "search", chooser: Controller, optional: true,
-        branches: [(branch_id: "search_for_a_basic_land", presentation: Fallback,
+        branches: [(branch_id: "search_for_a_basic_land",
           cost: None, body: (steps: [
             (id: "search_top", kind: Perform(SearchLibrary(
               filter: Some((card_type: Some(BasicLand))),

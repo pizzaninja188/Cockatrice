@@ -10,7 +10,7 @@ use tricerules_cards::primitives::{
     PlayerRecipient, ResolutionBranchRequirement, ResolutionCost, SpellEffectKind,
     TypeLineAddition, TypeLineReplacement,
 };
-use tricerules_cards::{AbilityPresentation, Amount, CardFaceId, ChoiceId};
+use tricerules_cards::{Amount, CardFaceId, ChoiceId, ChoicePresentation};
 use tricerules_core::state::{AffectedScope, ContinuousEffect};
 use tricerules_core::{AttachmentRecipient, EngineDeck, TurnStep, Zone};
 use tricerules_proto::ruled::v1::{
@@ -149,7 +149,7 @@ fn generic_equipment_receipt_registry() -> &'static tricerules_cards::CardRegist
                 optional: false,
                 branches: vec![AuthoredChooseBranch {
                     branch_id: ChoiceId::new("attach").expect("stable branch ID"),
-                    presentation: AbilityPresentation::Fallback,
+                    presentation: ChoicePresentation::Generated,
                     cost: ResolutionCost::None,
                     requirement: ResolutionBranchRequirement::Always,
                     body: AuthoredBlock {

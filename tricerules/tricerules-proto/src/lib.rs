@@ -16,6 +16,18 @@ pub mod diagnostic_enums;
 
 pub use ruled::diagnostics;
 
+impl ruled::v1::PresentationRef {
+    /// One-based lines selected as whole lines, in order. Range-bounded fragment spans are not
+    /// whole lines and are excluded; inspect `oracle_spans` directly for those.
+    pub fn whole_oracle_lines(&self) -> Vec<u32> {
+        self.oracle_spans
+            .iter()
+            .filter(|span| span.start.is_none() && span.end.is_none())
+            .map(|span| span.line)
+            .collect()
+    }
+}
+
 /// Maximum number of external card names carried by one private card-look log.
 pub const PRIVATE_CARD_LOOK_MAX_CARD_NAMES: usize = 64;
 /// Maximum UTF-8 byte length of one external card name in a private card-look log.
@@ -131,7 +143,18 @@ mod tests {
                     id: "kicked".into(),
                 },
             ],
-            oracle_line_indices: vec![1, 3],
+            oracle_spans: vec![
+                rv1::OracleSpan {
+                    line: 1,
+                    start: None,
+                    end: None,
+                },
+                rv1::OracleSpan {
+                    line: 3,
+                    start: Some(4),
+                    end: Some(9),
+                },
+            ],
             fallback_text: "Kicker {2}".into(),
             external_card_name: "Grow from the Ashes".into(),
             external_face_name: "Grow from the Ashes".into(),
@@ -141,6 +164,17 @@ mod tests {
         let decoded = rv1::PresentationRef::decode(reference.encode_to_vec().as_slice())
             .expect("presentation reference decodes");
         assert_eq!(decoded, reference);
+        assert_eq!(decoded.whole_oracle_lines(), [1]);
+        assert_eq!(decoded.oracle_spans[1].start, Some(4));
+
+        // Absent bounds mean a whole line; explicit zero is a distinct, present bound.
+        let zero = rv1::OracleSpan {
+            line: 2,
+            start: Some(0),
+            end: Some(1),
+        };
+        let decoded = rv1::OracleSpan::decode(zero.encode_to_vec().as_slice()).unwrap();
+        assert_eq!(decoded.start, Some(0));
     }
 
     #[test]

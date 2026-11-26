@@ -29,8 +29,7 @@ use super::{
     TargetGroupSchema, TargetKind, TargetSchema, TargetingDef, TokenCopySource, ZoneCardFilter,
 };
 use crate::{
-    choice_fallback, AbilityId, AbilityLinkId, AbilityPresentation, ChoiceId, ModeId,
-    ProgramOwnerId,
+    choice_fallback, AbilityId, AbilityLinkId, ChoiceId, ChoicePresentation, ModeId, ProgramOwnerId,
 };
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -168,7 +167,8 @@ pub enum InstructionKind {
     DrawCountChoice {
         choice: ChoiceId,
         chooser: PlayerRecipient,
-        presentation: AbilityPresentation,
+        #[serde(default)]
+        presentation: ChoicePresentation,
         who: PlayerRecipient,
         alternatives: Vec<DrawCountChoiceAlternative>,
     },
@@ -195,7 +195,8 @@ pub struct DrawCountChoiceAlternative {
 #[serde(deny_unknown_fields)]
 pub struct AuthoredChooseBranch {
     pub branch_id: ChoiceId,
-    pub presentation: AbilityPresentation,
+    #[serde(default)]
+    pub presentation: ChoicePresentation,
     pub cost: ResolutionCost,
     #[serde(default)]
     pub requirement: ResolutionBranchRequirement,
@@ -500,7 +501,7 @@ pub enum ChooseDeparturePolicy {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CompiledChooseBranch {
     pub branch_id: ChoiceId,
-    pub presentation: AbilityPresentation,
+    pub presentation: ChoicePresentation,
     pub cost: ResolutionCost,
     pub requirement: CompiledChooseRequirement,
     pub body: CompiledBlock,
@@ -534,7 +535,7 @@ impl CompiledChooseBranch {
                     .collect::<Option<Vec<_>>>();
                 effects
                     .as_deref()
-                    .and_then(super::presentation::simple_effects)
+                    .and_then(super::presentation::branch_label)
                     .unwrap_or_else(|| choice_fallback("Choice", &self.branch_id))
             }
             _ => choice_fallback("Choice", &self.branch_id),
@@ -1000,7 +1001,7 @@ fn normalize_program_block(
 
 fn expand_draw_count_choice(
     instruction_id: &str,
-    presentation: &AbilityPresentation,
+    presentation: &ChoicePresentation,
     who: PlayerRecipient,
     alternatives: &[DrawCountChoiceAlternative],
 ) -> Result<Vec<AuthoredChooseBranch>, String> {
@@ -8165,7 +8166,7 @@ mod activated_x_mana_value_limit_program_rejections {
             2 => {
                 let branch = |branch_id: &str| AuthoredChooseBranch {
                     branch_id: ChoiceId::new(branch_id).expect("valid branch ID"),
-                    presentation: AbilityPresentation::Fallback,
+                    presentation: ChoicePresentation::Generated,
                     cost: ResolutionCost::None,
                     requirement: ResolutionBranchRequirement::Always,
                     body: AuthoredBlock {

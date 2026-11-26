@@ -2698,6 +2698,20 @@ TEST(RuledPendingTargetTest, SpellPromptUsesFaceAndActiveModeContext)
                                 "Choose target spell."));
 }
 
+// Select whole one-based Oracle lines, the engine's encoding for OracleLines mappings.
+void addWholeLine(ruled::v1::PresentationRef &presentation, quint32 line)
+{
+    presentation.add_oracle_spans()->set_line(line);
+}
+
+void addSpan(ruled::v1::PresentationRef &presentation, quint32 line, quint32 start, quint32 end)
+{
+    auto *span = presentation.add_oracle_spans();
+    span->set_line(line);
+    span->set_start(start);
+    span->set_end(end);
+}
+
 CardNameMap readPresentationCards(QByteArray xml)
 {
     QBuffer input(&xml);
@@ -2725,14 +2739,14 @@ TEST(RuledPresentationResolverTest, ResolvesExactFaceLinesAndFallsBackAsOneUnit)
     presentation.set_external_card_name("Fire // Ice");
     presentation.set_external_face_name("Fire");
     presentation.set_oracle_text_sha256(RuledOracleText::textSha256(oracleText).toStdString());
-    presentation.add_oracle_line_indices(1);
-    presentation.add_oracle_line_indices(3);
+    addWholeLine(presentation, 1);
+    addWholeLine(presentation, 3);
     presentation.set_fallback_text("fallback");
     EXPECT_EQ(resolver.resolve(presentation), QString::fromUtf8("Choose one —\n• Second mode"));
     presentation.set_oracle_text_sha256(std::string(64, '0'));
     EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("fallback"));
     presentation.set_oracle_text_sha256(RuledOracleText::textSha256(oracleText).toStdString());
-    presentation.add_oracle_line_indices(99);
+    addWholeLine(presentation, 99);
     EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("fallback"));
 }
 
@@ -2780,10 +2794,80 @@ TEST(RuledPresentationResolverTest, RejectsDuplicateAndDescendingMappings)
     presentation.set_external_face_name("Card");
     presentation.set_oracle_text_sha256(RuledOracleText::textSha256("One\nTwo").toStdString());
     presentation.set_fallback_text("fallback");
-    presentation.add_oracle_line_indices(2);
-    presentation.add_oracle_line_indices(2);
+    addWholeLine(presentation, 2);
+    addWholeLine(presentation, 2);
     EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("fallback"));
-    presentation.set_oracle_line_indices(1, 1);
+    presentation.mutable_oracle_spans(1)->set_line(1);
+    EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("fallback"));
+}
+
+// #531: a granted quoted ability, a single keyword or a single sentence is one Unicode-scalar
+// range of its fingerprinted line. Any invalid range falls back as one unit.
+TEST(RuledPresentationResolverTest, SelectsOracleFragmentSubstringOrFallsBack)
+{
+    const QString oracleText = QStringLiteral(
+        "Enchant creature\nEnchanted creature gets +2/+2 and has \"{1}{G}: Regenerate this creature.\" (Reminder.)");
+    CardNameMap cards;
+    auto card = CardInfo::newInstance("Trollhide");
+    card->ruled().addFace("Trollhide", "Trollhide", oracleText);
+    cards.insert("Trollhide", card);
+    RuledPresentationResolver resolver([&cards](const QString &name) { return cards.value(name); });
+    ruled::v1::PresentationRef presentation;
+    presentation.set_external_card_name("Trollhide");
+    presentation.set_external_face_name("Trollhide");
+    presentation.set_oracle_text_sha256(RuledOracleText::textSha256(oracleText).toStdString());
+    presentation.set_fallback_text("fallback");
+    addSpan(presentation, 2, 39, 72);
+    EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("{1}{G}: Regenerate this creature."));
+    EXPECT_TRUE(resolver.inspect(presentation).diagnostic.isEmpty());
+
+    // The offsets are only meaningful against the exact text they were generated from.
+    presentation.set_oracle_text_sha256(std::string(64, '0'));
+    EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("fallback"));
+    presentation.set_oracle_text_sha256(RuledOracleText::textSha256(oracleText).toStdString());
+
+    for (const auto &[line, start, end] :
+         {std::tuple<quint32, quint32, quint32>{2, 39, 999}, {2, 72, 72}, {2, 80, 72}, {3, 0, 1}, {0, 0, 1}}) {
+        presentation.clear_oracle_spans();
+        addSpan(presentation, line, start, end);
+        EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("fallback")) << line << ":" << start << "-" << end;
+        EXPECT_FALSE(resolver.inspect(presentation).diagnostic.isEmpty());
+    }
+    // A span must carry both bounds or neither.
+    presentation.clear_oracle_spans();
+    presentation.add_oracle_spans()->set_line(2);
+    presentation.mutable_oracle_spans(0)->set_start(39);
+    EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("fallback"));
+    EXPECT_TRUE(resolver.inspect(presentation).diagnostic.contains("both bounds"));
+    // Overlapping spans of one line are invalid; disjoint ordered spans join with LF.
+    presentation.clear_oracle_spans();
+    addSpan(presentation, 2, 0, 18);
+    addSpan(presentation, 2, 10, 20);
+    EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("fallback"));
+    presentation.clear_oracle_spans();
+    addWholeLine(presentation, 1);
+    addSpan(presentation, 2, 39, 72);
+    EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("Enchant creature\n{1}{G}: Regenerate this creature."));
+}
+
+TEST(RuledPresentationResolverTest, OracleFragmentOffsetsCountUnicodeScalarsNotUtf16Units)
+{
+    // U+1D538 is one scalar but two UTF-16 code units; the engine counts scalars.
+    const QString oracleText = QString::fromUtf8("Gains \"\xF0\x9D\x94\xB8 \xE2\x80\x94 draw.\"");
+    CardNameMap cards;
+    auto card = CardInfo::newInstance("Probe");
+    card->ruled().addFace("Probe", "Probe", oracleText);
+    cards.insert("Probe", card);
+    RuledPresentationResolver resolver([&cards](const QString &name) { return cards.value(name); });
+    ruled::v1::PresentationRef presentation;
+    presentation.set_external_card_name("Probe");
+    presentation.set_external_face_name("Probe");
+    presentation.set_oracle_text_sha256(RuledOracleText::textSha256(oracleText).toStdString());
+    presentation.set_fallback_text("fallback");
+    addSpan(presentation, 1, 7, 16);
+    EXPECT_EQ(resolver.resolve(presentation), QString::fromUtf8("\xF0\x9D\x94\xB8 \xE2\x80\x94 draw."));
+    presentation.clear_oracle_spans();
+    addSpan(presentation, 1, 7, 18);
     EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("fallback"));
 }
 
@@ -2798,7 +2882,7 @@ TEST(RuledPresentationResolverTest, UsesDatabaseFaceTextWithoutCompanionCache)
     presentation.set_external_face_name("Forest");
     presentation.set_oracle_text_sha256(RuledOracleText::textSha256("{T}: Add {G}.").toStdString());
     presentation.set_fallback_text("fallback");
-    presentation.add_oracle_line_indices(1);
+    addWholeLine(presentation, 1);
     EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("{T}: Add {G}."));
     EXPECT_TRUE(resolver.inspect(presentation).diagnostic.isEmpty());
     // Lookup follows the loaded database, with no retained file or stale face snapshot.
@@ -2837,7 +2921,7 @@ TEST(RuledPresentationResolverTest, NormalizesMtgjsonBracketedLoyaltyLabelsForSc
     presentation.set_external_face_name("Kaito, Bane of Nightmares");
     presentation.set_oracle_text_sha256(RuledOracleText::textSha256(scryfallText).toStdString());
     presentation.set_fallback_text("activated_02");
-    presentation.add_oracle_line_indices(2);
+    addWholeLine(presentation, 2);
     EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("+1: You get an emblem."));
 }
 
@@ -2873,7 +2957,7 @@ TEST(RuledPresentationResolverTest, SelectsExactSplitRoomAdventureAndTransformFa
         presentation.set_external_face_name(face.faceName.toStdString());
         presentation.set_oracle_text_sha256(RuledOracleText::textSha256(face.oracleText).toStdString());
         presentation.set_fallback_text("fallback");
-        presentation.add_oracle_line_indices(1);
+        addWholeLine(presentation, 1);
         EXPECT_EQ(resolver.resolve(presentation), face.oracleText.split('\n').first());
         presentation.set_external_face_name("Wrong face");
         EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("fallback"));
@@ -2891,7 +2975,7 @@ Two</text></face></ruled-oracle></card></cards></cockatrice_carddatabase>)");
     presentation.set_external_face_name("Face");
     presentation.set_oracle_text_sha256(RuledOracleText::textSha256("One\nTwo").toStdString());
     presentation.set_fallback_text("whole fallback");
-    presentation.add_oracle_line_indices(1);
+    addWholeLine(presentation, 1);
     EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("whole fallback"));
     presentation.set_external_card_name("Card");
     presentation.set_external_face_name("Missing");
@@ -2901,14 +2985,14 @@ Two</text></face></ruled-oracle></card></cards></cockatrice_carddatabase>)");
     presentation.set_oracle_text_sha256(std::string(64, 'f'));
     EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("whole fallback"));
     presentation.set_oracle_text_sha256(RuledOracleText::textSha256("One\nTwo").toStdString());
-    presentation.set_oracle_line_indices(0, 0);
+    presentation.mutable_oracle_spans(0)->set_line(0);
     EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("whole fallback"));
-    EXPECT_TRUE(resolver.inspect(presentation).diagnostic.contains("Invalid Oracle mapping at line 0"));
-    presentation.set_oracle_line_indices(0, 1);
-    presentation.add_oracle_line_indices(3);
+    EXPECT_TRUE(resolver.inspect(presentation).diagnostic.contains("Invalid Oracle span at line 0"));
+    presentation.mutable_oracle_spans(0)->set_line(1);
+    addWholeLine(presentation, 3);
     EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("whole fallback"));
-    presentation.clear_oracle_line_indices();
-    presentation.add_oracle_line_indices(1);
+    presentation.clear_oracle_spans();
+    addWholeLine(presentation, 1);
     for (const QByteArray &block :
          {QByteArray(""), QByteArray(R"(<ruled-oracle><face card-name="Card"><text>One</text></face></ruled-oracle>)"),
           QByteArray(R"(<ruled-oracle><face card-name="Card" face-name="Face"><text>One</text></face>
@@ -12450,7 +12534,7 @@ TEST_F(RuledClientTest, DatabaseOracleTextReachesAbilityMenusAndTracksDatabaseRe
     presentation->set_external_card_name("Prodigal Sorcerer");
     presentation->set_external_face_name("Prodigal Sorcerer");
     presentation->set_oracle_text_sha256(RuledOracleText::textSha256(text).toStdString());
-    presentation->add_oracle_line_indices(1);
+    addWholeLine(*presentation, 1);
     presentation->set_fallback_text("Prodigal Sorcerer — activated ability (activated_01)");
     apply(batch);
     EXPECT_EQ(state->activatedAbilityMenuLabel(203, 0), text);
@@ -12871,7 +12955,7 @@ TEST_F(RuledClientTest, WarRoomNumericEngineCostsReachBothMenusWithoutChangingUn
         presentation->set_external_card_name("War Room");
         presentation->set_external_face_name("War Room");
         presentation->set_oracle_text_sha256(RuledOracleText::textSha256(oracle).toStdString());
-        presentation->add_oracle_line_indices(1);
+        addWholeLine(*presentation, 1);
         presentation->set_fallback_text(expected.toStdString());
         apply(batch);
         EXPECT_EQ(state->activatedAbilityMenuLabel(100, 0), expected);
@@ -12901,7 +12985,7 @@ TEST_F(RuledClientTest, WarRoomNumericEngineCostsReachBothMenusWithoutChangingUn
         presentation->set_external_card_name("Fountainport");
         presentation->set_external_face_name("Fountainport");
         presentation->set_oracle_text_sha256(RuledOracleText::textSha256(fountain).toStdString());
-        presentation->add_oracle_line_indices(1);
+        addWholeLine(*presentation, 1);
         presentation->set_fallback_text(entry.first.toStdString());
         apply(batch);
         EXPECT_EQ(state->activatedAbilityMenuLabel(100, 0), fountain);
@@ -12957,7 +13041,7 @@ TEST_F(RuledClientTest, EffectiveLoyaltyCostsReachBothMenusOnlyWithCompleteMatch
         presentation->set_external_card_name("Loyalty Fixture");
         presentation->set_external_face_name("Loyalty Fixture");
         presentation->set_oracle_text_sha256(RuledOracleText::textSha256(oracle).toStdString());
-        presentation->add_oracle_line_indices(entry.line);
+        addWholeLine(*presentation, entry.line);
         presentation->set_fallback_text(entry.fallback);
         apply(batch);
         const auto expected = QString::fromUtf8(entry.expected);
@@ -14786,7 +14870,7 @@ TEST_F(RuledClientTest, ResolutionBranchesKeepDistinctEngineLabelsWhenOracleText
         presentation->set_external_card_name("Arcane Denial");
         presentation->set_external_face_name("Arcane Denial");
         presentation->set_oracle_text_sha256(RuledOracleText::textSha256(oracleText).toStdString());
-        presentation->add_oracle_line_indices(1);
+        addWholeLine(*presentation, 1);
         presentation->set_fallback_text(labels[index].toStdString());
     }
     auto *unresolvedBranch = choice->add_resolution_branches();
@@ -14797,7 +14881,7 @@ TEST_F(RuledClientTest, ResolutionBranchesKeepDistinctEngineLabelsWhenOracleText
     unresolvedPresentation->set_external_card_name("Arcane Denial");
     unresolvedPresentation->set_external_face_name("Arcane Denial");
     unresolvedPresentation->set_oracle_text_sha256(RuledOracleText::textSha256(oracleText).toStdString());
-    unresolvedPresentation->add_oracle_line_indices(1);
+    addWholeLine(*unresolvedPresentation, 1);
     unresolvedPresentation->set_fallback_text("Choice (unresolved_branch)");
 
     apply(batch);
@@ -20272,7 +20356,7 @@ When Spyglass Siren enters, create a Map token.</text></face>
     ability->set_external_card_name("Spyglass Siren");
     ability->set_external_face_name("Spyglass Siren");
     ability->set_oracle_text_sha256(RuledOracleText::textSha256(oracle).toStdString());
-    ability->add_oracle_line_indices(2);
+    addWholeLine(*ability, 2);
     ability->set_fallback_text("Siren fallback ability");
     QSignalSpy timeline(state, &RuledClientState::engineTimeline);
     apply(batch);

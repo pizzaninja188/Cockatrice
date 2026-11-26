@@ -63,7 +63,7 @@ fn grow_from_the_ashes_publishes_and_records_kicker_as_part_of_total_cost() {
         .presentation
         .as_ref()
         .expect("stable kicker option identity");
-    assert_eq!(option_presentation.oracle_line_indices, [1]);
+    assert_eq!(option_presentation.whole_oracle_lines(), [1]);
     assert_eq!(option_presentation.path.last().unwrap().id, "option_01");
 
     e.state.players[0].mana_pool.colorless = 4;

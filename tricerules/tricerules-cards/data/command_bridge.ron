@@ -20,7 +20,7 @@
       (id: "choose_tap", kind: Choose(
         choice: "tap_permanent", chooser: Controller, optional: true,
         branches: [(
-          branch_id: "tap_an_untapped_permanent_you_control", presentation: Fallback,
+          branch_id: "tap_an_untapped_permanent_you_control",
           cost: TapPermanents(
             count: 1,
             filter: (kind: AnyPermanent, controller: You),

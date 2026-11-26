@@ -15,7 +15,6 @@
         optional: true,
         branches: [(
           branch_id: "exile_graveyard_card",
-          presentation: Fallback,
           cost: ExileGraveyardCard(),
           body: (steps: [
             (id: "damage_target_controller",

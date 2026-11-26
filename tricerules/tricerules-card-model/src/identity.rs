@@ -1,5 +1,6 @@
 //! Stable authored identity and presentation metadata for card definitions.
 
+use crate::oracle_fragment::{resolve_oracle_fragment, slice_scalars, OracleFragmentPart};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -161,31 +162,146 @@ impl<T: PartialEq> PartialEq<T> for IdentifiedAbility<T> {
     }
 }
 
-/// Non-mechanical instructions for presenting an authored spell or ability.
+/// Non-mechanical instructions for presenting an authored printed spell, ability, mode or cost
+/// group. Interactive choice labels use [`ChoicePresentation`] instead.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AbilityPresentation {
     /// One-based lines in the external Oracle text for this exact card face.
     OracleLines(Vec<u16>),
+    /// Printed text that is only part of one line: a quoted grant, one sentence or one keyword.
+    /// Offsets are resolved at refresh time into the generated fragment table.
+    OracleFragment { line: u16, part: OracleFragmentPart },
     /// No exact external mapping exists; callers must use the deterministic fallback.
     Fallback,
 }
 
 impl AbilityPresentation {
     pub fn validate(&self) -> Result<(), String> {
-        let Self::OracleLines(lines) = self else {
-            return Ok(());
-        };
-        if lines.is_empty() {
-            return Err("OracleLines must contain at least one line".into());
+        match self {
+            Self::OracleLines(lines) => validate_oracle_lines(lines),
+            Self::OracleFragment { line, part } => {
+                if *line == 0 {
+                    return Err("OracleFragment line is one-based".into());
+                }
+                if part.ordinal() == 0 {
+                    return Err("OracleFragment part ordinals are one-based".into());
+                }
+                Ok(())
+            }
+            Self::Fallback => Ok(()),
         }
-        if lines[0] == 0 {
-            return Err("OracleLines indices are one-based".into());
-        }
-        if lines.windows(2).any(|pair| pair[0] >= pair[1]) {
-            return Err("OracleLines indices must be unique and ascending".into());
-        }
-        Ok(())
     }
+
+    /// External spans for this presentation. `fragment` supplies the refresh-resolved offsets
+    /// of a fragment selector on this face; a missing entry yields no spans (fallback).
+    pub fn oracle_spans(
+        &self,
+        fragment: impl FnOnce(u16, OracleFragmentPart) -> Option<(u32, u32)>,
+    ) -> Vec<OracleTextSpan> {
+        if self.validate().is_err() {
+            return Vec::new();
+        }
+        match self {
+            Self::OracleLines(lines) => whole_line_spans(lines),
+            Self::OracleFragment { line, part } => fragment(*line, *part)
+                .map(|range| {
+                    vec![OracleTextSpan {
+                        line: *line,
+                        range: Some(range),
+                    }]
+                })
+                .unwrap_or_default(),
+            Self::Fallback => Vec::new(),
+        }
+    }
+}
+
+/// Presentation for an interactive choice label: a resolution branch, cast-cost option, search
+/// slot, mana restriction or draw-count choice. Its natural label names the specific choice, so
+/// generated text is the default and needs no exception.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ChoicePresentation {
+    /// The engine-generated label for this exact choice.
+    #[default]
+    Generated,
+    /// A choice that really is one or more whole printed lines (a bulleted mode-like branch).
+    OracleLines(Vec<u16>),
+}
+
+impl ChoicePresentation {
+    pub fn validate(&self) -> Result<(), String> {
+        match self {
+            Self::Generated => Ok(()),
+            Self::OracleLines(lines) => validate_oracle_lines(lines),
+        }
+    }
+
+    pub fn is_generated(&self) -> bool {
+        matches!(self, Self::Generated)
+    }
+
+    pub fn oracle_spans(&self) -> Vec<OracleTextSpan> {
+        match self {
+            Self::OracleLines(lines) if validate_oracle_lines(lines).is_ok() => {
+                whole_line_spans(lines)
+            }
+            _ => Vec::new(),
+        }
+    }
+}
+
+fn validate_oracle_lines(lines: &[u16]) -> Result<(), String> {
+    if lines.is_empty() {
+        return Err("OracleLines must contain at least one line".into());
+    }
+    if lines[0] == 0 {
+        return Err("OracleLines indices are one-based".into());
+    }
+    if lines.windows(2).any(|pair| pair[0] >= pair[1]) {
+        return Err("OracleLines indices must be unique and ascending".into());
+    }
+    Ok(())
+}
+
+fn whole_line_spans(lines: &[u16]) -> Vec<OracleTextSpan> {
+    lines
+        .iter()
+        .map(|line| OracleTextSpan {
+            line: *line,
+            range: None,
+        })
+        .collect()
+}
+
+/// One selected piece of a normalized external face: a whole one-based line, or the
+/// Unicode-scalar `[start, end)` range of that line.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct OracleTextSpan {
+    pub line: u16,
+    pub range: Option<(u32, u32)>,
+}
+
+/// Select spans from normalized lines as one unit: any invalid, unordered or overlapping span
+/// selects nothing. Multiple spans join with newlines.
+pub fn select_oracle_spans(lines: &[String], spans: &[OracleTextSpan]) -> Option<String> {
+    if spans.is_empty() {
+        return None;
+    }
+    let mut previous: Option<(u16, u32)> = None;
+    let mut selected = Vec::with_capacity(spans.len());
+    for span in spans {
+        let text = lines.get(usize::from(span.line).checked_sub(1)?)?;
+        let scalars = u32::try_from(text.chars().count()).ok()?;
+        let (start, end) = span.range.unwrap_or((0, scalars));
+        if let Some((line, last_end)) = previous {
+            if span.line < line || (span.line == line && start < last_end) {
+                return None;
+            }
+        }
+        previous = Some((span.line, end));
+        selected.push(slice_scalars(text, start, end)?);
+    }
+    Some(selected.join("\n"))
 }
 
 /// Normalize one external face's Oracle text into its addressable line sequence.
@@ -210,32 +326,21 @@ pub fn is_non_game_layout(layout: &str) -> bool {
     )
 }
 
-/// Resolve an all-or-fallback external presentation mapping.
+/// Resolve an all-or-fallback external presentation mapping against one external face text.
 pub fn resolve_external_presentation(
     presentation: &AbilityPresentation,
     external_face_text: Option<&str>,
     fallback: impl FnOnce() -> String,
 ) -> String {
-    if presentation.validate().is_err() {
+    let Some(text) = external_face_text else {
         return fallback();
-    }
-    if let (AbilityPresentation::OracleLines(indices), Some(text)) =
-        (presentation, external_face_text)
-    {
-        let lines = external_oracle_lines(text);
-        let selected = indices
-            .iter()
-            .map(|index| lines.get(usize::from(*index) - 1))
-            .collect::<Option<Vec<_>>>();
-        if let Some(selected) = selected {
-            return selected
-                .into_iter()
-                .map(String::as_str)
-                .collect::<Vec<_>>()
-                .join("\n");
-        }
-    }
-    fallback()
+    };
+    let lines = external_oracle_lines(text);
+    let spans = presentation.oracle_spans(|line, part| {
+        let text = lines.get(usize::from(line).checked_sub(1)?)?;
+        resolve_oracle_fragment(text, part).ok()
+    });
+    select_oracle_spans(&lines, &spans).unwrap_or_else(fallback)
 }
 
 pub fn ability_fallback(face_name: &str, kind: &str, path: &[AbilityId]) -> String {
@@ -328,6 +433,105 @@ mod tests {
             resolve_external_presentation(&mapping, None, || "fallback".into()),
             "fallback"
         );
+    }
+
+    #[test]
+    fn fragment_resolution_selects_the_printed_part_or_falls_back() {
+        let text = "Enchant creature\nEnchanted creature has \"{T}: Draw a card.\" (Reminder.)";
+        let quote = AbilityPresentation::OracleFragment {
+            line: 2,
+            part: OracleFragmentPart::Quote(1),
+        };
+        assert_eq!(
+            resolve_external_presentation(&quote, Some(text), || "fallback".into()),
+            "{T}: Draw a card."
+        );
+        for missing in [
+            AbilityPresentation::OracleFragment {
+                line: 3,
+                part: OracleFragmentPart::Quote(1),
+            },
+            AbilityPresentation::OracleFragment {
+                line: 2,
+                part: OracleFragmentPart::Quote(2),
+            },
+            AbilityPresentation::OracleFragment {
+                line: 0,
+                part: OracleFragmentPart::Quote(1),
+            },
+        ] {
+            assert_eq!(
+                resolve_external_presentation(&missing, Some(text), || "fallback".into()),
+                "fallback"
+            );
+        }
+        assert!(quote.validate().is_ok());
+        assert!(AbilityPresentation::OracleFragment {
+            line: 1,
+            part: OracleFragmentPart::Sentence(0)
+        }
+        .validate()
+        .is_err());
+    }
+
+    #[test]
+    fn fragment_ron_names_line_and_part() {
+        let parsed: AbilityPresentation =
+            ron::from_str("OracleFragment(line: 2, part: Keyword(3))").unwrap();
+        assert_eq!(
+            parsed,
+            AbilityPresentation::OracleFragment {
+                line: 2,
+                part: OracleFragmentPart::Keyword(3)
+            }
+        );
+    }
+
+    #[test]
+    fn choice_labels_default_to_generated_and_never_accept_fallback() {
+        #[derive(Deserialize)]
+        struct Probe {
+            #[serde(default)]
+            presentation: ChoicePresentation,
+        }
+        let parsed: Probe = ron::from_str("()").unwrap();
+        assert!(parsed.presentation.is_generated());
+        assert!(parsed.presentation.oracle_spans().is_empty());
+        let mapped: Probe = ron::from_str("(presentation: OracleLines([2]))").unwrap();
+        assert_eq!(
+            mapped.presentation.oracle_spans(),
+            [OracleTextSpan {
+                line: 2,
+                range: None
+            }]
+        );
+        assert!(ron::from_str::<Probe>("(presentation: Fallback)").is_err());
+        assert!(ChoicePresentation::OracleLines(vec![]).validate().is_err());
+    }
+
+    #[test]
+    fn span_selection_is_ordered_non_overlapping_and_all_or_nothing() {
+        let lines = vec!["One two".to_string(), "Three".to_string()];
+        let span = |line, range| OracleTextSpan { line, range };
+        assert_eq!(
+            select_oracle_spans(&lines, &[span(1, Some((4, 7))), span(2, None)]).as_deref(),
+            Some("two\nThree")
+        );
+        assert_eq!(
+            select_oracle_spans(&lines, &[span(1, Some((0, 3))), span(1, Some((4, 7)))]).as_deref(),
+            Some("One\ntwo")
+        );
+        for invalid in [
+            vec![],
+            vec![span(3, None)],
+            vec![span(0, None)],
+            vec![span(1, Some((4, 8)))],
+            vec![span(1, Some((3, 3)))],
+            vec![span(2, None), span(1, None)],
+            vec![span(1, Some((0, 4))), span(1, Some((3, 7)))],
+        ] {
+            assert_eq!(select_oracle_spans(&lines, &invalid), None, "{invalid:?}");
+        }
     }
 
     #[test]

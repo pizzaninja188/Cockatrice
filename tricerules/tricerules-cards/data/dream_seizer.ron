@@ -13,7 +13,6 @@
         optional: true,
         branches: [(
           branch_id: "blight_1",
-          presentation: Fallback,
           cost: Blight(count: 1),
           body: (steps: [
             (id: "discard", bind: ["discarded"], kind: Perform(Discard(

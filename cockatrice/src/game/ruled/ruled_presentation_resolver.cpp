@@ -24,7 +24,7 @@ RuledPresentationResolver::Result
 RuledPresentationResolver::inspect(const ruled::v1::PresentationRef &presentation) const
 {
     const QString fallback = QString::fromStdString(presentation.fallback_text());
-    if (presentation.oracle_line_indices().empty()) {
+    if (presentation.oracle_spans().empty()) {
         return {fallback, {}};
     }
     const QString cardName = QString::fromStdString(presentation.external_card_name());
@@ -82,17 +82,37 @@ RuledPresentationResolver::inspect(const ruled::v1::PresentationRef &presentatio
     }
     const QStringList lines = text.split(QLatin1Char('\n'));
     QStringList selected;
-    selected.reserve(static_cast<qsizetype>(presentation.oracle_line_indices().size()));
-    quint32 previous = 0;
-    for (const quint32 oneBasedIndex : presentation.oracle_line_indices()) {
-        if (oneBasedIndex <= previous || oneBasedIndex > static_cast<quint32>(lines.size())) {
-            return failure(QStringLiteral("Invalid Oracle mapping at line %1 (%2 available); indices must be positive, "
-                                          "unique, and ascending.")
-                               .arg(oneBasedIndex)
-                               .arg(lines.size()));
+    selected.reserve(static_cast<qsizetype>(presentation.oracle_spans().size()));
+    quint32 previousLine = 0;
+    quint32 previousEnd = 0;
+    for (const auto &span : presentation.oracle_spans()) {
+        const quint32 line = span.line();
+        if (line == 0 || line > static_cast<quint32>(lines.size())) {
+            return failure(
+                QStringLiteral("Invalid Oracle span at line %1 (%2 available).").arg(line).arg(lines.size()));
         }
-        previous = oneBasedIndex;
-        selected.append(lines.at(static_cast<qsizetype>(oneBasedIndex - 1)));
+        if (span.has_start() != span.has_end()) {
+            return failure(QStringLiteral("Oracle span at line %1 must set both bounds or neither.").arg(line));
+        }
+        // Engine offsets count Unicode scalar values, not UTF-16 code units.
+        const QList<uint> scalars = lines.at(static_cast<qsizetype>(line - 1)).toUcs4();
+        const auto count = static_cast<quint32>(scalars.size());
+        const quint32 start = span.has_start() ? span.start() : 0;
+        const quint32 end = span.has_end() ? span.end() : count;
+        if (start >= end || end > count) {
+            return failure(QStringLiteral("Oracle span %1:[%2, %3) is outside the %4-character line.")
+                               .arg(line)
+                               .arg(start)
+                               .arg(end)
+                               .arg(count));
+        }
+        if (line < previousLine || (line == previousLine && start < previousEnd)) {
+            return failure(QStringLiteral("Oracle spans must be ordered by line and must not overlap."));
+        }
+        previousLine = line;
+        previousEnd = end;
+        selected.append(QString::fromUcs4(reinterpret_cast<const char32_t *>(scalars.constData() + start),
+                                          static_cast<qsizetype>(end - start)));
     }
     return {selected.join(QLatin1Char('\n')), {}};
 }

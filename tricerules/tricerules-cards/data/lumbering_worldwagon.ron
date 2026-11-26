@@ -29,7 +29,6 @@
           optional: true,
           branches: [(
             branch_id: "search_for_a_basic_land",
-            presentation: Fallback,
             cost: None,
             body: (steps: [(id: "search_basic_land", kind: Perform(SearchLibrary(
               filter: Some((card_type: Some(BasicLand))),
@@ -52,7 +51,6 @@
           optional: true,
           branches: [(
             branch_id: "search_for_a_basic_land",
-            presentation: Fallback,
             cost: None,
             body: (steps: [(id: "search_basic_land", kind: Perform(SearchLibrary(
               filter: Some((card_type: Some(BasicLand))),

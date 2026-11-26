@@ -21,7 +21,9 @@ use tricerules_cards::primitives::{
     SpellEffectKind, StaticAbilityDef, TargetController, TargetKind, TriggerCondition,
     TypeLineAddition, ZoneCardFilter,
 };
-use tricerules_cards::{AbilityPresentation, CardFace, CounterKind, Keyword, ManaCost};
+use tricerules_cards::{
+    AbilityPresentation, CardFace, ChoicePresentation, CounterKind, Keyword, ManaCost,
+};
 
 struct SpacecraftFixture {
     id: &'static str,
@@ -455,7 +457,7 @@ fn issue_423_companion_abilities_are_registered_exactly() {
     assert_eq!(branch.branch_id.as_str(), "sacrifice_a_land_or_lander");
     assert_eq!(
         branch.presentation,
-        AbilityPresentation::OracleLines(vec![1])
+        ChoicePresentation::OracleLines(vec![1])
     );
     assert_eq!(
         branch.cost,

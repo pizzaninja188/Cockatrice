@@ -13,7 +13,7 @@
   keywords: [Vigilance],
   triggered_abilities: [(
     ability_id: "triggered_01",
-    presentation: Fallback,
+    presentation: OracleFragment(line: 1, part: Keyword(2)),
     trigger: WheneverSelfBecomesTarget(source: SpellOrAbility, source_controller: Opponent),
     program: Some((body: (steps: [
       (id: "ward", kind: Perform(CounterTriggeringStackObjectUnlessPays(cost: Mana("{2}")))),

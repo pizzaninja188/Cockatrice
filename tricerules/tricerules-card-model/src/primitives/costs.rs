@@ -5,7 +5,7 @@ use super::{
     TargetKind, ZoneCardFilter,
 };
 use crate::mana::ManaCost;
-use crate::{choice_fallback, AbilityPresentation, ChoiceId};
+use crate::{choice_fallback, AbilityPresentation, ChoiceId, ChoicePresentation};
 use serde::{Deserialize, Serialize};
 
 /// Engine-computed quantity contributed by one public-zone object payment.
@@ -535,14 +535,16 @@ pub enum CastCostOptionDef {
     /// Cinder Strike's optional payment and Wild Unraveling's Blight-or-mana group.
     Blight {
         option_id: ChoiceId,
-        presentation: AbilityPresentation,
+        #[serde(default)]
+        presentation: ChoicePresentation,
         count: u32,
     },
     /// Pay this additional mana as part of the spell's single total cost. Grow from the Ashes and
     /// Gnarlid Colony use this for kicker.
     Mana {
         option_id: ChoiceId,
-        presentation: AbilityPresentation,
+        #[serde(default)]
+        presentation: ChoicePresentation,
         kind: ManaCostChoiceKind,
         cost: ManaCost,
     },
@@ -550,27 +552,31 @@ pub enum CastCostOptionDef {
     /// Caustic Exhale and Osseous Exhale use the same typed selection.
     Behold {
         option_id: ChoiceId,
-        presentation: AbilityPresentation,
+        #[serde(default)]
+        presentation: ChoicePresentation,
         criterion: BeholdCriterion,
     },
     /// Discard one other card chosen from the caster's hand. Bone Shards and Bitter Triumph use
     /// this as one announced cost option.
     DiscardCard {
         option_id: ChoiceId,
-        presentation: AbilityPresentation,
+        #[serde(default)]
+        presentation: ChoicePresentation,
     },
     /// Pay a fixed amount of life as an announced cost option. Bitter Triumph and Final Payment
     /// use this alongside a different nonmana payment.
     PayLife {
         option_id: ChoiceId,
-        presentation: AbilityPresentation,
+        #[serde(default)]
+        presentation: ChoicePresentation,
         amount: u32,
     },
     /// Tap a generation-bound cohort of untapped permanents as an announced cast cost. Teamwork
     /// uses an aggregate CurrentPower constraint; exact-count variants support future mechanics.
     TapPermanents {
         option_id: ChoiceId,
-        presentation: AbilityPresentation,
+        #[serde(default)]
+        presentation: ChoicePresentation,
         kind: ObjectCastCostKind,
         constraint: ObjectPaymentConstraint,
         filter: Box<ObjectFilter>,
@@ -578,7 +584,8 @@ pub enum CastCostOptionDef {
     /// Sacrifice one matching permanent as an announced cost, including kicker costs.
     SacrificePermanent {
         option_id: ChoiceId,
-        presentation: AbilityPresentation,
+        #[serde(default)]
+        presentation: ChoicePresentation,
         kind: ObjectCastCostKind,
         filter: Box<ObjectFilter>,
     },
@@ -747,7 +754,7 @@ impl CastCostOptionDef {
         }
     }
 
-    pub fn presentation(&self) -> &AbilityPresentation {
+    pub fn presentation(&self) -> &ChoicePresentation {
         match self {
             Self::Blight { presentation, .. }
             | Self::Mana { presentation, .. }

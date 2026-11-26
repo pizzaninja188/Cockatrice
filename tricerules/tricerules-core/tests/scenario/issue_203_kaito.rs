@@ -136,8 +136,7 @@ fn kaito_battlefield_view_preserves_loyalty_indices_and_presentations() {
                     .presentation
                     .as_ref()
                     .expect("ability presentation")
-                    .oracle_line_indices
-                    .clone()
+                    .whole_oracle_lines()
             })
             .collect::<Vec<_>>(),
         vec![vec![3], vec![4], vec![5]]

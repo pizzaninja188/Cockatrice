@@ -336,7 +336,7 @@ pub(super) fn execute_effect(
                 .into_iter()
                 .map(|(id, label)| ResolutionBranchDef {
                     branch_id: tricerules_card_model::ChoiceId::new(id).expect("static branch id"),
-                    presentation: tricerules_card_model::AbilityPresentation::Fallback,
+                    presentation: tricerules_card_model::ChoicePresentation::Generated,
                     runtime_fallback: Some(label.into()),
                     cost: ResolutionCost::None,
                     requirement: Default::default(),

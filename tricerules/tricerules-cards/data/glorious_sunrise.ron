@@ -30,7 +30,7 @@
             subject: Chosen((kind: AnyPermanent, permanent_types: [Land])),
             modifier: GrantActivatedAbility((
               ability_id: "sunrise_three_green",
-              presentation: Fallback,
+              presentation: OracleFragment(line: 3, part: Quote(1)),
               costs: [Tap],
               effect: [ProduceMana(options: [(g: 3)])],
             )),

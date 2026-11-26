@@ -23,7 +23,6 @@
         optional: true,
         branches: [(
           branch_id: "pay_1",
-          presentation: Fallback,
           cost: Mana("{1}"),
           body: (steps: [(id: "draw_one", kind: Perform(Draw( count: 1)))]),
         )],

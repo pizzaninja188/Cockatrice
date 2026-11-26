@@ -1918,7 +1918,6 @@ fn synthetic_legendary_sacrifice_program_finishes_search_and_tail_before_903_9a(
                     optional: true,
                     branches: [(
                         branch_id: "sacrifice_commander",
-                        presentation: Fallback,
                         cost: SacrificePermanent(
                             filter: (kind: AnyPermanent, controller: You),
                             source_only: true,
@@ -3811,19 +3810,19 @@ fn cast_cost_choose_registry(
         types: ["Instant"],
         cast_cost_groups: [(
             group_id: "kicker_group", presentation: Fallback, min: 0, max: 1,
-            options: [Mana(option_id: "kicker_option", presentation: Fallback,
+            options: [Mana(option_id: "kicker_option",
                 kind: Kicker, cost: "{1}")]
         )],
         spell_program: Some((body: (steps: [
             (id: "cast_receipt_choice", kind: Choose(
                 choice: "cast_receipt_choice", chooser: Controller, optional: false,
                 branches: [
-                    (branch_id: "kicker_selected", presentation: Fallback, cost: None,
+                    (branch_id: "kicker_selected", cost: None,
                         requirement: CastCostReceipt((group_id: "kicker_group",
                             option_id: "kicker_option", expected_selected: true)),
                         body: (steps: [(id: "draw_one", kind: Perform(Draw(
                             who: Controller, count: 1)))], yields: [])),
-                    (branch_id: "kicker_not_selected", presentation: Fallback, cost: None,
+                    (branch_id: "kicker_not_selected", cost: None,
                         requirement: CastCostReceipt((group_id: "kicker_group",
                             option_id: "kicker_option", expected_selected: false)),
                         body: (steps: [(id: "draw_two", kind: Perform(Draw(
@@ -3856,7 +3855,7 @@ fn cast_cost_mode_choose_registry() -> &'static tricerules_card_model::CardRegis
         types: ["Instant"],
         cast_cost_groups: [(
             group_id: "kicker_group", presentation: Fallback, min: 0, max: 1,
-            options: [Mana(option_id: "kicker_option", presentation: Fallback,
+            options: [Mana(option_id: "kicker_option",
                 kind: Kicker, cost: "{1}")]
         )],
         modal_spell: (
@@ -3866,12 +3865,12 @@ fn cast_cost_mode_choose_registry() -> &'static tricerules_card_model::CardRegis
                     (id: "mode_receipt_choice", kind: Choose(
                         choice: "mode_receipt_choice", chooser: Controller, optional: false,
                         branches: [
-                            (branch_id: "kicker_selected", presentation: Fallback, cost: None,
+                            (branch_id: "kicker_selected", cost: None,
                                 requirement: CastCostReceipt((group_id: "kicker_group",
                                     option_id: "kicker_option", expected_selected: true)),
                                 body: (steps: [(id: "draw_one", kind: Perform(Draw(
                                     who: Controller, count: 1)))], yields: [])),
-                            (branch_id: "kicker_not_selected", presentation: Fallback, cost: None,
+                            (branch_id: "kicker_not_selected", cost: None,
                                 requirement: CastCostReceipt((group_id: "kicker_group",
                                     option_id: "kicker_option", expected_selected: false)),
                                 body: (steps: [(id: "draw_two", kind: Perform(Draw(
@@ -3979,7 +3978,7 @@ fn draw_limit_choose_registry() -> &'static tricerules_card_model::CardRegistry 
         spell_program: Some((body: (steps: [
             (id: "free_draw_choice", kind: Choose(
                 choice: "free_draw_choice", chooser: Controller, optional: false,
-                branches: [(branch_id: "draw", presentation: Fallback, cost: None,
+                branches: [(branch_id: "draw", cost: None,
                     body: (steps: [(id: "draw_one", kind: Perform(Draw(
                         who: Controller, count: 1)))], yields: []))],
                 otherwise: (steps: [], yields: []),
@@ -3992,7 +3991,7 @@ fn draw_limit_choose_registry() -> &'static tricerules_card_model::CardRegistry 
         spell_program: Some((body: (steps: [
             (id: "paid_draw_choice", kind: Choose(
                 choice: "paid_draw_choice", chooser: Controller, optional: false,
-                branches: [(branch_id: "pay_draw", presentation: Fallback,
+                branches: [(branch_id: "pay_draw",
                     cost: Mana("{1}"), body: (steps: [
                         (id: "draw_one", kind: Perform(Draw(
                             who: Controller, count: 1)))
@@ -4408,7 +4407,7 @@ fn program_choose_departed_controller_selects_delegate_then_runs_survivor_tail_o
                 (id: "choose_route", kind: Choose(
                     choice: "choose_route", chooser: Controller, optional: false,
                     branches: [
-                        (branch_id: "route_a", presentation: Fallback, cost: None,
+                        (branch_id: "route_a", cost: None,
                             body: (steps: [], yields: [])),
                         (branch_id: "route_b", presentation: OracleLines([2]), cost: None,
                             body: (steps: [], yields: [])),
@@ -4544,7 +4543,7 @@ fn program_choose_departed_controller_selects_delegate_then_runs_survivor_tail_o
         .expect("delegated original menu carries its owner-bound presentation path");
     assert_eq!(presentation.card_id, "departed_program_choose");
     assert_eq!(presentation.face_id, "departed_program_choose");
-    assert_eq!(presentation.oracle_line_indices, vec![2]);
+    assert_eq!(presentation.whole_oracle_lines(), vec![2]);
     assert_eq!(
         presentation.path.last().map(|part| part.id.as_str()),
         Some("route_b")
@@ -4650,9 +4649,9 @@ fn program_choose_departed_selector_keeps_delegate_indices_stable() {
                 (id: "choose_route", kind: Choose(
                     choice: "choose_route", chooser: Controller, optional: false,
                     branches: [
-                        (branch_id: "route_a", presentation: Fallback, cost: None,
+                        (branch_id: "route_a", cost: None,
                             body: (steps: [], yields: [])),
-                        (branch_id: "route_b", presentation: Fallback, cost: None,
+                        (branch_id: "route_b", cost: None,
                             body: (steps: [], yields: [])),
                     ],
                     otherwise: (steps: [], yields: []),

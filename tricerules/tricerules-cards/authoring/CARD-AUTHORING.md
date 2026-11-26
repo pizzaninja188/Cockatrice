@@ -1512,18 +1512,23 @@ to compensate for a stale external database.
 
 ### Presentation-bearing surfaces
 
-Every authored display node needs stable identity and an explicit `OracleLines` or `Fallback`
-decision.
+Every authored display node needs stable identity. Printed nodes need an explicit `OracleLines`,
+`OracleFragment` or `Fallback` decision. Interactive choice labels name one specific choice, so their
+presentation defaults to the engine-generated label and is usually omitted.
 
-| Surface | Presentation field | Primary consumers |
-|---|---|---|
-| Identified ability | `presentation` | Context-menu labels, ability target prompts, trigger choices, and synthetic stack cards |
-| Modal option | `presentation` | Mode picker, mode target prompt, and chosen-mode annotation |
-| Cast-cost group | `presentation` | Cast-cost prompt |
-| Cast-cost option | `presentation` | Cast-cost option label and chosen-cost annotation |
-| Resolution branch | `presentation` | Resolution option label |
-| Heterogeneous search slot | `presentation` | Search-choice label |
-| Restricted-mana rule | `presentation` | Mana restriction explanation |
+| Surface | Presentation type | Default | Primary consumers |
+|---|---|---|---|
+| Identified ability | `AbilityPresentation` | required | Context-menu labels, ability target prompts, trigger choices, and synthetic stack cards |
+| Modal option | `AbilityPresentation` | required | Mode picker, mode target prompt, and chosen-mode annotation |
+| Cast-cost group | `AbilityPresentation` | required | Cast-cost prompt |
+| Cast-cost option | `ChoicePresentation` | `Generated` | Cast-cost option label and chosen-cost annotation |
+| Resolution branch | `ChoicePresentation` | `Generated` | Resolution option label |
+| Heterogeneous search slot | `ChoicePresentation` | `Generated` | Search-choice label |
+| Restricted-mana rule | `ChoicePresentation` | `Generated` | Mana restriction explanation |
+
+`ChoicePresentation` is `Generated` or `OracleLines([..])`. Use `OracleLines` on a choice only when
+the choice really is one or more whole printed lines (a bulleted option, a whole kicker line); it has
+no `Fallback` variant and needs no exception row.
 
 For a modal spell, map each mode separately. Map cast-cost groups and options independently as
 well. A permanent's battlefield abilities are mapped on their identified ability entries, not by
@@ -1560,15 +1565,37 @@ Example normalized text:
 database face text is invalid, clients display the supplied deterministic fallback rather than a partial
 selection.
 
+### Map a fragment of one line
+
+When a printed ability is only part of one line, select that part instead of falling back:
+
+```ron
+presentation: OracleFragment(line: 2, part: Quote(1))     // Trollhide's granted "{1}{G}: Regenerate this creature."
+presentation: OracleFragment(line: 1, part: Keyword(2))   // Humpback Whales' "ward {2}" in "Vigilance, ward {2}"
+presentation: OracleFragment(line: 1, part: Sentence(3))  // Ray of Command's delayed control-loss trigger
+```
+
+Ordinals are one-based, and parenthesized reminder text is never selectable:
+
+- `Quote(n)` is the text inside the nth top-level double-quoted span, quote marks excluded.
+- `Sentence(n)` is the nth top-level sentence including its period; periods inside quotes and
+  reminder text do not end a sentence.
+- `Keyword(n)` is the nth item of a keyword list: the whole line, or the clause after the last
+  top-level `has`/`have`, split on commas and `and`, trailing period dropped.
+
+Unbalanced quotes or parentheses make a selector ambiguous; an ordinal past the end is
+unresolvable. Both fail the refresh and check. `update-card-data.ps1 -Mode Refresh` resolves every
+selector against the pinned face into [oracle_fragments.tsv](../presentation/oracle_fragments.tsv),
+which records only Unicode-scalar offsets, never prose. `-Mode Check` fails when a selector cannot be
+resolved or the table is stale. The engine publishes the offsets as an Oracle span; clients slice
+the fingerprinted line and fall back on any mismatch, exactly as for whole lines.
+
 ### Use `Fallback` deliberately
 
-Use `Fallback` only after checking current Oracle text and determining that the node has no exact
-external line mapping. Typical cases are:
-
-- a synthetic no-op branch used internally by `FirstApplicable`;
-- a runtime-only choice with no separately printed wording; or
-- a child node representing only a fragment of a larger printed instruction where the whole line
-  would mislabel the child.
+Use `Fallback` only on a printed node (ability, mode or cost group) after checking current Oracle
+text and determining that neither whole lines nor a fragment selector present it exactly. Typical
+cases are a token template ability, or a child whose printed text is not a quote, sentence or keyword
+(Fire Nation Cadets' conditional "has firebending 2 as long as ...").
 
 Do not use `Fallback` merely to avoid verifying line numbers. It is an explicit presentation
 decision, not a TODO marker. Add a short RON comment when the reason is not obvious. A mechanical
@@ -1576,7 +1603,8 @@ implementation gap belongs in `partial-cards.tsv`; `Fallback` does not record pa
 
 Record every intentional authored `Fallback` in [presentation-exceptions.tsv](presentation-exceptions.tsv)
 with four tab-separated fields: card ID, face ID, node path, and a specific reason. Copy the node
-path from the audit output; ability and choice IDs identify array entries. Token templates use
+path from the audit output; ability and choice IDs identify array entries. Generated choice labels
+never need a row; the audit rejects one. Token templates use
 intentional fallback because they have no normal-card Oracle fingerprint. Their artwork matching
 keeps stable identity markers separate from readable menu and stack labels.
 
@@ -1597,15 +1625,17 @@ suggestion; the tool never applies mappings. Review the mechanics and current Or
 accepting a suggestion. Index validation cannot prove that a line describes the correct ability.
 
 The audit rejects unresolved fallback, missing source
-faces, empty/out-of-range/duplicate/descending line indices, and malformed, duplicate, or stale
-exceptions. After changing a node, update or remove its exception and rerun the check.
+faces, empty/out-of-range/duplicate/descending line indices, unresolvable or ambiguous fragment
+selectors, and malformed, duplicate, stale or unneeded (generated-label) exceptions. After changing a
+node, update or remove its exception and rerun the check.
 
 Simple fallback descriptions include costs, effects, and supported timing restrictions. If any
-piece cannot be described completely, the whole ability keeps its stable generic label.
+piece cannot be described completely, the whole ability keeps its stable generic label; a
+plausible but truncated phrase is never emitted.
 
 Client resolution remains all-or-fallback. The `cockatrice.ruled.presentation` logging category
 explains missing cards/faces, absent or invalid fingerprints, expected/loaded hash mismatches, and
-invalid line selections. Identical warnings are emitted once per resolver, with a bounded cache.
+invalid line or fragment spans. Identical warnings are emitted once per resolver, with a bounded cache.
 Intentional fallback with no Oracle line selection is silent. Use these diagnostics to repair
 metadata or the external card database; display text never determines legality.
 
@@ -1768,8 +1798,8 @@ all_modes_cast_cost: Some((group_id: "teamwork", option_id: "teamwork_4")),
 Resolution-time branches use typed Program `Choose` steps, with each branch's `presentation`
 mapped to the printed line. See [Finite authored programs](#finite-authored-programs).
 
-If line 2 describes only the parent ability and would be misleading as the branch label, use
-`Fallback` with a comment explaining the deliberate split.
+If line 2 describes only the parent ability and would be misleading as the branch label, omit the
+branch's `presentation`; it then uses its generated choice label.
 
 ### Bind "when you do" to a successful counter placement
 
@@ -1897,7 +1927,7 @@ exceptions, and unresolved fallback nodes. Suggestions are advisory; the command
 mappings. Review the exact Oracle record and current rulings before accepting a mapping.
 
 `scripts/update-card-data.ps1 -Mode Check` verifies the full direct-RON review-map evidence,
-source metadata and SHA, presentation audit and fingerprints, and the card checklist without
+source metadata and SHA, presentation audit, fingerprints and fragment offsets, and the card checklist without
 changing tracked files. Presentation exceptions need a specific reason. Do not use `Fallback`
 to avoid checking line numbers; it is an explicit presentation choice, not a TODO marker. When
 a node changes, update or remove its exception and rerun the check.

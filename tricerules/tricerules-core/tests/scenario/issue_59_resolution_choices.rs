@@ -86,14 +86,14 @@ const REFLEXIVE_PROGRAM_DAMAGE_FIXTURE: &str = r#"(
       (id: "choose_damage", kind: Choose(
         choice: "damage", chooser: Controller, optional: false,
         branches: [
-          (branch_id: "three_any_target", presentation: Fallback,
+          (branch_id: "three_any_target",
             cost: None, requirement: Always, body: (steps: [
               (id: "create_any_target_reflexive", kind: Perform(CreateReflexiveTrigger(ability: (
                 ability_id: "reflexive_01", presentation: Fallback,
                 effect: [DamageTarget(amount: 3, target: (kind: AnyTarget))],
               )))),
             ], yields: [])),
-          (branch_id: "four_opposing_creature", presentation: Fallback,
+          (branch_id: "four_opposing_creature",
             cost: None, requirement: Always, body: (steps: [
               (id: "create_opposing_creature_reflexive", kind: Perform(CreateReflexiveTrigger(ability: (
                 ability_id: "reflexive_02", presentation: Fallback,

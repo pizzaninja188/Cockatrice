@@ -19,12 +19,12 @@
       (id: "pay_1_u", kind: Choose(
         choice: "icewrought_pay_to_tap", chooser: Controller, optional: true,
         branches: [(
-          branch_id: "pay_1_u", presentation: Fallback,
+          branch_id: "pay_1_u",
           cost: Mana("{1}{U}"),
           body: (steps: [
             (id: "create_reflexive_tap",
              kind: Perform(CreateReflexiveTrigger(ability: (
-               ability_id: "reflexive_01", presentation: Fallback,
+               ability_id: "reflexive_01", presentation: OracleFragment(line: 2, part: Sentence(2)),
                effect: [Tap(subject: Chosen((kind: Creature, controller: Opponent)))],
              )))),
           ]),

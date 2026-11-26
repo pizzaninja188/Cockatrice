@@ -751,7 +751,7 @@ fn source_rule_cannot_silently_register_after_its_incarnation_has_left() {
 #[test]
 fn remembered_outer_optional_trigger_answer_does_not_answer_another_nested_binary_gate() {
     use tricerules_card_model::primitives::{PlayerRecipient, ResolutionBranchDef, ResolutionCost};
-    use tricerules_card_model::{AbilityPresentation, ChoiceId};
+    use tricerules_card_model::{ChoiceId, ChoicePresentation};
     use tricerules_core::state::{PendingResolutionBranch, PendingResolutionBranchStage};
     let mut e = engine();
     let reference = optional_draw_trigger(&mut e);
@@ -782,7 +782,7 @@ fn remembered_outer_optional_trigger_answer_does_not_answer_another_nested_binar
             original_chooser: 4,
             branches: vec![ResolutionBranchDef {
                 branch_id: ChoiceId::new("nested_gate").unwrap(),
-                presentation: AbilityPresentation::Fallback,
+                presentation: ChoicePresentation::Generated,
                 runtime_fallback: Some("Independent option".into()),
                 cost: ResolutionCost::None,
                 requirement: Default::default(),

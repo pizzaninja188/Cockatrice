@@ -256,6 +256,104 @@ pub fn collect_presentation_sources(
     Ok(sources)
 }
 
+/// The pinned source face fingerprinted for one authored face, by the registry's pairing rule.
+fn matching_source_face<'a>(
+    definition: &crate::CardDefinition,
+    face: &crate::CardFace,
+    source: &'a SourcePresentationCard,
+) -> Option<&'a SourcePresentationFace> {
+    if definition.faces.len() == 1 && source.faces.len() == 1 {
+        source.faces.first()
+    } else {
+        source
+            .faces
+            .iter()
+            .find(|candidate| normalize_name(&candidate.name) == normalize_name(&face.name))
+    }
+}
+
+/// Every `OracleFragment` selector authored anywhere on one face.
+pub fn face_fragment_selectors(
+    face: &crate::CardFace,
+) -> Result<BTreeSet<(u16, crate::OracleFragmentPart)>, String> {
+    fn walk(value: &Value, found: &mut BTreeSet<(u16, crate::OracleFragmentPart)>) {
+        match value {
+            Value::Object(map) => {
+                if map.len() == 1 && map.contains_key("OracleFragment") {
+                    if let Ok(crate::AbilityPresentation::OracleFragment { line, part }) =
+                        serde_json::from_value(value.clone())
+                    {
+                        found.insert((line, part));
+                        return;
+                    }
+                }
+                map.values().for_each(|child| walk(child, found));
+            }
+            Value::Array(items) => items.iter().for_each(|child| walk(child, found)),
+            _ => {}
+        }
+    }
+    let value = serde_json::to_value(face).map_err(|error| error.to_string())?;
+    let mut found = BTreeSet::new();
+    walk(&value, &mut found);
+    Ok(found)
+}
+
+/// Resolve every authored fragment selector against its pinned face. Any selector without a
+/// fingerprinted face, or that is unresolvable or ambiguous there, fails the whole table.
+pub fn render_fragment_registry(
+    provenance: &str,
+    registry: &CardRegistry,
+    source_cards: &HashMap<String, SourcePresentationCard>,
+) -> Result<String, String> {
+    let mut definitions = registry.definitions().collect::<Vec<_>>();
+    definitions.sort_by(|left, right| left.id.cmp(&right.id));
+    let mut output = format!("# {provenance}\n# card_id\tface_id\tline\tpart\tstart\tend\n");
+    let mut problems = Vec::new();
+    for definition in definitions {
+        for face in &definition.faces {
+            let selectors = face_fragment_selectors(face)?;
+            if selectors.is_empty() {
+                continue;
+            }
+            let source_face = source_cards
+                .get(&definition.id)
+                .and_then(|source| matching_source_face(definition, face, source));
+            for (line, part) in selectors {
+                let owner = format!("{} / {} line {line} {part}", definition.id, face.face_id);
+                let Some(source_face) = source_face else {
+                    problems.push(format!(
+                        "{owner}: no fingerprinted face in the pinned input"
+                    ));
+                    continue;
+                };
+                let Some(text) = source_face.lines.get(usize::from(line).wrapping_sub(1)) else {
+                    problems.push(format!(
+                        "{owner}: line out of range ({} available)",
+                        source_face.lines.len()
+                    ));
+                    continue;
+                };
+                match crate::resolve_oracle_fragment(text, part) {
+                    Ok((start, end)) => output.push_str(&format!(
+                        "{}\t{}\t{line}\t{part}\t{start}\t{end}\n",
+                        definition.id, face.face_id
+                    )),
+                    Err(error) => problems.push(format!("{owner}: {error}")),
+                }
+            }
+        }
+    }
+    if problems.is_empty() {
+        Ok(output)
+    } else {
+        Err(format!(
+            "Oracle fragment selectors failed:\n  {}",
+            problems.join("\n  ")
+        ))
+    }
+}
+
 pub fn render_presentation_registry(
     provenance: &str,
     registry: &CardRegistry,
@@ -271,15 +369,7 @@ pub fn render_presentation_registry(
             continue;
         };
         for face in &definition.faces {
-            let matching = if definition.faces.len() == 1 && source.faces.len() == 1 {
-                source.faces.first()
-            } else {
-                source
-                    .faces
-                    .iter()
-                    .find(|candidate| normalize_name(&candidate.name) == normalize_name(&face.name))
-            };
-            let Some(source_face) = matching else {
+            let Some(source_face) = matching_source_face(definition, face, source) else {
                 continue;
             };
             output.push_str(&format!(
@@ -422,6 +512,70 @@ mod tests {
         fs::write(&path, "stale\n").unwrap();
         assert!(check_presentation_registry(&path, "canonical\n").is_err());
         assert_eq!(fs::read_to_string(&path).unwrap(), "stale\n");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    fn fragment_fixture(part: &str) -> (CardRegistry, HashMap<String, SourcePresentationCard>) {
+        let chunk = format!(
+            r#"(id: "fragment_probe", name: "Fragment Probe", face_id: "fragment_probe",
+                mana_cost: "{{1}}", types: ["Creature"], power: 1, toughness: 1,
+                activated_abilities: [(ability_id: "activated_01",
+                    presentation: OracleFragment(line: 1, part: {part}),
+                    costs: [Tap], effect: [Draw(count: 1)])])"#
+        );
+        let registry = CardRegistry::from_chunks_and_tokens(&[chunk.as_str()], &[])
+            .expect("fragment fixture registry");
+        let card = json!({"name":"Fragment Probe", "layout":"normal",
+            "oracle_text":"Enchanted creature has \"{T}: Draw a card.\""});
+        let source = source_presentation_card(&card).unwrap();
+        (
+            registry,
+            HashMap::from([("fragment_probe".to_string(), source)]),
+        )
+    }
+
+    #[test]
+    fn fragment_registry_records_offsets_and_fails_unresolvable_ambiguous_or_missing_faces() {
+        let (registry, sources) = fragment_fixture("Quote(1)");
+        let rendered = render_fragment_registry("provenance", &registry, &sources).unwrap();
+        assert_eq!(
+            rendered,
+            "# provenance\n# card_id\tface_id\tline\tpart\tstart\tend\n\
+             fragment_probe\tfragment_probe\t1\tquote:1\t24\t41\n"
+        );
+        assert!(
+            !rendered.contains("Draw a card"),
+            "the table stores offsets only"
+        );
+
+        let (registry, sources) = fragment_fixture("Quote(2)");
+        let error = render_fragment_registry("provenance", &registry, &sources).unwrap_err();
+        assert!(error.contains("unresolvable"), "{error}");
+
+        let (registry, mut sources) = fragment_fixture("Quote(1)");
+        sources.get_mut("fragment_probe").unwrap().faces[0].lines =
+            vec!["Enchanted creature has \"{T}: Draw a card.".into()];
+        let error = render_fragment_registry("provenance", &registry, &sources).unwrap_err();
+        assert!(error.contains("ambiguous"), "{error}");
+
+        let (registry, _) = fragment_fixture("Quote(1)");
+        let error = render_fragment_registry("provenance", &registry, &HashMap::new()).unwrap_err();
+        assert!(error.contains("no fingerprinted face"), "{error}");
+    }
+
+    #[test]
+    fn stale_fragment_table_is_content_drift() {
+        let (registry, sources) = fragment_fixture("Quote(1)");
+        let expected = render_fragment_registry("provenance", &registry, &sources).unwrap();
+        let root = std::env::temp_dir().join(format!("fragment-registry-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        let path = root.join("oracle_fragments.tsv");
+        fs::write(&path, expected.replace("\t41\n", "\t40\n")).unwrap();
+        let error = check_presentation_registry(&path, &expected).unwrap_err();
+        assert!(error.contains("content drift"), "{error}");
+        fs::write(&path, &expected).unwrap();
+        assert!(check_presentation_registry(&path, &expected).is_ok());
         let _ = fs::remove_dir_all(root);
     }
 

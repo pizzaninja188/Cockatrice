@@ -894,6 +894,7 @@ pub(super) fn copy_triggering_activated_ability(
     });
     let (chosen_mode_indices, chosen_mode_labels, chosen_mode_presentations) =
         super::super::presentation::activated_stack_mode_presentation(
+            cx.engine.registry,
             copy.activated_ability
                 .as_ref()
                 .expect("captured activated ability copy retains its definition"),

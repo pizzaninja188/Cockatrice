@@ -27,7 +27,6 @@
       branches: [
         (
           branch_id: "dragon_beheld",
-          presentation: Fallback,
           cost: None,
           requirement: CastCostReceipt((
             group_id: "cast_cost_01",
@@ -39,7 +38,6 @@
         ),
         (
           branch_id: "no_dragon_beheld",
-          presentation: Fallback,
           cost: None,
           requirement: CastCostReceipt((
             group_id: "cast_cost_01",

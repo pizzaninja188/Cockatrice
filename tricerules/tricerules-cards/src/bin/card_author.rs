@@ -174,13 +174,22 @@ fn run() -> Result<Value, String> {
         let registry = tricerules_cards::registry::from_embedded()
             .map_err(|error| format!("failed to load embedded card registry: {error}"))?;
         let sources = source::collect_presentation_sources(&bulk, &registry)?;
+        let fragments_path = options
+            .get("presentation-fragments")
+            .map(|v| PathBuf::from(&v[0]))
+            .unwrap_or_else(|| package.join("presentation/oracle_fragments.tsv"));
         let expected = source::render_presentation_registry(&provenance, &registry, &sources.cards);
+        let expected_fragments =
+            source::render_fragment_registry(&provenance, &registry, &sources.cards)?;
         if refresh {
             let changed = source::refresh_presentation_registry(&registry_path, &expected)
                 .map_err(|error| format!("cannot refresh Oracle fingerprints: {error}"))?;
+            let fragments_changed =
+                source::refresh_presentation_registry(&fragments_path, &expected_fragments)
+                    .map_err(|error| format!("cannot refresh Oracle fragments: {error}"))?;
             return Ok(
-                json!({"mode":"refresh","changed":changed,"path":registry_path,
-                "provenance":provenance}),
+                json!({"mode":"refresh","changed":changed || fragments_changed,"path":registry_path,
+                "fragments_path":fragments_path,"provenance":provenance}),
             );
         }
         let (report, problems) = presentation_audit::run(&sources, None)?;
@@ -188,10 +197,11 @@ fn run() -> Result<Value, String> {
             return Err(format!("presentation audit failed\n{report}"));
         }
         source::check_presentation_registry(&registry_path, &expected)?;
+        source::check_presentation_registry(&fragments_path, &expected_fragments)?;
         return Ok(
             json!({"mode":"check","presentation_sources":sources.cards.len(),
-            "path":registry_path,"provenance":provenance,
-            "meaning":"Verified source metadata, presentation mappings and fingerprints; no files changed"}),
+            "path":registry_path,"fragments_path":fragments_path,"provenance":provenance,
+            "meaning":"Verified source metadata, presentation mappings, fingerprints and fragment offsets; no files changed"}),
         );
     }
     if command == "presentation-audit" {

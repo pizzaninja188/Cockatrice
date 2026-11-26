@@ -57,7 +57,7 @@ fn ability_logs_cover_activated_mana_sacrifice_and_targeted_abilities() {
         );
         if card_id != "treasure" {
             assert_eq!(ability.external_card_name, name);
-            assert_eq!(ability.oracle_line_indices, vec![1]);
+            assert_eq!(ability.whole_oracle_lines(), vec![1]);
         }
         if !targets.is_empty() {
             assert!(!presentation.suffix.is_empty(), "retain target description");
@@ -115,7 +115,7 @@ fn ability_logs_preserve_optional_targeted_trigger_presentation_through_decline(
         .ability
         .clone();
     assert_eq!(ability.as_ref().unwrap().external_card_name, "Gravedigger");
-    assert_eq!(ability.as_ref().unwrap().oracle_line_indices, vec![1]);
+    assert_eq!(ability.as_ref().unwrap().whole_oracle_lines(), vec![1]);
     let prompt = batch
         .events
         .iter()

@@ -447,7 +447,7 @@ impl GameEngine {
                         // A static Oracle line describes every physical copy of Path alike. The
                         // source-bound pool column needs the concrete producer to distinguish
                         // otherwise identical restriction groups.
-                        presentation.oracle_line_indices.clear();
+                        presentation.oracle_spans.clear();
                         presentation.fallback_text = display_label.clone();
                     }
                 }

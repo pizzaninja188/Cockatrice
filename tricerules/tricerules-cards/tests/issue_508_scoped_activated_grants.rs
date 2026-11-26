@@ -292,7 +292,7 @@ fn scoped_children_validate_all_supported_payment_amount_fields() {
 
 #[test]
 fn scoped_grants_reject_retired_resolution_branch_ron_as_unknown_variant() {
-    let retired = "ChooseResolutionBranch(optional: true, branches: [(branch_id: \"branch_01\", presentation: Fallback, cost: None, requirement: GameCondition(CastOrigin(origin: Hand)), effects: [Draw(count: 1)])])";
+    let retired = "ChooseResolutionBranch(optional: true, branches: [(branch_id: \"branch_01\", cost: None, requirement: GameCondition(CastOrigin(origin: Hand)), effects: [Draw(count: 1)])])";
     let ron = card("(kind: AnyPermanent)", &child_with_effect(retired));
     let error = match CardRegistry::from_chunks_and_tokens(&[&ron], &[]) {
         Err(error) => error.to_string(),

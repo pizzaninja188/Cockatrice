@@ -3,7 +3,8 @@ use tricerules_cards::primitives::{
     ResolutionCost, SearchDestination, SearchZoneSelection, SpellEffectKind,
 };
 use tricerules_cards::{
-    AbilityDefinitionId, AbilityPresentation, Keyword, ProgramOwnerId, TriggerCondition,
+    AbilityDefinitionId, AbilityPresentation, ChoicePresentation, Keyword, ProgramOwnerId,
+    TriggerCondition,
 };
 
 fn assert_optional_basic_land_to_top(
@@ -91,7 +92,7 @@ fn assert_optional_basic_land_to_top(
         panic!("issue #284 must have one search branch");
     };
     assert_eq!(branch.branch_id.as_str(), "search_for_a_basic_land");
-    assert_eq!(branch.presentation, AbilityPresentation::Fallback);
+    assert_eq!(branch.presentation, ChoicePresentation::Generated);
     assert_eq!(branch.cost, ResolutionCost::None);
     assert!(matches!(
         &branch.requirement,

@@ -194,7 +194,13 @@ fn issue_415_candlestick_static_grants_the_attack_surveil_trigger() {
             minimum_other_attackers: 0
         }
     );
-    assert_eq!(granted.presentation, AbilityPresentation::Fallback);
+    assert_eq!(
+        granted.presentation,
+        AbilityPresentation::OracleFragment {
+            line: 1,
+            part: tricerules_cards::OracleFragmentPart::Quote(1),
+        }
+    );
     assert_eq!(
         granted.effect,
         [SpellEffectKind::LibraryPartition {
@@ -373,7 +379,13 @@ fn issue_415_wrench_static_grants_vigilance_and_the_tap_ability() {
     let [granted] = activated_abilities.as_slice() else {
         panic!("Wrench must grant exactly one activated ability");
     };
-    assert_eq!(granted.presentation, AbilityPresentation::Fallback);
+    assert_eq!(
+        granted.presentation,
+        AbilityPresentation::OracleFragment {
+            line: 1,
+            part: tricerules_cards::OracleFragmentPart::Quote(1),
+        }
+    );
     assert_eq!(granted.source_zone, AbilitySourceZone::Battlefield);
     assert_eq!(granted.timing, ActivationTiming::Normal);
     assert_eq!(

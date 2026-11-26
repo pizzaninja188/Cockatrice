@@ -444,7 +444,7 @@ fn program_blight_completion_resumes_following_tail_once() {
             (id: "pay_or_blight", kind: Choose(
                 choice: "pay_or_blight", chooser: Controller, optional: true,
                 branches: [(
-                    branch_id: "pay_2", presentation: Fallback, cost: Mana("{2}"),
+                    branch_id: "pay_2", cost: Mana("{2}"),
                     body: (steps: [], yields: []),
                 )],
                 otherwise: (steps: [
@@ -555,7 +555,7 @@ fn program_choose_blight_completion_resumes_branch_and_parent_tails_once() {
                 (id: "paid_blight", kind: Choose(
                     choice: "paid_blight", chooser: Controller, optional: true,
                     branches: [(
-                        branch_id: "blight_2", presentation: Fallback,
+                        branch_id: "blight_2",
                         cost: Blight(count: 2), requirement: Always,
                         body: (steps: [
                             (id: "branch_draw", bind: ["branch_draw"], kind: Perform(Draw(

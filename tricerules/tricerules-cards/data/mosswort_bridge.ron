@@ -44,7 +44,6 @@
           optional: true,
           branches: [(
             branch_id: "play_linked_card",
-            presentation: Fallback,
             cost: None,
             requirement: GameCondition(BattlefieldAggregate(
               filter: (controllers: Controller, matching: (kind: Creature)),

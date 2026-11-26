@@ -19,7 +19,7 @@ const DIRECT_BATTLEFIELD_SEARCH_FIXTURE: &str = r#"(
   spell_program: Some((body: (steps: [
     (id: "choose_search", bind: [], input: None, kind: Choose(
       choice: "search", chooser: Controller, optional: true,
-      branches: [(branch_id: "search_for_a_basic_land", presentation: Fallback,
+      branches: [(branch_id: "search_for_a_basic_land",
         cost: None, requirement: Always, body: (steps: [
           (id: "search_battlefield", bind: [], input: None, kind: Perform(SearchLibrary(
             who: Controller, optional: false, count: 1, count_by_cast_cost: None,
@@ -164,7 +164,7 @@ const CONDITIONAL_BATTLEFIELD_SEARCH_TAIL_FIXTURE: &str = r#"(
     program: Some((body: (steps: [
       (id: "choose_search", bind: [], input: None, kind: Choose(
         choice: "search", chooser: Controller, optional: true,
-        branches: [(branch_id: "search_for_a_basic_land", presentation: Fallback,
+        branches: [(branch_id: "search_for_a_basic_land",
           cost: None, requirement: Always, body: (steps: [
             (id: "search_battlefield", bind: [], input: None, kind: Perform(SearchLibrary(
               who: Controller, optional: false, count: 1, count_by_cast_cost: None,
@@ -211,7 +211,7 @@ const RECURSIVE_CONDITION_SEARCH_FIXTURE: &str = r#"(
     program: Some((body: (steps: [
       (id: "choose_search", bind: [], input: None, kind: Choose(
         choice: "search", chooser: Controller, optional: true,
-        branches: [(branch_id: "search_for_a_basic_land", presentation: Fallback,
+        branches: [(branch_id: "search_for_a_basic_land",
           cost: None, requirement: Always, body: (steps: [
             (id: "search_battlefield", bind: [], input: None, kind: Perform(SearchLibrary(
               who: Controller, optional: false, count: 1, count_by_cast_cost: None,
@@ -261,7 +261,7 @@ const DRAW_STEP_TRIGGERED_BATTLEFIELD_SEARCH_FIXTURE: &str = r#"(
     program: Some((body: (steps: [
       (id: "choose_search", bind: [], input: None, kind: Choose(
         choice: "search", chooser: Controller, optional: true,
-        branches: [(branch_id: "search_for_a_basic_land", presentation: Fallback,
+        branches: [(branch_id: "search_for_a_basic_land",
           cost: None, requirement: Always, body: (steps: [
             (id: "search_battlefield", bind: [], input: None, kind: Perform(SearchLibrary(
               who: Controller, optional: false, count: 1, count_by_cast_cost: None,

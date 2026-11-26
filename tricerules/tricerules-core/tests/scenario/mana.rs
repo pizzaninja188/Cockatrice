@@ -809,7 +809,7 @@ fn embercat_restricted_mana_requires_matching_explicit_payment() {
         .expect("restricted mana presentation identity");
     assert_eq!(presentation.card_id, "chandras_embercat");
     assert_eq!(presentation.face_id, "chandra_s_embercat");
-    assert_eq!(presentation.oracle_line_indices, [1]);
+    assert_eq!(presentation.whole_oracle_lines(), [1]);
     assert_eq!(presentation.path.last().unwrap().id, "restriction_01");
     let group_id = group.restriction_group_id;
 

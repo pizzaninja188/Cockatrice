@@ -30,7 +30,7 @@
             ApplyPermanentModifier(
                 subject: Chosen((kind: Creature)),
                 modifier: GrantActivatedAbility((
-                    ability_id: "treasure_mana", presentation: Fallback,
+                    ability_id: "treasure_mana", presentation: OracleFragment(line: 3, part: Quote(1)),
                     costs: [Tap, SacrificeSelf],
                     effect: [ProduceMana(options: [(w: 1), (u: 1), (b: 1), (r: 1), (g: 1)])],
                 )),

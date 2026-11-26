@@ -17,7 +17,7 @@ use super::{
     PermanentEventFilter,
 };
 use crate::{
-    choice_fallback, AbilityId, AbilityLinkId, AbilityPresentation, ChoiceId, ExiledCohortId,
+    choice_fallback, AbilityId, AbilityLinkId, ChoiceId, ChoicePresentation, ExiledCohortId,
     ManaCost,
 };
 use serde::{Deserialize, Serialize};
@@ -855,7 +855,8 @@ pub enum ResolutionCost {
 #[serde(deny_unknown_fields)]
 pub struct ResolutionBranchDef {
     pub branch_id: ChoiceId,
-    pub presentation: AbilityPresentation,
+    #[serde(default)]
+    pub presentation: ChoicePresentation,
     /// Engine-derived wording for runtime-only synthetic choices. It cannot be authored in RON.
     #[serde(skip)]
     pub runtime_fallback: Option<String>,
@@ -887,7 +888,7 @@ impl ResolutionBranchDef {
                 format!("Tap {count} permanent(s)")
             }
             ResolutionCost::None if self.effects.is_empty() => "Continue".into(),
-            ResolutionCost::None => super::presentation::simple_effects(&self.effects)
+            ResolutionCost::None => super::presentation::branch_label(&self.effects)
                 .unwrap_or_else(|| choice_fallback("Choice", &self.branch_id)),
         }
     }
@@ -984,7 +985,8 @@ pub struct CastCostConditionalAmount {
 #[serde(deny_unknown_fields)]
 pub struct SearchSelectionSlot {
     pub slot_id: ChoiceId,
-    pub presentation: AbilityPresentation,
+    #[serde(default)]
+    pub presentation: ChoicePresentation,
     pub filter: ZoneCardFilter,
     #[serde(default)]
     pub enabled_by_cast_cost: Option<CastCostReceiptCondition>,
@@ -3043,7 +3045,8 @@ impl ManaSpendingEffect {
 #[serde(deny_unknown_fields)]
 pub struct ManaSpendingRestriction {
     pub restriction_id: ChoiceId,
-    pub presentation: AbilityPresentation,
+    #[serde(default)]
+    pub presentation: ChoicePresentation,
     #[serde(default)]
     pub unrestricted: bool,
     #[serde(default)]
@@ -8452,7 +8455,7 @@ mod pupu_ufo_effect_validation_tests {
     fn activated_source_power(effect: SpellEffectKind) -> ActivatedAbilityDef {
         ActivatedAbilityDef {
             ability_id: AbilityId::new("spell_context_probe").unwrap(),
-            presentation: AbilityPresentation::Fallback,
+            presentation: crate::AbilityPresentation::Fallback,
             intrinsic_land_mana: false,
             source_zone: AbilitySourceZone::Battlefield,
             costs: vec![],
@@ -8473,7 +8476,7 @@ mod pupu_ufo_effect_validation_tests {
     ) -> TriggeredAbilityDef {
         TriggeredAbilityDef {
             ability_id: AbilityId::new("spell_context_probe").unwrap(),
-            presentation: AbilityPresentation::Fallback,
+            presentation: crate::AbilityPresentation::Fallback,
             trigger,
             effect: vec![effect],
             program: None,
@@ -8555,7 +8558,7 @@ mod pupu_ufo_effect_validation_tests {
         let event_count_effect = source_power(Amount::EventCount);
         let activated = ActivatedAbilityDef {
             ability_id: AbilityId::new("event_count_probe").unwrap(),
-            presentation: AbilityPresentation::Fallback,
+            presentation: crate::AbilityPresentation::Fallback,
             intrinsic_land_mana: false,
             source_zone: AbilitySourceZone::Battlefield,
             costs: vec![],
@@ -8575,7 +8578,7 @@ mod pupu_ufo_effect_validation_tests {
 
         let triggered = |trigger| TriggeredAbilityDef {
             ability_id: AbilityId::new("event_count_probe").unwrap(),
-            presentation: AbilityPresentation::Fallback,
+            presentation: crate::AbilityPresentation::Fallback,
             trigger,
             effect: vec![event_count_effect.clone()],
             program: None,

@@ -839,6 +839,7 @@ impl GameEngine {
         let (chosen_mode_indices, chosen_mode_labels, chosen_mode_presentations) =
             if let Some(ability) = copy_item.activated_ability.as_ref() {
                 super::super::presentation::activated_stack_mode_presentation(
+                    self.registry,
                     ability,
                     copy_item.ability_text.as_deref().unwrap_or("Ability"),
                     &copy_item.chosen_modes,

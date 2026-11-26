@@ -367,7 +367,7 @@ fn push_source_review(output: &mut String, face: &SourceFace<'_>, indent: &str) 
             "{indent}// Candidate IDs for author confirmation: ability_{number:02}, choice_{number:02}. Split, merge, rename, or remove as mechanics require.\n"
         ));
         output.push_str(&format!(
-            "{indent}// Presentation review: OracleLines([{number}]) or an explicitly justified Fallback.\n"
+            "{indent}// Presentation review: OracleLines([{number}]), OracleFragment(line: {number}, part: Quote/Sentence/Keyword(n)) for a sub-line ability, or an explicitly justified Fallback. Choice labels default to generated text.\n"
         ));
     }
 }

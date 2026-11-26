@@ -38,7 +38,7 @@
           filter: (kind: AnyPermanent, controller: You, requires_any_counter: true),
           triggered_abilities: [(
             ability_id: "ward",
-            presentation: Fallback,
+            presentation: OracleFragment(line: 4, part: Keyword(1)),
             trigger: WheneverSelfBecomesTarget(source: SpellOrAbility, source_controller: Opponent),
             program: Some((body: (steps: [
               (id: "ward", kind: Perform(CounterTriggeringStackObjectUnlessPays(cost: Mana("{1}")))),

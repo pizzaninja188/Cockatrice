@@ -160,7 +160,7 @@ fn issue_etb_batch_maps_definitions() {
     };
     assert_eq!(
         branch.presentation,
-        tricerules_cards::AbilityPresentation::Fallback
+        tricerules_cards::ChoicePresentation::Generated
     );
     assert_eq!(
         branch.cost,

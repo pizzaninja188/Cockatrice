@@ -4197,7 +4197,7 @@ mod invariant_rollback_tests {
    program: Some((body: (steps: [
     (id: "choose", bind: [], input: None, kind: Choose(choice: "choose",
      chooser: TargetedPlayer(group_index: 0, kind: OpponentPlayer), optional: true,
-     branches: [(branch_id: "damage", presentation: Fallback, cost: None,
+     branches: [(branch_id: "damage", cost: None,
       requirement: Always, body: (steps: [
        (id: "damage", bind: [], input: None, kind: Perform(DamagePlayer(
         who: TargetedPlayer(group_index: 0, kind: OpponentPlayer), amount: 3)))
@@ -4211,7 +4211,7 @@ mod invariant_rollback_tests {
    program: Some((body: (steps: [
     (id: "other_choose", bind: [], input: None, kind: Choose(choice: "other_choice",
      chooser: TargetedPlayer(group_index: 0, kind: OpponentPlayer), optional: true,
-     branches: [(branch_id: "other_damage", presentation: Fallback, cost: None,
+     branches: [(branch_id: "other_damage", cost: None,
       requirement: Always, body: (steps: [
        (id: "other_damage", bind: [], input: None,
         kind: Perform(DamagePlayer(amount: 1,
@@ -5428,7 +5428,7 @@ mod invariant_rollback_tests {
                 (id: "choose", bind: [], input: None, kind: Choose(
                     choice: "choose", chooser: Controller, optional: false,
                     branches: [
-                        (branch_id: "first", presentation: Fallback, cost: None,
+                        (branch_id: "first", cost: None,
                             requirement: Always, body: (steps: [], yields: [])),
                         (branch_id: "second", presentation: OracleLines([2]), cost: None,
                             requirement: Always, body: (steps: [], yields: [])),
@@ -5570,7 +5570,7 @@ mod invariant_rollback_tests {
             spell_program: Some((body: (steps: [
                 (id: "choose", bind: [], input: None, kind: Choose(
                     choice: "choose", chooser: Controller, optional: true,
-                    branches: [(branch_id: "eligible", presentation: Fallback, cost: None,
+                    branches: [(branch_id: "eligible", cost: None,
                         requirement: GameCondition(BattlefieldAggregate(
                             filter: (controllers: Controller, matching: (kind: Creature)),
                             aggregate: TotalPower, min: Some(10), max: None,
@@ -5835,7 +5835,7 @@ mod invariant_rollback_tests {
             spell_program: Some((body: (steps: [
                 (id: "choose", kind: Choose(
                     choice: "only_free", chooser: Controller, optional: false,
-                    branches: [(branch_id: "gain_one", presentation: Fallback,
+                    branches: [(branch_id: "gain_one",
                         cost: None, requirement: Always,
                         body: (steps: [(id: "branch", kind: Perform(GainLife(amount: 1)))], yields: []))],
                     otherwise: (steps: [], yields: []),
@@ -5932,7 +5932,7 @@ mod invariant_rollback_tests {
             spell_program: Some((body: (steps: [
                 (id: "choose", bind: ["joined"], kind: Choose(
                     choice: "only_free", chooser: Controller, optional: false,
-                    branches: [(branch_id: "only", presentation: Fallback, cost: None,
+                    branches: [(branch_id: "only", cost: None,
                         requirement: Always,
                         body: (steps: [(id: "pick", bind: ["picked"], kind:
                             Perform(ChoosePermanents(
@@ -6066,7 +6066,7 @@ mod invariant_rollback_tests {
                     (id: "choose", kind: Choose(
                     choice: "sacrifice", chooser: Controller, optional: {optional},
                         branches: [(
-                            branch_id: "sacrifice_source", presentation: Fallback,
+                            branch_id: "sacrifice_source",
                             cost: SacrificePermanent(
                                 filter: (kind: AnyPermanent, controller: You),
                                 source_only: {source_only},
@@ -6191,7 +6191,7 @@ mod invariant_rollback_tests {
                     (id: "choose", kind: Choose(
                         choice: "discard", chooser: Controller, optional: true,
                         branches: [(
-                            branch_id: "discard_creature", presentation: Fallback,
+                            branch_id: "discard_creature",
                             cost: DiscardCard(filter: Some(Creature)), requirement: Always,
                             body: (steps: [(id: "branch_gain", kind: Perform(GainLife(amount: 2)))],
                                 yields: []),
@@ -6311,7 +6311,7 @@ mod invariant_rollback_tests {
                     (id: "choose_tap", bind: [], input: None, kind: Choose(
                         choice: "tap_permanent", chooser: Controller, optional: true,
                         branches: [(
-                            branch_id: "tap_a_permanent", presentation: Fallback,
+                            branch_id: "tap_a_permanent",
                             cost: TapPermanents(
                                 count: 1,
                                 filter: (kind: AnyPermanent, controller: You),
@@ -6435,7 +6435,7 @@ mod invariant_rollback_tests {
             (id: "choose_exile", bind: [], input: None, kind: Choose(
                 choice: "exile_graveyard_card", chooser: Controller, optional: true,
                 branches: [(
-                    branch_id: "exile_and_damage", presentation: Fallback,
+                    branch_id: "exile_and_damage",
                     cost: ExileGraveyardCard(filter: None), requirement: Always,
                     body: (steps: [(id: "damage_controller", bind: [], input: None,
                         kind: Perform(DamagePlayer(amount: 2,
@@ -8616,10 +8616,10 @@ mod invariant_rollback_tests {
                     (id: "choose", kind: Choose(
                         choice: "paid", chooser: SourceController, optional: false,
                         branches: [
-                            (branch_id: "mana", presentation: Fallback, cost: Mana("{1}"),
+                            (branch_id: "mana", cost: Mana("{1}"),
                                 requirement: Always,
                                 body: (steps: [(id: "mana_gain", kind: Perform(GainLife(amount: 1)))], yields: [])),
-                            (branch_id: "waterbend", presentation: Fallback, cost: Waterbend("{1}"),
+                            (branch_id: "waterbend", cost: Waterbend("{1}"),
                                 requirement: Always,
                                 body: (steps: [(id: "waterbend_gain", kind: Perform(GainLife(amount: 2)))], yields: [])),
                         ],
@@ -9417,7 +9417,7 @@ mod invariant_rollback_tests {
  face_id: "nested_choose_if_fixture", mana_cost: "{0}", types: ["Instant"],
  spell_program: Some((body: (steps: [
   (id: "route", bind: [], input: None, kind: Choose(choice: "route", chooser: Controller,
-   optional: true, branches: [(branch_id: "branch", presentation: Fallback, cost: None,
+   optional: true, branches: [(branch_id: "branch", cost: None,
     requirement: Always, body: (steps: [(id: "inside_branch", bind: [], input: None,
      kind: If(condition: CardsInHand(players: Relative(Controller), min: Some(1), max: None),
       yes: (steps: [(id: "branch_yes", bind: [], input: None,
@@ -9480,7 +9480,7 @@ mod invariant_rollback_tests {
  spell_program: Some((body: (steps: [
   (id: "draw_before", bind: ["drawn"], input: None, kind: Perform(Draw(who: Controller, count: 1))),
   (id: "pick", bind: ["picked"], input: None, kind: Choose(choice: "pick", chooser: Controller,
-   optional: true, branches: [(branch_id: "branch", presentation: Fallback, cost: None,
+   optional: true, branches: [(branch_id: "branch", cost: None,
     requirement: Always, body: (steps: [(id: "branch_pick", bind: ["branch_pick"], input: None,
      kind: Perform(ChoosePermanents(chooser: Controller, filter: (kind: AnyPermanent,
       permanent_types: [Land]), min: 1, max: 1)))], yields: ["branch_pick"]))],
@@ -9489,7 +9489,7 @@ mod invariant_rollback_tests {
      permanent_types: [Land]), min: 1, max: 1)))], yields: ["otherwise_pick"]))),
   (id: "untap", bind: [], input: Some("picked"), kind: Perform(UntapChosenPermanents)),
   (id: "pause_after_yield", bind: [], input: None, kind: Choose(choice: "after", chooser: Controller,
-   optional: true, branches: [(branch_id: "continue", presentation: Fallback, cost: None,
+   optional: true, branches: [(branch_id: "continue", cost: None,
     requirement: Always, body: (steps: [], yields: []))], otherwise: (steps: [], yields: [])))
  ], yields: []), target_bindings: [])))"#;
 
@@ -9927,13 +9927,13 @@ mod invariant_rollback_tests {
   (mode_id: "first", presentation: Fallback, effects: [], program: Some((body: (steps: [
    (id: "before", bind: ["before"], input: None, kind: Perform(Draw(who: Controller, count: 1))),
    (id: "pay_and_select", bind: [], input: None, kind: Choose(choice: "pay", chooser: Controller,
-    optional: false, branches: [(branch_id: "pay", presentation: Fallback, cost: Mana("{1}"),
+    optional: false, branches: [(branch_id: "pay", cost: Mana("{1}"),
      requirement: Always, body: (steps: [
       (id: "select", bind: ["selected"], input: None,
        kind: Perform(SelectHandCards(count: 1, ordered: true, prompt: "Choose the card to put back."))),
       (id: "put_back", bind: [], input: Some("selected"), kind: Perform(PutSelectedHandCardsOnLibraryTop)),
       (id: "pause", bind: [], input: None, kind: Choose(choice: "after_put_back", chooser: Controller,
-       optional: true, branches: [(branch_id: "continue", presentation: Fallback, cost: None,
+       optional: true, branches: [(branch_id: "continue", cost: None,
         requirement: Always, body: (steps: [], yields: []))], otherwise: (steps: [], yields: [])))
      ], yields: []))], otherwise: (steps: [], yields: [])))
   ], yields: []), target_bindings: []))),
@@ -9963,7 +9963,7 @@ mod invariant_rollback_tests {
  mana_cost: "{0}", types: ["Instant"], spell_program: Some((body: (steps: [
   (id: "search_choice", bind: [], input: None,
    kind: Choose(choice: "search", chooser: Controller, optional: true,
-    branches: [(branch_id: "search", presentation: Fallback, cost: None,
+    branches: [(branch_id: "search", cost: None,
      requirement: Always, body: (steps: [
       (id: "search_top", bind: [], input: None, kind: Perform(SearchLibrary(
        who: Controller, optional: false, count: 1, count_by_cast_cost: None,
@@ -9977,7 +9977,7 @@ mod invariant_rollback_tests {
    kind: Perform(Draw(who: Controller, count: 1))),
   (id: "pause_after_draw", bind: [], input: None,
    kind: Choose(choice: "after_draw", chooser: Controller, optional: true,
-    branches: [(branch_id: "finish", presentation: Fallback, cost: None,
+    branches: [(branch_id: "finish", cost: None,
      requirement: Always, body: (steps: [], yields: []))], otherwise: (steps: [], yields: [])))
  ], yields: []), target_bindings: [])))"#;
 
@@ -9986,7 +9986,7 @@ mod invariant_rollback_tests {
  mana_cost: "{0}", types: ["Instant"], spell_program: Some((body: (steps: [
   (id: "search_choice", bind: [], input: None,
    kind: Choose(choice: "search", chooser: Controller, optional: true,
-    branches: [(branch_id: "search", presentation: Fallback, cost: None,
+    branches: [(branch_id: "search", cost: None,
      requirement: Always, body: (steps: [
       (id: "search_top", bind: [], input: None, kind: Perform(SearchLibrary(
        who: Controller, optional: false, count: 1, count_by_cast_cost: None,
@@ -10000,7 +10000,7 @@ mod invariant_rollback_tests {
    kind: Perform(ShuffleLibrary(who: Controller))),
   (id: "pause_after_tail", bind: [], input: None,
    kind: Choose(choice: "after_tail", chooser: Controller, optional: true,
-    branches: [(branch_id: "continue", presentation: Fallback, cost: None,
+    branches: [(branch_id: "continue", cost: None,
      requirement: Always, body: (steps: [], yields: []))], otherwise: (steps: [], yields: [])))
  ], yields: []), target_bindings: [])))"#;
 

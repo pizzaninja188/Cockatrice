@@ -37,7 +37,7 @@
           subject: Source,
           modifier: GrantActivatedAbility((
             ability_id: "land_mana",
-            presentation: Fallback,
+            presentation: OracleFragment(line: 2, part: Quote(1)),
             costs: [Tap],
             effect: [ProduceMana(options: [(u: 1)])],
           )),

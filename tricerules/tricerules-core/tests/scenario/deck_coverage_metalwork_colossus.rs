@@ -399,7 +399,7 @@ fn metalwork_graveyard_exact_cost_offers_reject_invalid_atomic_and_return_only_s
     assert_eq!(presentation.card_id, CARD);
     assert_eq!(presentation.face_id, CARD);
     assert_eq!(presentation.path[0].id, "activated_01");
-    assert_eq!(presentation.oracle_line_indices, [2]);
+    assert_eq!(presentation.whole_oracle_lines(), [2]);
     assert!(!offer.legal_by_player[&20]
         .zone_ability_actions
         .iter()

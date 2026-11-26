@@ -12,7 +12,6 @@
         optional: true,
         branches: [(
           branch_id: "pay_2",
-          presentation: Fallback,
           cost: Mana("{2}"),
           body: (),
         )],

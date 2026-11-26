@@ -40,13 +40,13 @@ const SYNTHETIC_ARCANE_DELAYED_TAIL: &str = r#"
               chooser: AffectedPlayer,
               optional: false,
               branches: [
-                (branch_id: "draw_zero", presentation: Fallback, cost: None, requirement: Always,
+                (branch_id: "draw_zero", cost: None, requirement: Always,
                   body: (steps: [(id: "draw_zero", kind: Perform(Draw(
                     who: AffectedPlayer, count: 0)))], yields: [])),
-                (branch_id: "draw_one", presentation: Fallback, cost: None, requirement: Always,
+                (branch_id: "draw_one", cost: None, requirement: Always,
                   body: (steps: [(id: "draw_one", kind: Perform(Draw(
                     who: AffectedPlayer, count: 1)))], yields: [])),
-                (branch_id: "draw_two", presentation: Fallback, cost: None, requirement: Always,
+                (branch_id: "draw_two", cost: None, requirement: Always,
                   body: (steps: [(id: "draw_two", kind: Perform(Draw(
                     who: AffectedPlayer, count: 2)))], yields: [])),
               ],
@@ -485,7 +485,7 @@ fn arcane_denial_compiles_delayed_01_under_its_exact_face_owner() {
         );
         assert_eq!(
             branch.presentation,
-            AbilityPresentation::OracleLines(vec![1]),
+            tricerules_cards::ChoicePresentation::OracleLines(vec![1]),
         );
         assert_eq!(
             branch.cost,
@@ -1273,7 +1273,7 @@ fn runtime_proof_assert_arcane_branch_presentation(
         .expect("the actual branch offer carries its presentation reference");
     assert_eq!(presentation.card_id, "arcane_denial");
     assert_eq!(presentation.face_id, "arcane_denial");
-    assert_eq!(presentation.oracle_line_indices, [1]);
+    assert_eq!(presentation.whole_oracle_lines(), [1]);
     assert_eq!(
         presentation
             .path

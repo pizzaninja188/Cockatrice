@@ -4605,7 +4605,7 @@ mod convoke_transaction_tests {
             max: 1,
             options: vec![CastCostOptionDef::TapPermanents {
                 option_id: tricerules_card_model::ChoiceId::new("teamwork_4").unwrap(),
-                presentation: tricerules_card_model::AbilityPresentation::Fallback,
+                presentation: tricerules_card_model::ChoicePresentation::Generated,
                 kind: tricerules_card_model::ObjectCastCostKind::Teamwork,
                 constraint: ObjectPaymentConstraint::AggregateMinimum {
                     minimum: 4,

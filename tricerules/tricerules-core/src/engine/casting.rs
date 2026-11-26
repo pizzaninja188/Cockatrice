@@ -3284,6 +3284,7 @@ impl GameEngine {
         let trefs: Vec<_> = targets.iter().map(|target| target.object_id).collect();
         let (chosen_mode_indices, chosen_mode_labels, chosen_mode_presentations) =
             activated_stack_mode_presentation(
+                self.registry,
                 &ability,
                 &ability_text,
                 &chosen_modes,
@@ -4238,6 +4239,7 @@ impl GameEngine {
         let restriction_presentation = mana_restriction.as_ref().and_then(|restriction| {
             primary_presentation.as_ref().map(|parent| {
                 child_presentation_ref(
+                    self.registry,
                     parent,
                     PresentationPath::ManaRestriction(&restriction.restriction_id),
                     &restriction.presentation,
@@ -7085,7 +7087,7 @@ mod mana_payment_tests {
             max: 1,
             options: vec![CastCostOptionDef::Mana {
                 option_id: option_id.clone(),
-                presentation: tricerules_card_model::AbilityPresentation::Fallback,
+                presentation: tricerules_card_model::ChoicePresentation::Generated,
                 kind: tricerules_card_model::primitives::ManaCostChoiceKind::AdditionalPayment,
                 cost: ManaCost::parse("{1}").unwrap(),
             }],

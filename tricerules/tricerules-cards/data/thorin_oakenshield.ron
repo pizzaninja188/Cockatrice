@@ -20,7 +20,7 @@
       condition: Some(HasEnduringStory(players: Controller)),
       triggered_abilities: [(
         ability_id: "triggered_01",
-        presentation: Fallback,
+        presentation: OracleFragment(line: 3, part: Keyword(1)),
         trigger: WheneverSelfBecomesTarget(source: SpellOrAbility, source_controller: Opponent),
         program: Some((body: (steps: [
           (id: "ward", kind: Perform(CounterTriggeringStackObjectUnlessPays(cost: Mana("{1}")))),

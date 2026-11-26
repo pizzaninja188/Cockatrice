@@ -284,7 +284,7 @@ mod group_contract_tests {
     fn restriction() -> ManaSpendingRestriction {
         ManaSpendingRestriction {
             restriction_id: tricerules_card_model::ChoiceId::new("contract").unwrap(),
-            presentation: AbilityPresentation::Fallback,
+            presentation: tricerules_card_model::ChoicePresentation::Generated,
             unrestricted: true,
             cast_spell: vec![],
             activate_ability: vec![],

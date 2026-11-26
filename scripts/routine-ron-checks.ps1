@@ -192,6 +192,7 @@ function Get-RoutineRonPlan {
     if (-not $cards.Count) { throw 'Routine verification requires at least one changed handwritten card RON.' }
     $allowed = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     foreach ($path in @('tricerules/CARDS.md', 'tricerules/tricerules-cards/presentation/oracle_fingerprints.tsv',
+            'tricerules/tricerules-cards/presentation/oracle_fragments.tsv',
             'tricerules/tricerules-cards/authoring/partial-cards.tsv', 'tricerules/tricerules-cards/authoring/presentation-exceptions.tsv')) { $null = $allowed.Add($path) }
     $tests = [Collections.Generic.List[object]]::new()
     $seenTests = @{}

@@ -7,7 +7,7 @@ use crate::helpers::ScenarioCommandExt;
 
 use crate::helpers::*;
 use prost::Message;
-use tricerules_cards::{AbilityPresentation, ChoiceId, ManaAmount, ManaSpendingRestriction};
+use tricerules_cards::{ChoiceId, ChoicePresentation, ManaAmount, ManaSpendingRestriction};
 use tricerules_core::GameEngine;
 use tricerules_proto::ruled::v1::{
     ruled_command::Cmd, CostObjectRef, ManaSpendSelection, PaymentMana, PaymentSelection,
@@ -785,7 +785,7 @@ fn minds_aglow_accepts_only_restricted_mana_eligible_for_resolution_payments() {
         .push(tricerules_core::state::ManaRestrictionGroup {
             restriction: ManaSpendingRestriction {
                 restriction_id: ChoiceId::new("minds_aglow_resolution_only").unwrap(),
-                presentation: AbilityPresentation::Fallback,
+                presentation: ChoicePresentation::Generated,
                 unrestricted: false,
                 cast_spell: vec![],
                 activate_ability: vec![],

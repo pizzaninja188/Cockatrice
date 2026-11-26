@@ -8,13 +8,16 @@ use crate::primitives::{
     TargetKind, TargetSchema, TargetingDef, TokenCopySource, TriggerCondition, ZoneCardFilter,
 };
 use crate::token_def::TokenDefinition;
-use crate::PresentationFaceMetadata;
 use crate::{AbilityDefinitionId, ManaSymbol, ProgramOwnerId};
+use crate::{OracleFragmentPart, PresentationFaceMetadata};
 use once_cell::sync::Lazy;
 use ron::extensions::Extensions;
 use ron::Options;
 use std::collections::{HashMap, HashSet};
 use thiserror::Error;
+
+/// `(card_id, face_id, one-based line, selector)` of one generated fragment offset.
+pub type PresentationFragmentKey = (String, String, u16, OracleFragmentPart);
 
 /// `Option` fields need `IMPLICIT_SOME` so bare values (e.g. `2` for `Option<u32>`) deserialize.
 static RON_OPTS: Lazy<Options> =
@@ -39,6 +42,9 @@ pub struct CardRegistry {
     /// characteristic queries work uniformly for token objects.
     tokens: HashMap<String, CardDefinition>,
     presentation_faces: HashMap<(String, String), PresentationFaceMetadata>,
+    /// Refresh-resolved Unicode-scalar offsets of `OracleFragment` selectors, keyed by
+    /// `(card_id, face_id, line, part)`. Offsets only; no Oracle prose.
+    presentation_fragments: HashMap<PresentationFragmentKey, (u32, u32)>,
     /// Immutable, startup-validated execution forms kept apart from Oracle face data.
     compiled_programs: HashMap<ProgramOwnerId, CompiledProgram>,
 }
@@ -5046,6 +5052,19 @@ impl CardRegistry {
             .get(&(card_id.to_string(), face_id.to_string()))
     }
 
+    /// Refresh-resolved `[start, end)` scalar offsets for one fragment selector on one face.
+    pub fn presentation_fragment(
+        &self,
+        card_id: &str,
+        face_id: &str,
+        line: u16,
+        part: OracleFragmentPart,
+    ) -> Option<(u32, u32)> {
+        self.presentation_fragments
+            .get(&(card_id.to_string(), face_id.to_string(), line, part))
+            .copied()
+    }
+
     /// Compatibility lookup for an exact face-owned program.
     ///
     /// This preserves the original public API while delegating to the typed owner key. It does
@@ -5070,6 +5089,15 @@ impl CardRegistry {
         faces: impl IntoIterator<Item = ((String, String), PresentationFaceMetadata)>,
     ) -> Self {
         self.presentation_faces.extend(faces);
+        self
+    }
+
+    /// Attach the embedded corpus's generated fragment offsets. Descriptive only.
+    pub fn with_presentation_fragments(
+        mut self,
+        fragments: impl IntoIterator<Item = (PresentationFragmentKey, (u32, u32))>,
+    ) -> Self {
+        self.presentation_fragments.extend(fragments);
         self
     }
 }

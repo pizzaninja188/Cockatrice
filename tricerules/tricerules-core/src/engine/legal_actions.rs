@@ -196,6 +196,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                                     targets: Some(targets),
                                     presentation: parent_presentation.as_ref().map(|parent| {
                                         child_presentation_ref(
+                                            eng.registry,
                                             parent,
                                             PresentationPath::Mode(&mode.mode_id),
                                             &mode.presentation,
@@ -3743,7 +3744,7 @@ mod cast_cost_timing_tests {
                 max: 1,
                 options: vec![CastCostOptionDef::Mana {
                     option_id: option_id.clone(),
-                    presentation: tricerules_card_model::AbilityPresentation::Fallback,
+                    presentation: tricerules_card_model::ChoicePresentation::Generated,
                     kind: tricerules_card_model::primitives::ManaCostChoiceKind::AdditionalPayment,
                     cost: ManaCost::parse("{1}").unwrap(),
                 }],

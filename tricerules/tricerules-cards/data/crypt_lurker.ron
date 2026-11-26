@@ -18,14 +18,14 @@
           optional: true,
           branches: [
             (
-              branch_id: "sacrifice_a_creature", presentation: Fallback,
+              branch_id: "sacrifice_a_creature",
               cost: SacrificePermanent(filter: (kind: Creature, controller: You)),
               body: (steps: [
                 (id: "draw_after_sacrifice", kind: Perform(Draw( count: 1))),
               ]),
             ),
             (
-              branch_id: "discard_a_creature_card", presentation: Fallback,
+              branch_id: "discard_a_creature_card",
               cost: DiscardCard(filter: Some(Creature)),
               body: (steps: [
                 (id: "draw_after_discard", kind: Perform(Draw( count: 1))),

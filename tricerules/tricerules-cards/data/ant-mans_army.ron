@@ -11,11 +11,11 @@
         chooser: Controller,
         optional: false,
         branches: [
-          (branch_id: "create_food", presentation: Fallback, cost: None,
+          (branch_id: "create_food", cost: None,
             body: (steps: [(id: "create_food_token", kind: Perform(CreateTokens(
               token: "food", count: 1,
             )))])),
-          (branch_id: "create_treasure", presentation: Fallback, cost: None,
+          (branch_id: "create_treasure", cost: None,
             body: (steps: [(id: "create_treasure_token", kind: Perform(CreateTokens(
               token: "treasure", count: 1,
             )))])),

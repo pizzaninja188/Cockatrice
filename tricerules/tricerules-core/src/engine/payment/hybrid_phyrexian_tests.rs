@@ -1360,7 +1360,7 @@ fn hybrid_prepared_command_log_replays_exact_color_life_cancel_and_compleated_st
 const HYBRID_RESOLUTION: &str = r#"(id:"hybrid_resolution_probe",name:"Hybrid Resolution Probe",face_id:"hybrid_resolution_probe",types:["Artifact"],
  activated_abilities:[(ability_id:"activate",presentation:Fallback,costs:[],effect:[],program:Some((body:(steps:[
  (id:"choose",kind:Choose(choice:"pay",chooser:Controller,optional:true,branches:[(
- branch_id:"paid",presentation:Fallback,cost:Mana("{G/W/P}"),body:(steps:[
+ branch_id:"paid",cost:Mana("{G/W/P}"),body:(steps:[
  (id:"gain",kind:Perform(GainLife(amount:4))) ]))],otherwise:())) ]))))])"#;
 
 fn hybrid_resolution_fixture() -> GameEngine {

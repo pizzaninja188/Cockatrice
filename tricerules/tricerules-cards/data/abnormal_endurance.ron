@@ -10,7 +10,7 @@
       subject: Chosen((kind: Creature)),
       ability: (
         ability_id: "triggered_01",
-        presentation: Fallback,
+        presentation: OracleFragment(line: 1, part: Quote(1)),
         trigger: WhenSelfDies,
         effect: [
         ReturnTriggeredCard(

@@ -1553,7 +1553,7 @@ fn archive_receipt_fixture_registry() -> &'static tricerules_cards::CardRegistry
     const BODY: &str = r#"(steps: [
         (id: "choose_archive", kind: Choose(
             choice: "archive_linked_event", chooser: Controller, optional: true,
-            branches: [(branch_id: "archive", presentation: Fallback, cost: None,
+            branches: [(branch_id: "archive", cost: None,
                 requirement: EffectsApplicable, body: (steps: [
                     (id: "exile_event", bind: ["archive_receipt"], kind: Perform(Exile(
                         subject: TriggerObject, linked_exile_id: Some("archived_card"),

@@ -189,6 +189,7 @@ impl GameEngine {
                     .filter_map(|chosen| modal.mode_by_id(&chosen.mode_id))
                     .map(|mode| {
                         child_presentation_ref(
+                            self.registry,
                             parent,
                             PresentationPath::Mode(&mode.mode_id),
                             &mode.presentation,

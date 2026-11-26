@@ -16,7 +16,9 @@ use tricerules_cards::primitives::{
     ObjectFilter, PermanentTypeFilter, PlayerRecipient, SpellEffectKind, TargetController,
     TargetGroupDef, TargetKind, TargetingDef, TriggerCondition,
 };
-use tricerules_cards::{AbilityPresentation, ChoiceId, Color, CounterKind, Keyword, Layout};
+use tricerules_cards::{
+    AbilityPresentation, ChoiceId, ChoicePresentation, Color, CounterKind, Keyword, Layout,
+};
 
 const WORTHY_COST_FINGERPRINT: &str =
     "a5201b1a3fe71957d72ff1579f0ace7f49e06e040bebc2ad2b198ad2fbcbcbf9";
@@ -109,7 +111,7 @@ fn issue_338_direct_ron_batch_maps_definitions() {
         );
         assert_eq!(
             group.options[0].presentation(),
-            &AbilityPresentation::OracleLines(vec![1])
+            &ChoicePresentation::OracleLines(vec![1])
         );
     }
     assert_eq!(

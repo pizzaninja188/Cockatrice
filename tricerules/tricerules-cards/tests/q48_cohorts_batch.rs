@@ -792,7 +792,13 @@ fn q48_landcycling_creatures_maps_definitions() {
                     source_controller: CastTriggerPlayer::Opponent,
                 }
             );
-            assert_eq!(trigger.presentation, AbilityPresentation::Fallback);
+            assert_eq!(
+                trigger.presentation,
+                AbilityPresentation::OracleFragment {
+                    line: 1,
+                    part: tricerules_cards::OracleFragmentPart::Keyword(2),
+                }
+            );
         } else {
             assert!(f.triggered_abilities.is_empty(), "{id}");
         }

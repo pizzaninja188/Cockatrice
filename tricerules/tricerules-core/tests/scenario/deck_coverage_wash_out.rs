@@ -271,7 +271,7 @@ const SOURCE_DEPARTURE_TAIL_SPELL: &str = r#"(
       chooser: Controller,
       optional: true,
       branches: [
-        (branch_id: "blue", presentation: Fallback, cost: None, requirement: Always,
+        (branch_id: "blue", cost: None, requirement: Always,
          body: (steps: [
            (id: "return_blue", kind: Perform(ReturnAllToOwnersHand(kind: (
              kind: AnyPermanent, is_color: Some(Blue)

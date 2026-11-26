@@ -17,7 +17,7 @@ use tricerules_card_model::primitives::{
     ManaRetention, ResolutionBranchDef, ResolutionBranchRequirement, ResolutionCost, ResultType,
     TargetRole, TargetingDef, TriggeredAbilityDef,
 };
-use tricerules_card_model::{AbilityPresentation, ChoiceId};
+use tricerules_card_model::{ChoiceId, ChoicePresentation};
 
 mod chaos_warp;
 mod instruction;
@@ -57,7 +57,7 @@ pub(super) fn optional_triggered_ability_branch(
 
     Some(ResolutionBranchDef {
         branch_id: ChoiceId::new("apply_optional_effect").expect("static resolution branch id"),
-        presentation: AbilityPresentation::Fallback,
+        presentation: ChoicePresentation::Generated,
         runtime_fallback: Some("Apply optional effect".into()),
         cost: ResolutionCost::None,
         requirement: ResolutionBranchRequirement::EffectsApplicable,
@@ -12008,7 +12008,7 @@ mod attached_subject_tests {
             assert!(presentation.card_id.is_empty());
             assert!(presentation.face_id.is_empty());
             assert!(presentation.path.is_empty());
-            assert!(presentation.oracle_line_indices.is_empty());
+            assert!(presentation.oracle_spans.is_empty());
             assert!(presentation.external_card_name.is_empty());
             assert!(presentation.external_face_name.is_empty());
             assert!(presentation.oracle_text_sha256.is_empty());

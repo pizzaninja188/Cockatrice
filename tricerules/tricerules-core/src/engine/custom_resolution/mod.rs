@@ -3991,7 +3991,7 @@ mod resolution_payment_actor_tests {
                     original_chooser: 1,
                     branches: vec![tricerules_card_model::primitives::ResolutionBranchDef {
                         branch_id: tricerules_card_model::ChoiceId::new("tap_a_creature").unwrap(),
-                        presentation: tricerules_card_model::AbilityPresentation::Fallback,
+                        presentation: tricerules_card_model::ChoicePresentation::Generated,
                         runtime_fallback: None,
                         cost,
                         requirement:

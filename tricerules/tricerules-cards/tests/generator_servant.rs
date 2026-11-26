@@ -1,5 +1,7 @@
 use tricerules_cards::primitives::{CardTypeFilter, ManaSpendingEffect};
-use tricerules_cards::{AbilityCost, AbilityPresentation, Keyword, ManaAmount, SpellEffectKind};
+use tricerules_cards::{
+    AbilityCost, AbilityPresentation, ChoicePresentation, Keyword, ManaAmount, SpellEffectKind,
+};
 
 #[test]
 fn generator_servant_is_authored_with_exact_characteristics_and_mana_rule() {
@@ -44,7 +46,7 @@ fn generator_servant_is_authored_with_exact_characteristics_and_mana_rule() {
     assert!(!rule.activate_any_ability);
     assert!(!rule.all_nonspell_costs);
     assert!(rule.special_actions.is_empty());
-    assert_eq!(rule.presentation, AbilityPresentation::OracleLines(vec![1]));
+    assert_eq!(rule.presentation, ChoicePresentation::OracleLines(vec![1]));
     assert_eq!(
         rule.spending_effects,
         [ManaSpendingEffect::GrantKeywordsToSpellUntilEndOfTurn {

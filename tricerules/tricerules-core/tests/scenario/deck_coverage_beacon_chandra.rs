@@ -164,7 +164,7 @@ fn beacon_colorless_and_all_ten_restricted_pairs_pay_only_planeswalker_spells() 
             .expect("publish restriction group");
         let presentation = published.presentation.as_ref().unwrap();
         assert_eq!(presentation.card_id, "interplanar_beacon");
-        assert_eq!(presentation.oracle_line_indices, [3]);
+        assert_eq!(presentation.whole_oracle_lines(), [3]);
         let mut one = (0, 0, 0, 0, 0, 0);
         if expected.0 != 0 {
             one.0 = 1;

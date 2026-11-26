@@ -166,7 +166,7 @@ fn issue_459_all_four_fixed_endure_owners_use_the_ordered_program_contract() {
             "put_a_1_1_counter_on_kin_tree_nurturer",
             "create_a_1_1_white_spirit_creature_token",
             "spirit_w_1_1",
-            AbilityPresentation::Fallback,
+            tricerules_cards::ChoicePresentation::Generated,
         ),
         (
             "sandskitter_outrider",
@@ -175,7 +175,7 @@ fn issue_459_all_four_fixed_endure_owners_use_the_ordered_program_contract() {
             "put_two_1_1_counters_on_sandskitter_outrider",
             "create_a_2_2_white_spirit_creature_token",
             "spirit_w_2_2",
-            AbilityPresentation::Fallback,
+            tricerules_cards::ChoicePresentation::Generated,
         ),
         (
             "dusyut_earthcarver",
@@ -184,7 +184,7 @@ fn issue_459_all_four_fixed_endure_owners_use_the_ordered_program_contract() {
             "put_three_1_1_counters_on_dusyut_earthcarver",
             "create_a_3_3_white_spirit_creature_token",
             "spirit_w_3_3",
-            AbilityPresentation::Fallback,
+            tricerules_cards::ChoicePresentation::Generated,
         ),
         (
             "fortress_kin-guard",
@@ -193,7 +193,7 @@ fn issue_459_all_four_fixed_endure_owners_use_the_ordered_program_contract() {
             "put_a_1_1_counter_on_source",
             "create_a_1_1_white_spirit_creature_token",
             "spirit_w_1_1",
-            AbilityPresentation::OracleLines(vec![1]),
+            tricerules_cards::ChoicePresentation::OracleLines(vec![1]),
         ),
     ] {
         let face = face(id);

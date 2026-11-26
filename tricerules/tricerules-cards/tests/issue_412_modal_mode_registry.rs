@@ -339,7 +339,7 @@ fn issue_412_teamwork_modal_spells_expose_the_cost_and_both_mode_allowance() {
             group.options,
             [CastCostOptionDef::TapPermanents {
                 option_id: tricerules_cards::ChoiceId::new(format!("teamwork_{power}")).unwrap(),
-                presentation: tricerules_cards::AbilityPresentation::OracleLines(vec![1]),
+                presentation: tricerules_cards::ChoicePresentation::OracleLines(vec![1]),
                 kind: ObjectCastCostKind::Teamwork,
                 constraint: ObjectPaymentConstraint::AggregateMinimum {
                     minimum: power,

@@ -9,7 +9,7 @@ use tricerules_cards::primitives::{
     CastCostReceiptCondition, EffectSubject, ManaCostChoiceKind, ObjectCastCostKind, ObjectFilter,
     PermanentTypeFilter, PlayerRecipient, SpellEffectKind, TargetController, TargetKind,
 };
-use tricerules_cards::{AbilityPresentation, ChoiceId, Layout};
+use tricerules_cards::{AbilityPresentation, ChoiceId, ChoicePresentation, Layout};
 
 struct Card {
     id: &'static str,
@@ -79,7 +79,7 @@ fn kicker_mana(group: &CastCostGroupDef, cost: &str) -> ChoiceId {
     else {
         panic!("one mana kicker option");
     };
-    assert_eq!(*presentation, AbilityPresentation::OracleLines(vec![1]));
+    assert_eq!(*presentation, ChoicePresentation::OracleLines(vec![1]));
     assert_eq!(*kind, ManaCostChoiceKind::Kicker);
     assert_eq!(actual.to_string(), cost);
     option_id.clone()
@@ -189,7 +189,7 @@ fn q80_kicker_map_definitions() {
                 else {
                     panic!("{}: one sacrifice kicker option", card.id);
                 };
-                assert_eq!(*presentation, AbilityPresentation::OracleLines(vec![1]));
+                assert_eq!(*presentation, ChoicePresentation::OracleLines(vec![1]));
                 assert_eq!(*kind, ObjectCastCostKind::Kicker);
                 assert!(matches!(
                     filter.any_of.as_deref(),

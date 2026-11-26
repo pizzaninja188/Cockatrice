@@ -33,7 +33,7 @@ fn direct_hand_search_fixture(filter: &str, draw_tail: bool) -> String {
           spell_program: Some((body: (steps: [
             (id: "choose_search", bind: [], input: None, kind: Choose(
               choice: "search", chooser: Controller, optional: true,
-              branches: [(branch_id: "search_for_card", presentation: Fallback,
+              branches: [(branch_id: "search_for_card",
                 cost: None, requirement: Always, body: (steps: [
                   (id: "search_hand", bind: [], input: None, kind: Perform(SearchLibrary(
                     who: Controller, optional: false, count: 1, count_by_cast_cost: None,
@@ -69,7 +69,7 @@ const DIRECT_HAND_SEARCH_DEPARTURE_FIXTURE: &str = r#"(
   spell_program: Some((body: (steps: [
     (id: "choose_search", bind: [], input: None, kind: Choose(
       choice: "search", chooser: Controller, optional: true,
-      branches: [(branch_id: "search_for_card", presentation: Fallback,
+      branches: [(branch_id: "search_for_card",
         cost: None, requirement: Always, body: (steps: [
           (id: "search_hand", bind: [], input: None, kind: Perform(SearchLibrary(
             who: Controller, optional: false, count: 1, count_by_cast_cost: None,

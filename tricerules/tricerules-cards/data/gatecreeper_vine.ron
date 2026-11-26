@@ -22,7 +22,6 @@
         optional: true,
         branches: [(
           branch_id: "search_for_a_land",
-          presentation: Fallback,
           cost: None,
           body: (steps: [
             (id: "search_hand", kind: Perform(SearchLibrary(

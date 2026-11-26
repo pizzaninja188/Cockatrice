@@ -328,7 +328,7 @@ fn assert_untargeted_emblem_trigger(engine: &GameEngine, batch: &RuledEventBatch
         .expect("captured emblem presentation");
     assert_eq!(presentation.card_id, JACE);
     assert_eq!(presentation.face_id, "jace_unraveler_of_secrets");
-    assert_eq!(presentation.oracle_line_indices, [3]);
+    assert_eq!(presentation.whole_oracle_lines(), [3]);
     assert_eq!(
         presentation
             .path

@@ -3,7 +3,9 @@ use tricerules_cards::primitives::{
     PlayerRecipient, ResolutionCost, SearchDestination, SearchSelectionBounds, SearchZoneSelection,
     SpellEffectKind, TriggerCondition, ZoneCardFilter,
 };
-use tricerules_cards::{AbilityDefinitionId, AbilityPresentation, Layout, ProgramOwnerId};
+use tricerules_cards::{
+    AbilityDefinitionId, AbilityPresentation, ChoicePresentation, Layout, ProgramOwnerId,
+};
 
 #[test]
 fn solemn_simulacrum_registers_both_optional_triggered_abilities() {
@@ -77,7 +79,7 @@ fn solemn_simulacrum_registers_both_optional_triggered_abilities() {
     assert_eq!(branch.cost, ResolutionCost::None);
     assert_eq!(
         branch.presentation,
-        AbilityPresentation::OracleLines(vec![1])
+        ChoicePresentation::OracleLines(vec![1])
     );
     assert!(matches!(
         &branch.requirement,
@@ -159,7 +161,7 @@ fn solemn_simulacrum_registers_both_optional_triggered_abilities() {
     assert_eq!(branch.cost, ResolutionCost::None);
     assert_eq!(
         branch.presentation,
-        AbilityPresentation::OracleLines(vec![2])
+        ChoicePresentation::OracleLines(vec![2])
     );
     assert!(matches!(
         &branch.requirement,

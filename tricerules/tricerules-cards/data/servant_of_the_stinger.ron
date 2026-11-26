@@ -22,7 +22,6 @@
         optional: true,
         branches: [(
           branch_id: "sacrifice_servant_of_the_stinger",
-          presentation: Fallback,
           cost: SacrificePermanent(
             filter: (kind: AnyPermanent, controller: You),
             source_only: true,

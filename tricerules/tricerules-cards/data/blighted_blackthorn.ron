@@ -14,7 +14,6 @@
           optional: true,
           branches: [(
             branch_id: "blight_2",
-            presentation: Fallback,
             cost: Blight(count: 2),
             body: (steps: [
               (id: "draw", kind: Perform(Draw( count: 1))),
@@ -38,7 +37,6 @@
           optional: true,
           branches: [(
             branch_id: "blight_2",
-            presentation: Fallback,
             cost: Blight(count: 2),
             body: (steps: [
               (id: "draw", kind: Perform(Draw( count: 1))),

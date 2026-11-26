@@ -1,5 +1,6 @@
 use tricerules_card_model::{
-    AbilityId, AbilityPresentation, ActivatedAbilityDef, CardFaceId, CardRegistry, ChoiceId, ModeId,
+    AbilityId, AbilityPresentation, ActivatedAbilityDef, CardFaceId, CardRegistry, ChoiceId,
+    ChoicePresentation, ModeId,
 };
 use tricerules_proto::ruled::v1 as rv1;
 
@@ -40,10 +41,55 @@ impl PresentationPath<'_> {
     }
 }
 
-pub(super) fn child_presentation_ref(
+/// An authored presentation of either kind: printed abilities, modes and cost groups carry an
+/// [`AbilityPresentation`]; interactive choice labels carry a [`ChoicePresentation`].
+#[derive(Clone, Copy)]
+pub(super) enum PresentationMapping<'a> {
+    Ability(&'a AbilityPresentation),
+    Choice(&'a ChoicePresentation),
+}
+
+impl<'a> From<&'a AbilityPresentation> for PresentationMapping<'a> {
+    fn from(presentation: &'a AbilityPresentation) -> Self {
+        Self::Ability(presentation)
+    }
+}
+
+impl<'a> From<&'a ChoicePresentation> for PresentationMapping<'a> {
+    fn from(presentation: &'a ChoicePresentation) -> Self {
+        Self::Choice(presentation)
+    }
+}
+
+/// External spans for one mapping on one exact face. A fragment whose generated offsets are
+/// absent publishes no spans, so clients use the fallback text.
+fn oracle_spans(
+    registry: &CardRegistry,
+    card_id: &str,
+    face_id: &str,
+    mapping: PresentationMapping<'_>,
+) -> Vec<rv1::OracleSpan> {
+    let spans = match mapping {
+        PresentationMapping::Ability(presentation) => presentation.oracle_spans(|line, part| {
+            registry.presentation_fragment(card_id, face_id, line, part)
+        }),
+        PresentationMapping::Choice(presentation) => presentation.oracle_spans(),
+    };
+    spans
+        .into_iter()
+        .map(|span| rv1::OracleSpan {
+            line: u32::from(span.line),
+            start: span.range.map(|(start, _)| start),
+            end: span.range.map(|(_, end)| end),
+        })
+        .collect()
+}
+
+pub(super) fn child_presentation_ref<'p>(
+    registry: &CardRegistry,
     parent: &rv1::PresentationRef,
     child: PresentationPath<'_>,
-    presentation: &AbilityPresentation,
+    presentation: impl Into<PresentationMapping<'p>>,
     fallback_text: String,
 ) -> rv1::PresentationRef {
     let mut path = parent.path.clone();
@@ -52,12 +98,13 @@ pub(super) fn child_presentation_ref(
         card_id: parent.card_id.clone(),
         face_id: parent.face_id.clone(),
         path,
-        oracle_line_indices: match presentation {
-            AbilityPresentation::OracleLines(indices) => {
-                indices.iter().copied().map(u32::from).collect()
-            }
-            AbilityPresentation::Fallback => Vec::new(),
-        },
+        // A child never inherits its parent's spans; it maps (or falls back) on its own.
+        oracle_spans: oracle_spans(
+            registry,
+            &parent.card_id,
+            &parent.face_id,
+            presentation.into(),
+        ),
         fallback_text,
         external_card_name: parent.external_card_name.clone(),
         external_face_name: parent.external_face_name.clone(),
@@ -66,6 +113,7 @@ pub(super) fn child_presentation_ref(
 }
 
 pub(super) fn activated_stack_mode_presentation(
+    registry: &CardRegistry,
     ability: &ActivatedAbilityDef,
     ability_text: &str,
     chosen_modes: &[ChosenMode],
@@ -93,6 +141,7 @@ pub(super) fn activated_stack_mode_presentation(
         labels.push(label.clone());
         if let Some(parent) = parent {
             presentations.push(child_presentation_ref(
+                registry,
                 parent,
                 PresentationPath::Mode(&mode.mode_id),
                 &mode.presentation,
@@ -126,17 +175,18 @@ impl<'a> StackPresentationSource<'a> {
     }
 }
 
-pub(super) fn stack_child_presentation_ref<'a>(
+pub(super) fn stack_child_presentation_ref<'a, 'p>(
     registry: &CardRegistry,
     card_id: &str,
     face_index: usize,
     source: StackPresentationSource<'a>,
     child: PresentationPath<'a>,
-    presentation: &AbilityPresentation,
+    presentation: impl Into<PresentationMapping<'p>>,
     fallback_text: String,
 ) -> Option<rv1::PresentationRef> {
     if let StackPresentationSource::Parent(parent) = source {
         return Some(child_presentation_ref(
+            registry,
             parent,
             child,
             presentation,
@@ -157,12 +207,12 @@ pub(super) fn stack_child_presentation_ref<'a>(
     ))
 }
 
-pub(super) fn presentation_ref<'a>(
+pub(super) fn presentation_ref<'a, 'p>(
     registry: &CardRegistry,
     card_id: &str,
     face_id: &CardFaceId,
     path: impl IntoIterator<Item = PresentationPath<'a>>,
-    presentation: &AbilityPresentation,
+    presentation: impl Into<PresentationMapping<'p>>,
     fallback_text: String,
 ) -> rv1::PresentationRef {
     let metadata = registry.presentation_face(card_id, face_id.as_str());
@@ -175,17 +225,11 @@ pub(super) fn presentation_ref<'a>(
             )
         })
         .unwrap_or_default();
-    let oracle_line_indices = match presentation {
-        AbilityPresentation::OracleLines(indices) => {
-            indices.iter().copied().map(u32::from).collect()
-        }
-        AbilityPresentation::Fallback => Vec::new(),
-    };
     rv1::PresentationRef {
         card_id: card_id.to_owned(),
         face_id: face_id.as_str().to_owned(),
         path: path.into_iter().map(PresentationPath::into_proto).collect(),
-        oracle_line_indices,
+        oracle_spans: oracle_spans(registry, card_id, face_id.as_str(), presentation.into()),
         fallback_text,
         external_card_name,
         external_face_name,
@@ -273,7 +317,7 @@ pub(super) fn spell_stack_presentation(
                 // The number paid is a runtime rules fact, absent from the static Oracle line.
                 // Preserve that complete annotation while offers retain their Oracle mapping.
                 if receipt.multikicker.is_some() {
-                    &AbilityPresentation::Fallback
+                    &ChoicePresentation::Generated
                 } else {
                     mapping
                 },
@@ -342,7 +386,7 @@ mod tests {
         assert_eq!(option.face_id, "grow_from_the_ashes");
         assert_eq!(option.external_card_name, "Grow from the Ashes");
         assert_eq!(option.external_face_name, "Grow from the Ashes");
-        assert_eq!(option.oracle_line_indices, [1]);
+        assert_eq!(option.whole_oracle_lines(), [1]);
         assert_eq!(option.oracle_text_sha256.len(), 64);
         assert_eq!(
             option
@@ -375,7 +419,7 @@ mod tests {
             fallback.clone(),
         );
         assert_eq!(reference.fallback_text, fallback);
-        assert_eq!(reference.oracle_line_indices, [2]);
+        assert_eq!(reference.whole_oracle_lines(), [2]);
         assert_eq!(reference.path.len(), 1);
         assert_eq!(reference.path[0].id, "activated_01");
     }
@@ -398,7 +442,7 @@ mod tests {
             ability.fallback_text(&face.name),
         );
         assert_eq!(reference.fallback_text, "{2}, Sacrifice Clue: Draw a card.");
-        assert!(reference.oracle_line_indices.is_empty());
+        assert!(reference.oracle_spans.is_empty());
         assert!(reference.oracle_text_sha256.is_empty());
     }
 
@@ -462,7 +506,7 @@ mod tests {
         let mode = presentation.chosen_modes.first().expect("chosen mode");
         assert_eq!(mode.card_id, "boros_charm");
         assert_eq!(mode.face_id, "boros_charm");
-        assert_eq!(mode.oracle_line_indices, [3]);
+        assert_eq!(mode.whole_oracle_lines(), [3]);
         assert_eq!(mode.path.last().unwrap().id, "mode_02");
         assert_eq!(
             mode.path.last().unwrap().kind,

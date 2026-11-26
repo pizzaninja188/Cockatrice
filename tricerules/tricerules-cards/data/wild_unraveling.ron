@@ -4,8 +4,8 @@
   cast_cost_groups: [(
     group_id: "cast_cost_01", presentation: OracleLines([1]), min: 1,
     options: [
-      Blight(option_id: "option_01", presentation: Fallback, count: 2),
-      Mana(option_id: "option_02", presentation: Fallback, kind: AdditionalPayment, cost: "{1}"),
+      Blight(option_id: "option_01", count: 2),
+      Mana(option_id: "option_02", kind: AdditionalPayment, cost: "{1}"),
     ],
   )],
   spell_effect: [CounterTargetSpell(spell_filter: ())],

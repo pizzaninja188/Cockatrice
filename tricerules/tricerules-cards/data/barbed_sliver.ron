@@ -18,7 +18,7 @@
       filter: (kind: Creature, required_subtypes: ["Sliver"]),
       activated_abilities: [(
         ability_id: "activated_01",
-        presentation: Fallback,
+        presentation: OracleFragment(line: 1, part: Quote(1)),
         costs: [Mana("{2}")],
         effect: [PumpTarget(power: 1, toughness: 0, subject: Source)],
       )],

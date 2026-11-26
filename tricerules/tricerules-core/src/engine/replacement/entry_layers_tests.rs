@@ -435,12 +435,12 @@ fn manifest_dread_skipped_commander_resumes_none_tail_before_903_9a_choice() {
                     chooser: Controller,
                     optional: false,
                     branches: [
-                        (branch_id: "tail_gain_a", presentation: Fallback, cost: None,
+                        (branch_id: "tail_gain_a", cost: None,
                             requirement: Always, body: (steps: [
                                 (id: "tail_gain_a", bind: [], input: None,
                                     kind: Perform(GainLife(amount: 1))),
                             ], yields: [])),
-                        (branch_id: "tail_gain_b", presentation: Fallback, cost: None,
+                        (branch_id: "tail_gain_b", cost: None,
                             requirement: Always, body: (steps: [
                                 (id: "tail_gain_b", bind: [], input: None,
                                     kind: Perform(GainLife(amount: 1))),

@@ -653,7 +653,7 @@ fn as_foretold_mandatory_discard_optional_cost_and_failed_payment_preserve_use()
         crate::state::ManaPool::default()
     );
     let mut engine = fixture_spell(
-        r#"(id:"test_spell",name:"Test Spell",face_id:"test_spell",mana_cost:"{U}",types:["Instant"],cast_cost_groups:[(group_id:"kicker",presentation:Fallback,options:[Mana(option_id:"kick",presentation:Fallback,kind:Kicker,cost:"{2}")])],spell_effect:[GainLife(amount:1)])"#,
+        r#"(id:"test_spell",name:"Test Spell",face_id:"test_spell",mana_cost:"{U}",types:["Instant"],cast_cost_groups:[(group_id:"kicker",presentation:Fallback,options:[Mana(option_id:"kick",kind:Kicker,cost:"{2}")])],spell_effect:[GainLife(amount:1)])"#,
     );
     let id = source(&mut engine, 17, 1);
     let mut command = plain();

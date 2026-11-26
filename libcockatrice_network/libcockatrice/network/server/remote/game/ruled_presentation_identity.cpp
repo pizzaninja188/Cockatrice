@@ -94,7 +94,10 @@ bool supportedSchema()
         // object-identity domain. All of it stays per-player like the enclosing target group.
         // Goblin Welder's TargetPairConstraint/TargetPairChoice are removed in favor of that
         // relation; its related_group_indices are group positions, not object identities.
-        const QByteArray expected("e1542f201012ba10aec55858c25445e226b405a110033a192f1e2db6353bcf8b");
+        // PresentationRef.oracle_spans replaces oracle_line_indices. OracleSpan line/start/end are
+        // Oracle text coordinates (one-based line, Unicode-scalar range), never object or player
+        // identities, and stay public like the enclosing presentation reference.
+        const QByteArray expected("1b356b443e2d479f53ca3459038ed05c472b18289693efb59dc6dddb0c94cffa");
         if (digest != expected)
             qCritical() << "ruled presentation schema needs an identity audit:" << digest;
         return digest == expected;

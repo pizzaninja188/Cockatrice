@@ -313,7 +313,7 @@ fn tamiyo_hand_free_cast_preserves_targets_tax_mandatory_and_optional_costs() {
         mana_cost:"{7}{U}{U}{U}",types:["Sorcery"],
         additional_costs:[SacrificePermanent(filter:(kind:Creature,controller:You))],
         cast_cost_groups:[(group_id:"multikicker",presentation:Fallback,
-            options:[Mana(option_id:"kick",presentation:Fallback,kind:Multikicker,cost:"{3}")])],
+            options:[Mana(option_id:"kick",kind:Multikicker,cost:"{3}")])],
         spell_effect:[DamageTarget(amount:1,target:(kind:Creature))])"#;
     let creature = r#"(id:"cost_creature",name:"Cost Creature",face_id:"cost_creature",types:["Creature"],power:1,toughness:1)"#;
     let mut engine = fixture_for(

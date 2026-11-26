@@ -22,7 +22,7 @@
         chooser: AffectedPlayer,
         optional: true,
         branches: [
-          (branch_id: "add_doom_counter", presentation: Fallback, cost: None,
+          (branch_id: "add_doom_counter", cost: None,
             requirement: GameCondition(ObjectMatches(
               object: Source,
               filter: (kind: AnyPermanent),
@@ -30,7 +30,7 @@
             body: (steps: [(id: "add_doom", kind: Perform(PutCounters(
               counter: Doom, count: 1, subject: Source,
             )))])),
-          (branch_id: "remove_doom_counter", presentation: Fallback, cost: None,
+          (branch_id: "remove_doom_counter", cost: None,
             requirement: GameCondition(AllOf([
               ObjectMatches(object: Source, filter: (kind: AnyPermanent)),
               SourceCounterCount(counter: Doom, min: Some(1)),
@@ -52,8 +52,7 @@
               when: Some(Sacrificed(object: Source)),
               ability: (
                 ability_id: "reflexive_01",
-                // This is the reflexive damage fragment of the source's upkeep ability.
-                presentation: Fallback,
+                presentation: OracleFragment(line: 2, part: Sentence(3)),
                 effect: [DamageAll(amount: 6)],
               ),
             ),

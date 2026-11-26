@@ -12,10 +12,9 @@
     options: [
       Behold(
         option_id: "option_01",
-        presentation: Fallback,
         criterion: (required_subtype: "Dragon"),
       ),
-      Mana(option_id: "option_02", presentation: Fallback, kind: AdditionalPayment, cost: "{1}"),
+      Mana(option_id: "option_02", kind: AdditionalPayment, cost: "{1}"),
     ],
   )],
   spell_effect: [PumpTarget(power: -3, toughness: -3)],

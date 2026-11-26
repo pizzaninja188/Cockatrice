@@ -582,7 +582,7 @@ void SeededGameDriver::onRuledEvent(const ruled::v1::RuledEvent &ev)
     } else if (ev.has_log()) {
         if (ev.log().has_ability_presentation()) {
             const auto &presentation = ev.log().ability_presentation();
-            if (presentation.has_ability() && presentation.ability().oracle_line_indices_size() > 0) {
+            if (presentation.has_ability() && presentation.ability().oracle_spans_size() > 0) {
                 sawActivatedLogPresentation =
                     sawActivatedLogPresentation || presentation.ability().card_id() == "evolving_wilds";
                 sawTriggeredLogPresentation =

@@ -19,7 +19,9 @@ use tricerules_cards::primitives::{
     BeholdCriterion, CastCostGroupDef, CastCostOptionDef, ManaCostChoiceKind, ObjectCastCostKind,
     ObjectFilter, ObjectPaymentConstraint, PermanentTypeFilter, TargetController, TargetKind,
 };
-use tricerules_cards::{AbilityPresentation, CardFace, ChoiceId, Keyword, ManaCost};
+use tricerules_cards::{
+    AbilityPresentation, CardFace, ChoiceId, ChoicePresentation, Keyword, ManaCost,
+};
 
 fn face(id: &str) -> &'static CardFace {
     tricerules_cards::registry::global()
@@ -72,7 +74,7 @@ fn land() -> ObjectFilter {
 fn sacrifice(option_id: &str, filter: ObjectFilter) -> CastCostOptionDef {
     CastCostOptionDef::SacrificePermanent {
         option_id: ChoiceId::new(option_id).unwrap(),
-        presentation: AbilityPresentation::OracleLines(vec![1]),
+        presentation: ChoicePresentation::OracleLines(vec![1]),
         kind: ObjectCastCostKind::AdditionalPayment,
         filter: Box::new(filter),
     }
@@ -81,14 +83,14 @@ fn sacrifice(option_id: &str, filter: ObjectFilter) -> CastCostOptionDef {
 fn discard() -> CastCostOptionDef {
     CastCostOptionDef::DiscardCard {
         option_id: ChoiceId::new("discard_card").unwrap(),
-        presentation: AbilityPresentation::OracleLines(vec![1]),
+        presentation: ChoicePresentation::OracleLines(vec![1]),
     }
 }
 
 fn mana(option_id: &str, cost: &str) -> CastCostOptionDef {
     CastCostOptionDef::Mana {
         option_id: ChoiceId::new(option_id).unwrap(),
-        presentation: AbilityPresentation::OracleLines(vec![1]),
+        presentation: ChoicePresentation::OracleLines(vec![1]),
         kind: ManaCostChoiceKind::AdditionalPayment,
         cost: ManaCost::parse(cost).unwrap(),
     }
@@ -97,7 +99,7 @@ fn mana(option_id: &str, cost: &str) -> CastCostOptionDef {
 fn tap(option_id: &str, count: u32, filter: ObjectFilter) -> CastCostOptionDef {
     CastCostOptionDef::TapPermanents {
         option_id: ChoiceId::new(option_id).unwrap(),
-        presentation: AbilityPresentation::OracleLines(vec![1]),
+        presentation: ChoicePresentation::OracleLines(vec![1]),
         kind: ObjectCastCostKind::AdditionalPayment,
         constraint: ObjectPaymentConstraint::ExactCount(count),
         filter: Box::new(filter),
@@ -280,7 +282,7 @@ fn issue_338_emits_the_reviewed_cast_cost_groups() {
         [
             CastCostOptionDef::Blight {
                 option_id: ChoiceId::new("blight").unwrap(),
-                presentation: AbilityPresentation::OracleLines(vec![1]),
+                presentation: ChoicePresentation::OracleLines(vec![1]),
                 count: 1,
             },
             mana("pay_mana", "{3}"),
@@ -291,7 +293,7 @@ fn issue_338_emits_the_reviewed_cast_cost_groups() {
         [
             CastCostOptionDef::Behold {
                 option_id: ChoiceId::new("behold").unwrap(),
-                presentation: AbilityPresentation::OracleLines(vec![1]),
+                presentation: ChoicePresentation::OracleLines(vec![1]),
                 criterion: BeholdCriterion {
                     required_subtype: "Kithkin".to_string(),
                 },
@@ -304,7 +306,7 @@ fn issue_338_emits_the_reviewed_cast_cost_groups() {
         [
             CastCostOptionDef::Behold {
                 option_id: ChoiceId::new("behold").unwrap(),
-                presentation: AbilityPresentation::OracleLines(vec![1]),
+                presentation: ChoicePresentation::OracleLines(vec![1]),
                 criterion: BeholdCriterion {
                     required_subtype: "Merfolk".to_string(),
                 },
@@ -368,7 +370,7 @@ fn issue_338_option_presentations_map_the_printed_line() {
         for option in &group.options {
             assert_eq!(
                 option.presentation(),
-                &AbilityPresentation::OracleLines(vec![1]),
+                &ChoicePresentation::OracleLines(vec![1]),
                 "{id}"
             );
         }

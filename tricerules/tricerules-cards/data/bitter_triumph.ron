@@ -11,8 +11,8 @@
     presentation: OracleLines([1]),
     min: 1,
     options: [
-      DiscardCard(option_id: "discard_card", presentation: Fallback),
-      PayLife(option_id: "pay_3_life", presentation: Fallback, amount: 3),
+      DiscardCard(option_id: "discard_card"),
+      PayLife(option_id: "pay_3_life", amount: 3),
     ],
   )],
   spell_effect: [Destroy(subject: Chosen((any_of: Some([

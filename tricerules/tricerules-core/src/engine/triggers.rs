@@ -3510,6 +3510,7 @@ impl GameEngine {
                         targets: Some(targets),
                         presentation: presentation.as_ref().map(|parent| {
                             child_presentation_ref(
+                                self.registry,
                                 parent,
                                 PresentationPath::Mode(&mode.mode_id),
                                 &mode.presentation,

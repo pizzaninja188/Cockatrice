@@ -3,6 +3,7 @@
 pub mod card_def;
 pub mod identity;
 pub mod mana;
+pub mod oracle_fragment;
 pub mod presentation;
 pub mod primitives;
 pub mod registry;
@@ -16,11 +17,12 @@ pub use card_def::{
 };
 pub use identity::{
     ability_fallback, choice_fallback, external_oracle_lines, is_non_game_layout, mode_fallback,
-    resolve_external_presentation, AbilityDefinitionId, AbilityId, AbilityLinkId,
-    AbilityPresentation, CardFaceDefinitionId, CardFaceId, ChoiceId, ExiledCohortId,
-    IdentifiedAbility, ModeId, ProgramOwnerId,
+    resolve_external_presentation, select_oracle_spans, AbilityDefinitionId, AbilityId,
+    AbilityLinkId, AbilityPresentation, CardFaceDefinitionId, CardFaceId, ChoiceId,
+    ChoicePresentation, ExiledCohortId, IdentifiedAbility, ModeId, OracleTextSpan, ProgramOwnerId,
 };
 pub use mana::{ColorPip, ManaCost, ManaSymbol};
+pub use oracle_fragment::{resolve_oracle_fragment, FragmentError, OracleFragmentPart};
 pub use presentation::PresentationFaceMetadata;
 pub use primitives::{
     AbilityCost, AbilitySourceZone, ActivatedAbilityDef, ActivationTiming, AdditionalCost, Amount,

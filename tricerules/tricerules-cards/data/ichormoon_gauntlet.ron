@@ -10,17 +10,16 @@
     presentation: OracleLines([1]),
     definition: GrantActivatedAbilityToPermanents(
       filter: (kind: AnyPermanent, controller: You, permanent_types: [Planeswalker]),
-      // Oracle line 1 combines both grants; mapping it on either child would mislabel that grant.
       activated_abilities: [
         (
           ability_id: "activated_01",
-          presentation: Fallback,
+          presentation: OracleFragment(line: 1, part: Quote(1)),
           costs: [Loyalty(0)],
           effect: [Proliferate],
         ),
         (
           ability_id: "activated_02",
-          presentation: Fallback,
+          presentation: OracleFragment(line: 1, part: Quote(2)),
           costs: [Loyalty(-12)],
           effect: [TakeExtraTurns(count: 1)],
         ),

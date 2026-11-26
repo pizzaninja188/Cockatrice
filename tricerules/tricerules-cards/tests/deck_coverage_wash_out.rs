@@ -10,7 +10,7 @@ fn chosen_color_return_labels_are_complete_and_reject_extra_constraints() {
         ("Green", "green"),
     ] {
         let data = format!(
-            r#"(branch_id:"chosen_color",presentation:Fallback,cost:None,effects:[ReturnAllToOwnersHand(kind:(kind:AnyPermanent,is_color:Some({color})))])"#
+            r#"(branch_id:"chosen_color",cost:None,effects:[ReturnAllToOwnersHand(kind:(kind:AnyPermanent,is_color:Some({color})))])"#
         );
         let branch: ResolutionBranchDef = ron::from_str(&data).unwrap();
         assert_eq!(

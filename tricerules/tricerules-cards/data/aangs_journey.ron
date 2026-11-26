@@ -15,12 +15,10 @@
       slots: [
         (
           slot_id: "slot_01",
-          presentation: Fallback,
           filter: (card_type: Some(BasicLand)),
         ),
         (
           slot_id: "slot_02",
-          presentation: Fallback,
           filter: (required_subtypes: ["Shrine"]),
           enabled_by_cast_cost: Some((
             group_id: "cast_cost_01",

@@ -1925,5 +1925,5 @@ pub(crate) fn assert_top_stack_engine_text(e: &GameEngine, expected: &str) {
         .and_then(|stack| stack.primary.as_ref())
         .expect("primary presentation");
     assert_eq!(presentation.fallback_text, expected);
-    assert!(presentation.oracle_line_indices.is_empty());
+    assert!(presentation.oracle_spans.is_empty());
 }

@@ -76,7 +76,7 @@ const PROGRAM_NESTED_CHOOSE_IF_SCRY_TAIL_FIXTURE: &str = r#"(
   spell_program: Some((body: (steps: [
     (id: "choose_scry", bind: [], input: None, kind: Choose(
       choice: "scry", chooser: Controller, optional: true,
-      branches: [(branch_id: "scry", presentation: Fallback, cost: None,
+      branches: [(branch_id: "scry", cost: None,
         requirement: Always, body: (steps: [
           (id: "if_cards_in_hand", bind: [], input: None, kind: If(
             condition: CardsInHand(players: Relative(Controller), min: Some(1), max: None),

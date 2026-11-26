@@ -96,7 +96,7 @@ fn multikicker_counted_entry_schema_is_linked_and_fail_closed() {
             r#"(id: "repeated_entry", name: "Repeated Entry", face_id: "repeated_entry",
                 mana_cost: "{{0}}", types: ["Artifact"],
                 cast_cost_groups: [(group_id: "multikicker", presentation: Fallback,
-                    options: [Mana(option_id: "kick", presentation: Fallback,
+                    options: [Mana(option_id: "kick",
                         kind: {kind}, cost: "{cost}")])],
                 static_abilities: [(ability_id: "entry", presentation: Fallback,
                     definition: EntersWithCounters(affected: {affected}, counter: Charge,
@@ -1316,8 +1316,7 @@ fn registry_rejects_cast_payment_import_outside_exact_mandatory_discard_spell_pr
             "[\"Instant\"]",
             "",
             r#"additional_costs: [DiscardCard], cast_cost_groups: [(group_id: "kicker",
-                presentation: Fallback, min: 0, max: 1, options: [Mana(option_id: "kick",
-                    presentation: Fallback, kind: Kicker, cost: "{1}")])],"#,
+                presentation: Fallback, min: 0, max: 1, options: [Mana(option_id: "kick", kind: Kicker, cost: "{1}")])],"#,
         ),
         (
             "cast_payment_import_with_flashback_profile",
@@ -1344,8 +1343,7 @@ fn registry_rejects_cast_payment_import_outside_exact_mandatory_discard_spell_pr
             r#"additional_costs: [DiscardCard], instant_speed_cast_cost: Some((
                 group_id: "kicker", option_id: "kick", expected_selected: true)),
                 cast_cost_groups: [(group_id: "kicker", presentation: Fallback,
-                    min: 0, max: 1, options: [Mana(option_id: "kick",
-                        presentation: Fallback, kind: Kicker, cost: "{1}")])],"#,
+                    min: 0, max: 1, options: [Mana(option_id: "kick", kind: Kicker, cost: "{1}")])],"#,
         ),
         (
             "cast_payment_import_with_cost_modifier_profile",
@@ -2439,20 +2437,19 @@ fn structured_choice_metadata_is_stable_nonmechanical_and_unique() {
             min: 1,
             max: 2,
             options: [
-                Mana(option_id: "first", presentation: Fallback, kind: AdditionalPayment, cost: "{1}"),
-                Mana(option_id: "second", presentation: Fallback, kind: AdditionalPayment, cost: "{2}"),
+                Mana(option_id: "first", kind: AdditionalPayment, cost: "{1}"),
+                Mana(option_id: "second", kind: AdditionalPayment, cost: "{2}"),
             ],
         )"#,
     )
     .expect("bounded cast-cost group parses");
     assert!(bounded_group.validate().is_ok());
 
-    let branch: super::ResolutionBranchDef = ron::from_str(
-        r#"(branch_id: "draw", presentation: Fallback, cost: None, effects: [Draw(count: 1)])"#,
-    )
-    .expect("structured branch presentation");
+    let branch: super::ResolutionBranchDef =
+        ron::from_str(r#"(branch_id: "draw", cost: None, effects: [Draw(count: 1)])"#)
+            .expect("structured branch presentation");
     let mut externally_mapped = branch.clone();
-    externally_mapped.presentation = crate::AbilityPresentation::OracleLines(vec![1]);
+    externally_mapped.presentation = crate::ChoicePresentation::OracleLines(vec![1]);
     assert_eq!(branch.fallback_label(), "Draw a card.");
     assert_eq!(branch.fallback_label(), externally_mapped.fallback_label());
 
@@ -2473,8 +2470,8 @@ fn structured_choice_metadata_is_stable_nonmechanical_and_unique() {
     let duplicate_slots: super::SpellEffectKind = ron::from_str(
         r#"SearchLibrary(
             slots: [
-                (slot_id: "slot_01", presentation: Fallback, filter: (card_type: Some(BasicLand))),
-                (slot_id: "slot_01", presentation: Fallback, filter: (required_subtypes: ["Shrine"])),
+                (slot_id: "slot_01", filter: (card_type: Some(BasicLand))),
+                (slot_id: "slot_01", filter: (required_subtypes: ["Shrine"])),
             ],
             destination: Hand,
         )"#,
@@ -2488,8 +2485,8 @@ fn structured_choice_metadata_is_stable_nonmechanical_and_unique() {
         id: "duplicate_groups", name: "Duplicate Groups", face_id: "duplicate_groups",
         mana_cost: "{1}", types: ["Sorcery"],
         cast_cost_groups: [
-            (group_id: "cast_cost_01", presentation: Fallback, options: [Mana(option_id: "option_01", presentation: Fallback, kind: AdditionalPayment, cost: "{1}")]),
-            (group_id: "cast_cost_01", presentation: Fallback, options: [Mana(option_id: "option_01", presentation: Fallback, kind: AdditionalPayment, cost: "{2}")]),
+            (group_id: "cast_cost_01", presentation: Fallback, options: [Mana(option_id: "option_01", kind: AdditionalPayment, cost: "{1}")]),
+            (group_id: "cast_cost_01", presentation: Fallback, options: [Mana(option_id: "option_01", kind: AdditionalPayment, cost: "{2}")]),
         ],
     )"#;
     assert!(crate::CardRegistry::from_chunks_and_tokens(&[duplicate_groups], &[]).is_err());
@@ -2635,8 +2632,8 @@ fn issue_159_heterogeneous_library_search_slots_deserialize() {
     let effect: super::SpellEffectKind = ron::from_str(
         r#"SearchLibrary(
             slots: [
-                (slot_id: "slot_01", presentation: Fallback, filter: (card_type: Some(BasicLand))),
-                (slot_id: "slot_02", presentation: Fallback, filter: (required_subtypes: ["Shrine"]), enabled_by_cast_cost: Some((group_id: "cast_cost_01", option_id: "option_01", expected_selected: true))),
+                (slot_id: "slot_01", filter: (card_type: Some(BasicLand))),
+                (slot_id: "slot_02", filter: (required_subtypes: ["Shrine"]), enabled_by_cast_cost: Some((group_id: "cast_cost_01", option_id: "option_01", expected_selected: true))),
             ],
             destination: Hand,
             reveal: true,
@@ -5026,7 +5023,7 @@ fn issue_172_expend_threshold_is_positive_and_defaults_to_controller() {
 fn special_action_mana_restrictions_validate_without_spell_or_ability_permissions() {
     for purpose in ["UnlockRoomDoor", "TurnFaceUp"] {
         let restriction: ManaSpendingRestriction = ron::from_str(&format!(
-            "(restriction_id: \"restriction_01\", presentation: Fallback, special_actions: [{purpose}])"
+            "(restriction_id: \"restriction_01\", special_actions: [{purpose}])"
         ))
         .expect("typed special-action restriction");
         assert!(restriction.validate().is_ok(), "{purpose}");
@@ -5038,7 +5035,7 @@ fn special_action_mana_restrictions_validate_without_spell_or_ability_permission
 #[test]
 fn special_action_mana_restrictions_reject_unknown_purposes() {
     assert!(ron::from_str::<ManaSpendingRestriction>(
-        "(restriction_id: \"restriction_01\", presentation: Fallback, special_actions: [CastAnything])"
+        "(restriction_id: \"restriction_01\", special_actions: [CastAnything])"
     )
     .is_err());
 }
@@ -5046,7 +5043,7 @@ fn special_action_mana_restrictions_reject_unknown_purposes() {
 #[test]
 fn unrestricted_ability_and_all_nonspell_permissions_are_distinct_and_canonical() {
     let any_ability: ManaSpendingRestriction = ron::from_str(
-        "(restriction_id: \"restriction_01\", presentation: Fallback, cast_spell: [(card_type: Some(Artifact))], activate_any_ability: true)",
+        "(restriction_id: \"restriction_01\", cast_spell: [(card_type: Some(Artifact))], activate_any_ability: true)",
     )
     .expect("unrestricted ability permission");
     assert!(any_ability.validate().is_ok());
@@ -5054,7 +5051,7 @@ fn unrestricted_ability_and_all_nonspell_permissions_are_distinct_and_canonical(
     assert!(!any_ability.all_nonspell_costs);
 
     let all_nonspell: ManaSpendingRestriction = ron::from_str(
-        "(restriction_id: \"restriction_01\", presentation: Fallback, cast_spell: [(card_type: Some(Artifact))], all_nonspell_costs: true)",
+        "(restriction_id: \"restriction_01\", cast_spell: [(card_type: Some(Artifact))], all_nonspell_costs: true)",
     )
     .expect("all-nonspell permission");
     assert!(all_nonspell.validate().is_ok());
@@ -5062,9 +5059,9 @@ fn unrestricted_ability_and_all_nonspell_permissions_are_distinct_and_canonical(
     assert!(all_nonspell.all_nonspell_costs);
 
     for redundant in [
-        "(restriction_id: \"restriction_01\", presentation: Fallback, activate_ability: [(card_type: Some(Artifact))], activate_any_ability: true)",
-        "(restriction_id: \"restriction_01\", presentation: Fallback, all_nonspell_costs: true, activate_any_ability: true)",
-        "(restriction_id: \"restriction_01\", presentation: Fallback, all_nonspell_costs: true, special_actions: [TurnFaceUp])",
+        "(restriction_id: \"restriction_01\", activate_ability: [(card_type: Some(Artifact))], activate_any_ability: true)",
+        "(restriction_id: \"restriction_01\", all_nonspell_costs: true, activate_any_ability: true)",
+        "(restriction_id: \"restriction_01\", all_nonspell_costs: true, special_actions: [TurnFaceUp])",
     ] {
         let restriction: ManaSpendingRestriction = ron::from_str(redundant).unwrap();
         assert!(restriction.validate().is_err(), "{redundant}");
@@ -5076,7 +5073,6 @@ fn unrestricted_mana_can_carry_a_validated_spell_keyword_effect() {
     let rule: ManaSpendingRestriction = ron::from_str(
         r#"(
             restriction_id: "restriction_01",
-            presentation: Fallback,
             unrestricted: true,
             spending_effects: [GrantKeywordsToSpellUntilEndOfTurn(
                 filter: (card_type: Some(Creature)),
@@ -5094,13 +5090,11 @@ fn unrestricted_mana_can_carry_a_validated_spell_keyword_effect() {
     for invalid in [
         r#"(
             restriction_id: "restriction_01",
-            presentation: Fallback,
             unrestricted: true,
             cast_spell: [(card_type: Some(Creature))],
         )"#,
         r#"(
             restriction_id: "restriction_01",
-            presentation: Fallback,
             unrestricted: true,
             spending_effects: [GrantKeywordsToSpellUntilEndOfTurn(
                 filter: (card_type: Some(Creature)),
@@ -5109,7 +5103,6 @@ fn unrestricted_mana_can_carry_a_validated_spell_keyword_effect() {
         )"#,
         r#"(
             restriction_id: "restriction_01",
-            presentation: Fallback,
             unrestricted: true,
             spending_effects: [GrantKeywordsToSpellUntilEndOfTurn(
                 filter: (card_type: Some(Creature)),
@@ -6044,7 +6037,7 @@ fn non_koya_spell_can_bind_optional_exile_into_an_authored_delayed_child() {
                             (id: "choose_return", kind: Choose(
                                 choice: "pay_or_return", chooser: Controller,
                                 optional: true,
-                                branches: [(branch_id: "pay", presentation: Fallback,
+                                branches: [(branch_id: "pay",
                                     cost: Mana("{1}"), requirement: Always,
                                     body: (steps: [], yields: []))],
                                 otherwise: (steps: [
@@ -7601,10 +7594,8 @@ fn triggering_attacker_recipient_is_draw_only_and_requires_coveted_jewels_trigge
 
 #[test]
 fn simple_fallbacks_cover_synthetic_choices_and_keep_unknown_instructions_whole() {
-    let branch: super::ResolutionBranchDef = ron::from_str(
-        r#"(branch_id: "continue", presentation: Fallback, cost: None, effects: [])"#,
-    )
-    .unwrap();
+    let branch: super::ResolutionBranchDef =
+        ron::from_str(r#"(branch_id: "continue", cost: None, effects: [])"#).unwrap();
     assert_eq!(branch.fallback_label(), "Continue");
     let ability: super::ActivatedAbilityDef = ron::from_str(
         r#"(ability_id: "activated_01", presentation: Fallback, costs: [Tap], effect: [ProduceMana(options: [(w: 1), (u: 1), (b: 1), (r: 1), (g: 1)])])"#,
@@ -8001,7 +7992,7 @@ fn vow_equipment_program_ron(condition: &str) -> String {
             (id: "dwarf_gate", bind: [], input: None, kind: Choose(
                 choice: "dwarf_gate", chooser: Controller, optional: false,
                 branches: [(
-                    branch_id: "dwarf", presentation: Fallback, cost: None,
+                    branch_id: "dwarf", cost: None,
                     requirement: GameCondition({condition}),
                     body: (steps: [
                         (id: "choose_equipment", bind: ["selected_equipment"], input: None,
@@ -8161,7 +8152,7 @@ fn equipment_receipt_program_compiler_admits_parent_created_batch_in_nested_choi
                     who: Controller, tapped: false, sacrifice_timing: None))),
             (id: "choose_attachment", bind: [], input: None, kind: Choose(
                 choice: "attach_created_cohort", chooser: Controller, optional: false,
-                branches: [(branch_id: "attach", presentation: Fallback, cost: None,
+                branches: [(branch_id: "attach", cost: None,
                     requirement: Always, body: (steps: [
                         (id: "attach_created_tokens", bind: [], input: Some("created_tokens"),
                             kind: Perform(AttachEquipment(
@@ -8336,7 +8327,7 @@ fn equipment_selection_program_ron(
             (id: "dwarf_gate", bind: [], input: None, kind: Choose(
                 choice: "dwarf_gate", chooser: Controller, optional: false,
                 branches: [(
-                    branch_id: "elf", presentation: Fallback, cost: None,
+                    branch_id: "elf", cost: None,
                     requirement: GameCondition(ObjectMatches(
                         object: ChosenTarget(group_index: {guard_group}, target_index: 0),
                         filter: (kind: Creature, required_subtypes: ["Elf"]),
@@ -8492,7 +8483,6 @@ fn legacy_flat_resolution_branch_ron_is_rejected() {
         selection: FirstApplicable,
         branches: [(
             branch_id: "branch_01",
-            presentation: Fallback,
             cost: None,
             requirement: Always,
             effects: [GainLife(amount: 1)],
@@ -8513,7 +8503,7 @@ fn typed_program_choose_remains_admitted_after_flat_branch_retirement() {
             (id: "choose_draw", kind: Choose(
                 choice: "choose_draw", chooser: Controller, optional: false,
                 branches: [(
-                    branch_id: "draw", presentation: Fallback,
+                    branch_id: "draw",
                     cost: None, requirement: Always,
                     body: (steps: [
                         (id: "draw", kind: Perform(Draw(who: Controller, count: 1))),
@@ -8568,7 +8558,7 @@ fn resultless_direct_hand_search_program(filter: &str) -> String {
         r#"(steps: [
             (id: "search_choice", bind: [], input: None, kind: Choose(
                 choice: "search", chooser: Controller, optional: true,
-                branches: [(branch_id: "search_for_card", presentation: Fallback,
+                branches: [(branch_id: "search_for_card",
                     cost: None, requirement: Always, body: (steps: [
                         (id: "search_hand", bind: [], input: None, kind: Perform(SearchLibrary(
                             who: Controller, optional: false, count: 1,
@@ -8666,7 +8656,7 @@ fn authored_choose_accepts_resultless_direct_basic_land_search_to_library_top() 
         r#"(steps: [
             (id: "search_choice", bind: [], input: None, kind: Choose(
                 choice: "search", chooser: Controller, optional: true,
-                branches: [(branch_id: "search_for_a_basic_land", presentation: Fallback,
+                branches: [(branch_id: "search_for_a_basic_land",
                     cost: None, requirement: Always, body: (steps: [
                         (id: "search_top", bind: [], input: None, kind: Perform(SearchLibrary(
                             who: Controller, optional: false, count: 1,
@@ -8792,7 +8782,7 @@ fn authored_choose_accepts_resultless_direct_basic_land_search_to_library_top() 
             "selection slots are excluded",
             definition.replace(
                 "slots: [],",
-                "slots: [(slot_id: \"basic\", presentation: Fallback, filter: (card_type: Some(BasicLand)))],",
+                "slots: [(slot_id: \"basic\", filter: (card_type: Some(BasicLand)))],",
             ),
         ),
         (
@@ -8841,7 +8831,7 @@ fn resultless_direct_battlefield_search_program(count: u32, max: u32) -> String 
         r#"(steps: [
             (id: "search_choice", bind: [], input: None, kind: Choose(
                 choice: "search", chooser: Controller, optional: true,
-                branches: [(branch_id: "search_for_a_basic_land", presentation: Fallback,
+                branches: [(branch_id: "search_for_a_basic_land",
                     cost: None, requirement: Always, body: (steps: [
                         (id: "search_battlefield", bind: [], input: None, kind: Perform(SearchLibrary(
                             who: Controller, optional: false, count: 1,
@@ -8866,7 +8856,7 @@ fn resultless_conditional_top_search_program() -> String {
         r#"(steps: [
             (id: "search_choice", bind: [], input: None, kind: Choose(
                 choice: "search", chooser: Controller, optional: true,
-                branches: [(branch_id: "search_for_a_basic_land", presentation: Fallback,
+                branches: [(branch_id: "search_for_a_basic_land",
                     cost: None, requirement: Always, body: (steps: [
                         (id: "search_top", bind: [], input: None, kind: Perform(SearchLibrary(
                             who: Controller, optional: false, count: 1,
@@ -9059,7 +9049,7 @@ fn program_reusable_operation_contract() {
                 r#"(steps: [
                 (id: "search_choice", bind: [], input: None, kind: Choose(
                     choice: "search", chooser: Controller, optional: true,
-                    branches: [(branch_id: "search_for_card", presentation: Fallback,
+                    branches: [(branch_id: "search_for_card",
                         cost: None, requirement: Always, body: (steps: [
                             (id: "search", bind: [], input: None, kind: Perform(SearchLibrary(
                                 who: Controller, optional: false, count: 1,
@@ -9569,7 +9559,7 @@ fn authored_choose_accepts_resultless_direct_basic_land_search_to_battlefield_ta
             "the search has no slot definitions",
             definition.replace(
                 "slots: [],",
-                "slots: [(slot_id: \"basic\", presentation: Fallback, filter: (card_type: Some(BasicLand)))],",
+                "slots: [(slot_id: \"basic\", filter: (card_type: Some(BasicLand)))],",
             ),
         ),
         (
@@ -9740,7 +9730,7 @@ fn typed_permanent_search_profile_rejects_unproven_or_infeasible_shapes() {
             "heterogeneous slots",
             base.replace(
                 "slots: []",
-                "slots: [(slot_id: \"creature\", presentation: Fallback, filter: (card_type: Some(Creature)))]",
+                "slots: [(slot_id: \"creature\", filter: (card_type: Some(Creature)))]",
             ),
         ),
         (
@@ -10040,7 +10030,7 @@ fn choose_cast_cost_program(group_id: &str, option_id: &str) -> String {
         r#"Some((body: (steps: [
             (id: "cast_cost_choice", kind: Choose(
                 choice: "cast_cost_choice", chooser: Controller, optional: false,
-                branches: [(branch_id: "selected", presentation: Fallback, cost: None,
+                branches: [(branch_id: "selected", cost: None,
                     requirement: CastCostReceipt((group_id: "{group_id}",
                         option_id: "{option_id}", expected_selected: true)),
                     body: (steps: [], yields: []))],
@@ -10118,7 +10108,7 @@ fn program_choose_raw_ron_compiles_nested_paid_and_otherwise_blocks() {
              kind: Choose(
                 choice: "waterbend_or_discard", chooser: Controller, optional: true,
                 branches: [(
-                    branch_id: "waterbend_2", presentation: Fallback,
+                    branch_id: "waterbend_2",
                     cost: Waterbend("{2}"), requirement: Always,
                     body: (steps: [], yields: []),
                 )],
@@ -10320,7 +10310,7 @@ fn cast_snapshot_program_if_stays_spell_face_scoped_and_checks_its_index() {
         cast_conditions: [CastOrigin(origin: Graveyard)],
         spell_program: Some((body: (steps: [(id: "choose", kind: Choose(
             choice: "choose", chooser: Controller, optional: false,
-            branches: [(branch_id: "cast", presentation: Fallback, cost: None,
+            branches: [(branch_id: "cast", cost: None,
                 requirement: GameCondition(CastSnapshot(index: 0)),
                 body: (steps: [], yields: []))],
             otherwise: (steps: [], yields: []),
@@ -10689,7 +10679,7 @@ fn spell_program_rejects_other_exile_permission_leaf_profiles() {
     ], yields: [])"#;
     let conditional_definition = program_fixture(conditional_body).replace(
         "types: [\"Instant\"],",
-        "types: [\"Instant\"], cast_cost_groups: [(group_id: \"cast_cost_01\", presentation: Fallback, options: [Mana(option_id: \"option_01\", presentation: Fallback, kind: AdditionalPayment, cost: \"{1}\")])],",
+        "types: [\"Instant\"], cast_cost_groups: [(group_id: \"cast_cost_01\", presentation: Fallback, options: [Mana(option_id: \"option_01\", kind: AdditionalPayment, cost: \"{1}\")])],",
     );
     assert!(
         crate::CardRegistry::from_chunks_and_tokens(&[&conditional_definition], &[]).is_err(),
@@ -11405,7 +11395,7 @@ fn mosswort_total_power_choose_body(condition: &str) -> String {
     format!(
         r#"(steps: [(id: "choose_linked_play", kind: Choose(
             choice: "choose_linked_play", chooser: Controller, optional: true,
-            branches: [(branch_id: "play_linked_card", presentation: Fallback, cost: None,
+            branches: [(branch_id: "play_linked_card", cost: None,
                 requirement: GameCondition({condition}),
                 body: (steps: [], yields: []))],
             otherwise: (steps: [], yields: []),
@@ -11515,7 +11505,7 @@ fn trade_route_envoy_counter_choose_body(condition: &str) -> String {
     format!(
         r#"(steps: [(id: "draw_or_counter", kind: Choose(
             choice: "draw_if_countered", chooser: Controller, optional: false,
-            branches: [(branch_id: "draw_a_card", presentation: Fallback, cost: None,
+            branches: [(branch_id: "draw_a_card", cost: None,
                 requirement: GameCondition({condition}),
                 body: (steps: [(id: "draw", kind: Perform(Draw(who: Controller, count: 1)))], yields: []))],
             otherwise: (steps: [(id: "put_counter", kind: Perform(PutCounters(
@@ -11682,7 +11672,7 @@ fn program_choose_rejects_invalid_or_context_dependent_total_power_conditions() 
 
 const MOSSWORT_LINKED_PLAY_BODY: &str = r#"(steps: [(id: "choose_linked_play", kind: Choose(
     choice: "choose_linked_play", chooser: Controller, optional: true,
-    branches: [(branch_id: "play_linked_card", presentation: Fallback, cost: None,
+    branches: [(branch_id: "play_linked_card", cost: None,
         requirement: GameCondition(BattlefieldAggregate(
             filter: (controllers: Controller, matching: (kind: Creature)),
             aggregate: TotalPower, min: Some(10), max: None,
@@ -12772,8 +12762,7 @@ fn choose_cast_cost_receipts_compile_for_exact_face_and_selected_mode_owners() {
         r#"(id: "face_choose_cost_receipt", name: "Face Choose Cost Receipt",
             face_id: "face_choose_cost_receipt", mana_cost: "{{0}}", types: ["Instant"],
             cast_cost_groups: [(group_id: "kicker_group", presentation: Fallback,
-                min: 0, max: 1, options: [Mana(option_id: "kicker_option",
-                    presentation: Fallback, kind: Kicker, cost: "{{1}}")])],
+                min: 0, max: 1, options: [Mana(option_id: "kicker_option", kind: Kicker, cost: "{{1}}")])],
             spell_program: {face_program})"#
     );
     let mode_program = choose_cast_cost_program("kicker_group", "kicker_option");
@@ -12781,8 +12770,7 @@ fn choose_cast_cost_receipts_compile_for_exact_face_and_selected_mode_owners() {
         r#"(id: "mode_choose_cost_receipt", name: "Mode Choose Cost Receipt",
             face_id: "mode_choose_cost_receipt", mana_cost: "{{0}}", types: ["Instant"],
             cast_cost_groups: [(group_id: "kicker_group", presentation: Fallback,
-                min: 0, max: 1, options: [Mana(option_id: "kicker_option",
-                    presentation: Fallback, kind: Kicker, cost: "{{1}}")])],
+                min: 0, max: 1, options: [Mana(option_id: "kicker_option", kind: Kicker, cost: "{{1}}")])],
             modal_spell: Some((min_modes: 1, max_modes: 1, modes: [
                 (mode_id: "receipt_mode", presentation: Fallback, linked_cast_cost: None,
                     effects: [], program: {mode_program}, targeting: None)
@@ -12828,8 +12816,7 @@ fn choose_cast_cost_receipts_reject_unknown_group_option_and_sibling_face() {
             r#"(id: "{card_id}", name: "Receipt Negative",
                 face_id: "{card_id}", mana_cost: "{{0}}", types: ["Instant"],
                 cast_cost_groups: [(group_id: "kicker_group", presentation: Fallback,
-                    min: 0, max: 1, options: [Mana(option_id: "kicker_option",
-                        presentation: Fallback, kind: Kicker, cost: "{{1}}")])],
+                    min: 0, max: 1, options: [Mana(option_id: "kicker_option", kind: Kicker, cost: "{{1}}")])],
                 spell_program: {program})"#
         )
     };
@@ -12855,7 +12842,7 @@ fn choose_cast_cost_receipts_reject_unknown_group_option_and_sibling_face() {
                 (name: "Cost Face", face_id: "cost_face", mana_cost: "{{0}}",
                     types: ["Instant"], cast_cost_groups: [(group_id: "kicker_group",
                         presentation: Fallback, min: 0, max: 1,
-                        options: [Mana(option_id: "kicker_option", presentation: Fallback,
+                        options: [Mana(option_id: "kicker_option",
                             kind: Kicker, cost: "{{1}}")])]),
                 (name: "Program Face", face_id: "program_face", mana_cost: "{{0}}",
                     types: ["Instant"], spell_program: {program})
@@ -12900,7 +12887,6 @@ fn registry_discovers_nested_koya_delayed_program_and_rejects_unavailable_captur
                                                 choice: "pay_or_return", chooser: Controller,
                                                 optional: true,
                                                 branches: [(branch_id: "pay",
-                                                    presentation: Fallback,
                                                     cost: Mana("{3}{B}"), requirement: Always,
                                                     body: (steps: [], yields: []))],
                                                 otherwise: (steps: [
@@ -14922,7 +14908,7 @@ fn program_target_aliases_lower_recursively_through_if_result_and_choose_conditi
             yes: (steps: [(id: "choose", bind: [], input: None, kind: Choose(
                 choice: "choose", chooser: Controller, optional: false,
                 branches: [(
-                    branch_id: "if_matches", presentation: Fallback, cost: None,
+                    branch_id: "if_matches", cost: None,
                     requirement: GameCondition(AllOf([
                         ObjectMatches(object: TargetAlias("target_creature"),
                             filter: (kind: Creature)),
@@ -17299,7 +17285,7 @@ fn bound_card_result_count_is_lowered_in_nested_compiled_branches() {
                 no: (steps: [
                     (id: "choose", input: None, kind: Choose(
                         choice: "count_after_discard", chooser: Controller, optional: false,
-                        branches: [(branch_id: "gain", presentation: Fallback,
+                        branches: [(branch_id: "gain",
                             cost: None, requirement: Always,
                             body: (steps: [
                                 (id: "gain_choose_branch", input: Some("discarded"),
@@ -18040,7 +18026,7 @@ fn program_choose_rejects_unsupported_admission_shapes() {
                 (id: "choose", bind: [], input: {input}, kind: Choose(
                     choice: "choice_01", chooser: {chooser}, optional: false,
                     branches: [(
-                        branch_id: "branch_01", presentation: Fallback,
+                        branch_id: "branch_01",
                         cost: {cost}, requirement: {requirement},
                         body: (steps: [], yields: []),
                     )],
@@ -18112,7 +18098,7 @@ fn program_choose_admits_controller_spell_hand_bottom_cost() {
             (id: "choose", bind: [], input: None, kind: Choose(
                 choice: "choice_01", chooser: Controller, optional: true,
                 branches: [(
-                    branch_id: "bottom_and_draw", presentation: Fallback,
+                    branch_id: "bottom_and_draw",
                     cost: PutHandCardOnLibraryBottom, requirement: Always,
                     body: (steps: [
                         (id: "draw", bind: [], input: None,
@@ -18200,7 +18186,7 @@ fn program_choose_admits_controller_ability_sacrifice_permanent_cost() {
             r#"(steps: [(id: "choose", bind: [], input: None, kind: Choose(
                 choice: "sacrifice", chooser: {chooser}, optional: true,
                 branches: [(
-                    branch_id: "pay_sacrifice", presentation: Fallback,
+                    branch_id: "pay_sacrifice",
                     cost: {cost}, requirement: Always,
                     body: (steps: [], yields: []),
                 )],
@@ -18300,7 +18286,7 @@ fn program_choose_admits_fixed_controller_ability_tap_permanent_cost() {
             r#"(steps: [(id: "choose", bind: {bind}, input: {input}, kind: Choose(
                 choice: "tap", chooser: {chooser}, optional: {optional},
                 branches: [(
-                    branch_id: "pay_tap", presentation: Fallback,
+                    branch_id: "pay_tap",
                     cost: {cost}, requirement: Always,
                     body: (steps: [], yields: []),
                 )],
@@ -18415,9 +18401,9 @@ fn program_choose_admits_fixed_controller_ability_tap_permanent_cost() {
     let mixed = r#"(steps: [(id: "choose", bind: [], input: None, kind: Choose(
         choice: "tap", chooser: Controller, optional: false,
         branches: [
-            (branch_id: "free", presentation: Fallback, cost: None,
+            (branch_id: "free", cost: None,
                 requirement: Always, body: (steps: [], yields: [])),
-            (branch_id: "paid", presentation: Fallback,
+            (branch_id: "paid",
                 cost: TapPermanents(count: 1,
                     filter: (kind: Creature, controller: You), exclude_source: true),
                 requirement: Always, body: (steps: [], yields: [])),
@@ -18439,7 +18425,7 @@ fn program_choose_admits_optional_controller_spell_graveyard_exile_cost() {
             r#"(steps: [(id: "choose", bind: [], input: None, kind: Choose(
                 choice: "exile_graveyard_card", chooser: Controller, optional: true,
                 branches: [(
-                    branch_id: "exile_and_draw", presentation: Fallback,
+                    branch_id: "exile_and_draw",
                     cost: ExileGraveyardCard(filter: {cost}), requirement: Always,
                     body: (steps: [(id: "draw", bind: [], input: None,
                         kind: Perform(Draw(who: Controller, count: 1)))], yields: []),
@@ -18525,7 +18511,7 @@ fn program_spell_graveyard_exile_cost_rejects_bad_context_filters_and_mixed_bran
             r#"(steps: [(id: "choose", bind: [], input: None, kind: Choose(
                 choice: "exile_graveyard_card", chooser: {chooser}, optional: true,
                 branches: [(
-                    branch_id: "exile_and_draw", presentation: Fallback,
+                    branch_id: "exile_and_draw",
                     cost: ExileGraveyardCard(filter: {filter}), requirement: Always,
                     body: (steps: [(id: "draw", bind: [], input: None,
                         kind: Perform(Draw(who: Controller, count: 1)))], yields: []),
@@ -18572,10 +18558,10 @@ fn program_spell_graveyard_exile_cost_rejects_bad_context_filters_and_mixed_bran
     let mixed = r#"(steps: [(id: "choose", bind: [], input: None, kind: Choose(
         choice: "exile_graveyard_card", chooser: Controller, optional: true,
         branches: [
-            (branch_id: "free", presentation: Fallback, cost: None,
+            (branch_id: "free", cost: None,
                 requirement: Always,
                 body: (steps: [(id: "free_draw", kind: Perform(Draw(who: Controller, count: 1)))], yields: [])),
-            (branch_id: "paid", presentation: Fallback,
+            (branch_id: "paid",
                 cost: ExileGraveyardCard(filter: None), requirement: Always,
                 body: (steps: [(id: "paid_draw", kind: Perform(Draw(who: Controller, count: 1)))], yields: [])),
         ],
@@ -18713,7 +18699,7 @@ fn spell_program_accepts_fixed_controller_of_target_group_damage_riders() {
         ))),
         (id: "exile_choice", kind: Choose(
             choice: "exile_graveyard_card", chooser: Controller, optional: true,
-            branches: [(branch_id: "pay_exile", presentation: Fallback,
+            branches: [(branch_id: "pay_exile",
                 cost: ExileGraveyardCard(filter: None), requirement: Always,
                 body: (steps: [(id: "damage_controller", kind: Perform(DamagePlayer(
                     amount: 2, who: ControllerOfTargetGroup(group_index: 0),
@@ -19140,7 +19126,7 @@ fn program_sacrifice_rejects_any_of_branch_exclusions_but_keeps_supported_filter
             r#"(steps: [(id: "choose", bind: [], input: None, kind: Choose(
                 choice: "sacrifice", chooser: Controller, optional: true,
                 branches: [(
-                    branch_id: "pay_sacrifice", presentation: Fallback,
+                    branch_id: "pay_sacrifice",
                     cost: {cost}, requirement: Always,
                     body: (steps: [], yields: []),
                 )],
@@ -19211,7 +19197,7 @@ fn program_choose_admits_fixed_blight_only_for_controller_ability_programs() {
     };
     let body = r#"(steps: [(id: "choose", bind: [], kind: Choose(
         choice: "blight", chooser: Controller, optional: true,
-        branches: [(branch_id: "pay_blight", presentation: Fallback,
+        branches: [(branch_id: "pay_blight",
             cost: Blight(count: 2), requirement: Always,
             body: (steps: [(id: "draw", kind: Perform(Draw(who: Controller, count: 1)))],
                 yields: []))],
@@ -19281,12 +19267,12 @@ fn program_choose_admits_optional_filtered_discard_for_ability_controller() {
     let body = r#"(steps: [(id: "choose_crypt_lurker_branch", kind: Choose(
         choice: "crypt_lurker", chooser: Controller, optional: true,
         branches: [
-            (branch_id: "sacrifice_a_creature", presentation: Fallback,
+            (branch_id: "sacrifice_a_creature",
                 cost: SacrificePermanent(filter: (kind: Creature, controller: You)),
                 requirement: Always,
                 body: (steps: [(id: "draw_after_sacrifice", kind: Perform(
                     Draw(who: Controller, count: 1)))], yields: [])),
-            (branch_id: "discard_a_creature_card", presentation: Fallback,
+            (branch_id: "discard_a_creature_card",
                 cost: DiscardCard(filter: Some(Creature)),
                 requirement: Always,
                 body: (steps: [(id: "draw_after_discard", kind: Perform(
@@ -19366,7 +19352,7 @@ fn program_choose_admits_optional_filtered_discard_for_ability_controller() {
         format!(
             r#"(steps: [(id: "choose_discard", kind: Choose(
                 choice: "discard", chooser: {chooser}, optional: {optional},
-                branches: [(branch_id: "discard_creature", presentation: Fallback,
+                branches: [(branch_id: "discard_creature",
                     cost: DiscardCard(filter: {filter}), requirement: Always,
                     body: (steps: [(id: "draw", kind: Perform(
                         Draw(who: Controller, count: 1)))], yields: []))],
@@ -19666,7 +19652,7 @@ fn endure_program_constituent_contracts_fail_independently_before_admission() {
             "exact single-counter EffectsApplicable branch",
             r#"(steps: [(id: "choose", kind: Choose(
                 choice: "endure", chooser: Controller, optional: false,
-                branches: [(branch_id: "counters", presentation: Fallback, cost: None,
+                branches: [(branch_id: "counters", cost: None,
                     requirement: EffectsApplicable,
                     body: (steps: [(id: "put", kind: Perform(PutCounters(
                         counter: PlusOnePlusOne, count: 1, subject: Source,
@@ -19699,7 +19685,7 @@ fn currency_discard_to_exile_program_admits_only_its_exact_linked_exile_choice()
 
     let body = r#"(steps: [(id: "choose_to_exile", kind: Choose(
         choice: "may_exile", chooser: Controller, optional: true,
-        branches: [(branch_id: "exile", presentation: Fallback, cost: None,
+        branches: [(branch_id: "exile", cost: None,
             requirement: EffectsApplicable, body: (steps: [
                 (id: "exile_discarded", kind: Perform(Exile(
                     subject: TriggerObject, linked_exile_id: Some("exiled_cards"),
@@ -19829,8 +19815,8 @@ fn currency_discard_to_exile_program_admits_only_its_exact_linked_exile_choice()
         (
             "multiple branches",
             body.replace(
-                "branches: [(branch_id: \"exile\", presentation: Fallback, cost: None,\n            requirement: EffectsApplicable, body: (steps: [\n                (id: \"exile_discarded\", kind: Perform(Exile(\n                    subject: TriggerObject, linked_exile_id: Some(\"exiled_cards\"),\n                )))\n            ], yields: []))],",
-                "branches: [(branch_id: \"exile\", presentation: Fallback, cost: None,\n            requirement: EffectsApplicable, body: (steps: [\n                (id: \"exile_discarded\", kind: Perform(Exile(\n                    subject: TriggerObject, linked_exile_id: Some(\"exiled_cards\"),\n                )))\n            ], yields: [])),\n            (branch_id: \"empty\", presentation: Fallback, cost: None, requirement: Always, body: (steps: [], yields: []))],",
+                "branches: [(branch_id: \"exile\", cost: None,\n            requirement: EffectsApplicable, body: (steps: [\n                (id: \"exile_discarded\", kind: Perform(Exile(\n                    subject: TriggerObject, linked_exile_id: Some(\"exiled_cards\"),\n                )))\n            ], yields: []))],",
+                "branches: [(branch_id: \"exile\", cost: None,\n            requirement: EffectsApplicable, body: (steps: [\n                (id: \"exile_discarded\", kind: Perform(Exile(\n                    subject: TriggerObject, linked_exile_id: Some(\"exiled_cards\"),\n                )))\n            ], yields: [])),\n            (branch_id: \"empty\", cost: None, requirement: Always, body: (steps: [], yields: []))],",
             ),
         ),
     ] {
@@ -19855,7 +19841,7 @@ fn linked_exile_receipt_program_admits_only_its_exact_top_level_pair() {
 
     const BODY: &str = r#"(steps: [(id: "choose_archive", kind: Choose(
         choice: "archive_linked_event", chooser: Controller, optional: true,
-        branches: [(branch_id: "archive", presentation: Fallback, cost: None,
+        branches: [(branch_id: "archive", cost: None,
             requirement: EffectsApplicable, body: (steps: [
                 (id: "exile_event", bind: ["archive_receipt"], kind: Perform(Exile(
                     subject: TriggerObject, linked_exile_id: Some("archived_card"),
@@ -20057,7 +20043,7 @@ fn linked_exile_receipt_program_admits_only_its_exact_top_level_pair() {
 fn linked_exile_program_input_requires_an_exact_event_object_source() {
     const BODY: &str = r#"(steps: [(id: "choose_to_exile", kind: Choose(
         choice: "may_exile", chooser: Controller, optional: true,
-        branches: [(branch_id: "exile", presentation: Fallback, cost: None,
+        branches: [(branch_id: "exile", cost: None,
             requirement: EffectsApplicable, body: (steps: [
                 (id: "exile_discarded", kind: Perform(Exile(
                     subject: TriggerObject, linked_exile_id: Some("exiled_cards"),
@@ -20128,12 +20114,12 @@ fn endure_program_admits_only_the_source_counter_choice_composition() {
     let source = r#"(steps: [(id: "choose", kind: Choose(
         choice: "endure", chooser: SourceController, optional: false,
         branches: [
-            (branch_id: "counters", presentation: Fallback, cost: None,
+            (branch_id: "counters", cost: None,
                 requirement: EffectsApplicable,
                 body: (steps: [(id: "counters", kind: Perform(PutCounters(
                     counter: PlusOnePlusOne, count: 1, subject: Source,
                 )))], yields: [])),
-            (branch_id: "spirit", presentation: Fallback, cost: None,
+            (branch_id: "spirit", cost: None,
                 requirement: Always,
                 body: (steps: [(id: "spirit", kind: Perform(CreateTokens(
                     token: "spirit_w_1_1", count: 1, who: SourceController,
@@ -20192,7 +20178,7 @@ fn endure_program_admits_only_the_source_counter_choice_composition() {
             r#"(steps: [(id: "choose", kind: Choose(
                 choice: "endure", chooser: SourceController, optional: false,
                 branches: [(
-                    branch_id: "counters", presentation: Fallback, cost: None,
+                    branch_id: "counters", cost: None,
                     requirement: EffectsApplicable,
                     body: (steps: [(id: "counters", kind: Perform(PutCounters(
                         counter: {counter}, count: {count}, subject: Source,
@@ -20240,7 +20226,7 @@ fn endure_program_admits_only_the_source_counter_choice_composition() {
         let body = format!(
             r#"(steps: [(id: "choose", kind: Choose(
                 choice: "endure", chooser: SourceController, optional: false,
-                branches: [(branch_id: "counters", presentation: Fallback, cost: None,
+                branches: [(branch_id: "counters", cost: None,
                     requirement: EffectsApplicable, body: {invalid_body})],
                 otherwise: (steps: [], yields: []),
             ))], yields: [])"#
@@ -20268,7 +20254,7 @@ fn endure_program_admits_only_the_source_counter_choice_composition() {
         let body = format!(
             r#"(steps: [(id: "choose", kind: Choose(
                 choice: "endure", chooser: SourceController, optional: false,
-                branches: [(branch_id: "counters", presentation: Fallback, cost: None,
+                branches: [(branch_id: "counters", cost: None,
                     requirement: EffectsApplicable, body: {invalid_body})],
                 otherwise: (steps: [], yields: []),
             ))], yields: [])"#
@@ -20445,7 +20431,7 @@ fn source_counter_program_support_is_typed_and_rejects_unsupported_contexts() {
 
     let nested_choose_if = r#"(steps: [(id: "choose", kind: Choose(
         choice: "mode", chooser: Controller, optional: false,
-        branches: [(branch_id: "mode", presentation: Fallback,
+        branches: [(branch_id: "mode",
             cost: None, requirement: Always,
             body: (steps: [(id: "if", kind: If(
                 condition: SourceCounterCount(counter: Night, min: Some(8)),
@@ -20462,7 +20448,7 @@ fn source_counter_program_support_is_typed_and_rejects_unsupported_contexts() {
 
     let choose_source_counter_requirement = r#"(steps: [(id: "choose", kind: Choose(
         choice: "mode", chooser: Controller, optional: false,
-        branches: [(branch_id: "mode", presentation: Fallback,
+        branches: [(branch_id: "mode",
             cost: None,
             requirement: GameCondition(SourceCounterCount(
                 counter: Night, min: Some(8),
@@ -20649,7 +20635,7 @@ fn program_choose_rejects_mixed_free_paid_and_x_cost_siblings() {
     let fixed_mana = program_fixture(
         r#"(steps: [(id: "choose", kind: Choose(
             choice: "choice_01", chooser: Controller, optional: false,
-            branches: [(branch_id: "paid", presentation: Fallback,
+            branches: [(branch_id: "paid",
                 cost: Mana("{2}"), body: (steps: [], yields: []))],
             otherwise: (steps: [], yields: []),
         ))], yields: [])"#,
@@ -20661,9 +20647,9 @@ fn program_choose_rejects_mixed_free_paid_and_x_cost_siblings() {
         r#"(steps: [(id: "choose", kind: Choose(
             choice: "choice_01", chooser: Controller, optional: false,
             branches: [
-                (branch_id: "mana", presentation: Fallback, cost: Mana("{2}"),
+                (branch_id: "mana", cost: Mana("{2}"),
                     body: (steps: [], yields: [])),
-                (branch_id: "waterbend", presentation: Fallback,
+                (branch_id: "waterbend",
                     cost: Waterbend("{2}"), body: (steps: [], yields: [])),
             ],
             otherwise: (steps: [], yields: []),
@@ -20697,9 +20683,9 @@ fn program_choose_rejects_mixed_free_paid_and_x_cost_siblings() {
         r#"(steps: [(id: "choose", kind: Choose(
             choice: "choice_01", chooser: Controller, optional: false,
             branches: [
-                (branch_id: "free", presentation: Fallback, cost: None,
+                (branch_id: "free", cost: None,
                     body: (steps: [], yields: [])),
-                (branch_id: "paid", presentation: Fallback, cost: Mana("{1}"),
+                (branch_id: "paid", cost: Mana("{1}"),
                     body: (steps: [], yields: [])),
             ],
             otherwise: (steps: [], yields: []),
@@ -20715,7 +20701,7 @@ fn program_choose_rejects_mixed_free_paid_and_x_cost_siblings() {
         let definition = program_fixture(&format!(
             r#"(steps: [(id: "choose", kind: Choose(
                 choice: "choice_01", chooser: Controller, optional: false,
-                branches: [(branch_id: "paid", presentation: Fallback, cost: {cost},
+                branches: [(branch_id: "paid", cost: {cost},
                     body: (steps: [], yields: []))],
                 otherwise: (steps: [], yields: []),
             ))], yields: [])"#
@@ -20734,7 +20720,7 @@ fn program_choose_enforces_program_and_choice_id_boundaries() {
         format!(
             r#"(id: "{instruction_id}", bind: [], kind: Choose(
                 choice: "{choice_id}", chooser: Controller, optional: false,
-                branches: [(branch_id: "{branch_id}", presentation: Fallback,
+                branches: [(branch_id: "{branch_id}",
                     cost: None, body: (steps: [], yields: []))],
                 otherwise: (steps: [], yields: []),
             ))"#
@@ -20764,9 +20750,9 @@ fn program_choose_enforces_program_and_choice_id_boundaries() {
         r#"(steps: [(id: "choose", kind: Choose(
             choice: "choice_01", chooser: Controller, optional: false,
             branches: [
-                (branch_id: "same_branch", presentation: Fallback, cost: None,
+                (branch_id: "same_branch", cost: None,
                     body: (steps: [], yields: [])),
-                (branch_id: "same_branch", presentation: Fallback, cost: None,
+                (branch_id: "same_branch", cost: None,
                     body: (steps: [], yields: [])),
             ],
             otherwise: (steps: [], yields: []),
@@ -20814,7 +20800,7 @@ fn program_choose_blocks_do_not_leak_sibling_or_branch_locals() {
         r#"(steps: [(id: "choose", kind: Choose(
             choice: "choice_01", chooser: Controller, optional: false,
             branches: [
-                (branch_id: "produce", presentation: Fallback, cost: None,
+                (branch_id: "produce", cost: None,
                     body: (steps: [
                         (id: "pick_lands", bind: ["branch_lands"],
                             kind: Perform(ChoosePermanents(
@@ -20823,7 +20809,7 @@ fn program_choose_blocks_do_not_leak_sibling_or_branch_locals() {
                                 min: 0, max: 3,
                             ))),
                     ], yields: [])),
-                (branch_id: "consume", presentation: Fallback, cost: None,
+                (branch_id: "consume", cost: None,
                     body: (steps: [
                         (id: "reuse", input: Some("branch_lands"),
                             kind: Perform(UntapChosenPermanents)),
@@ -20841,7 +20827,7 @@ fn program_choose_blocks_do_not_leak_sibling_or_branch_locals() {
     let otherwise_leak = program_fixture(
         r#"(steps: [(id: "choose", kind: Choose(
             choice: "choice_01", chooser: Controller, optional: false,
-            branches: [(branch_id: "produce", presentation: Fallback, cost: None,
+            branches: [(branch_id: "produce", cost: None,
                 body: (steps: [
                     (id: "pick_lands", bind: ["branch_lands"],
                         kind: Perform(ChoosePermanents(
@@ -20867,7 +20853,7 @@ fn program_choose_joins_matching_typed_yields_from_every_exit() {
             (id: "choose", bind: ["lands"], kind: Choose(
                 choice: "choose_lands", chooser: Controller, optional: true,
                 branches: [
-                    (branch_id: "first", presentation: Fallback, cost: None,
+                    (branch_id: "first", cost: None,
                         requirement: GameCondition(ControllerLibraryEmpty),
                         body: (steps: [
                             (id: "pick_first", bind: ["first_lands"],
@@ -20877,7 +20863,7 @@ fn program_choose_joins_matching_typed_yields_from_every_exit() {
                                     min: 0, max: 3,
                                 ))),
                         ], yields: ["first_lands"])),
-                    (branch_id: "second", presentation: Fallback, cost: None,
+                    (branch_id: "second", cost: None,
                         body: (steps: [
                             (id: "pick_second", bind: ["second_lands"],
                                 kind: Perform(ChoosePermanents(
@@ -20919,7 +20905,7 @@ fn program_choose_joins_matching_typed_yields_from_every_exit() {
     let missing_yield = program_fixture(
         r#"(steps: [(id: "choose", bind: ["joined"], kind: Choose(
             choice: "choose_lands", chooser: Controller, optional: true,
-            branches: [(branch_id: "pick", presentation: Fallback, cost: None,
+            branches: [(branch_id: "pick", cost: None,
                 body: (steps: [
                     (id: "pick_lands", bind: ["lands"], kind: Perform(ChoosePermanents(
                         chooser: Controller,
@@ -20936,7 +20922,7 @@ fn program_choose_joins_matching_typed_yields_from_every_exit() {
     let mismatched_type = program_fixture(
         r#"(steps: [(id: "choose", bind: ["joined"], kind: Choose(
             choice: "choose_lands", chooser: Controller, optional: true,
-            branches: [(branch_id: "pick", presentation: Fallback, cost: None,
+            branches: [(branch_id: "pick", cost: None,
                 body: (steps: [
                     (id: "pick_lands", bind: ["lands"], kind: Perform(ChoosePermanents(
                         chooser: Controller,
@@ -20976,7 +20962,7 @@ fn program_choose_target_bindings_cover_nested_branch_and_otherwise_leaves() {
             "choose_branch_target_fixture",
             r#"(id: "choose", kind: Choose(
                 choice: "choose_damage", chooser: Controller, optional: false,
-                branches: [(branch_id: "damage", presentation: Fallback, cost: None,
+                branches: [(branch_id: "damage", cost: None,
                     body: (steps: [(id: "branch_damage", kind: Perform(DamageTarget(
                         amount: 3, target: (kind: Creature),
                     )))], yields: []))],
@@ -20988,7 +20974,7 @@ fn program_choose_target_bindings_cover_nested_branch_and_otherwise_leaves() {
             "choose_otherwise_target_fixture",
             r#"(id: "choose", kind: Choose(
                 choice: "choose_noop", chooser: Controller, optional: false,
-                branches: [(branch_id: "noop", presentation: Fallback, cost: None,
+                branches: [(branch_id: "noop", cost: None,
                     body: (steps: [], yields: []))],
                 otherwise: (steps: [(id: "otherwise_damage", kind: Perform(DamageTarget(
                     amount: 3, target: (kind: Creature),
@@ -21026,8 +21012,7 @@ fn choose_cast_cost_receipt_accepts_expected_unselected_and_rejects_ability_owne
         r#"(id: "choose_unselected_receipt", name: "Choose Unselected Receipt",
             face_id: "choose_unselected_receipt", mana_cost: "{{0}}", types: ["Instant"],
             cast_cost_groups: [(group_id: "kicker_group", presentation: Fallback,
-                min: 0, max: 1, options: [Mana(option_id: "kicker_option",
-                    presentation: Fallback, kind: Kicker, cost: "{{1}}")])],
+                min: 0, max: 1, options: [Mana(option_id: "kicker_option", kind: Kicker, cost: "{{1}}")])],
             spell_program: {program})"#
     );
     let registry = crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[])
@@ -21055,7 +21040,7 @@ fn choose_cast_cost_receipt_accepts_expected_unselected_and_rejects_ability_owne
     let body: super::AuthoredBlock = ron::from_str(
         r#"(steps: [(id: "choose", kind: Choose(
             choice: "ability_receipt", chooser: Controller, optional: false,
-            branches: [(branch_id: "selected", presentation: Fallback, cost: None,
+            branches: [(branch_id: "selected", cost: None,
                 requirement: CastCostReceipt((group_id: "kicker_group",
                     option_id: "kicker_option", expected_selected: false)),
                 body: (steps: [], yields: []))],
@@ -21092,14 +21077,14 @@ fn lavabrink_program_admits_affected_choice_and_recursive_source_conditions() {
         (id: "upkeep_choice", kind: Choose(
             choice: "doom_counter_choice", chooser: AffectedPlayer, optional: true,
             branches: [
-                (branch_id: "add_doom", presentation: Fallback, cost: None,
+                (branch_id: "add_doom", cost: None,
                     requirement: GameCondition(ObjectMatches(
                         object: Source, filter: (kind: AnyPermanent),
                     )),
                     body: (steps: [(id: "add_doom_counter", kind: Perform(PutCounters(
                         counter: Doom, count: 1, subject: Source,
                     )))], yields: [])),
-                (branch_id: "remove_doom", presentation: Fallback, cost: None,
+                (branch_id: "remove_doom", cost: None,
                     requirement: GameCondition(AllOf([
                         ObjectMatches(object: Source, filter: (kind: AnyPermanent)),
                         SourceCounterCount(counter: Doom, min: Some(1)),
@@ -21403,7 +21388,7 @@ fn program_source_counter_removal_branch_fallback_is_readable() {
 
     let branch = CompiledChooseBranch {
         branch_id: crate::ChoiceId::new("remove_doom").unwrap(),
-        presentation: crate::AbilityPresentation::Fallback,
+        presentation: crate::ChoicePresentation::Generated,
         cost: ResolutionCost::None,
         requirement: CompiledChooseRequirement::Always,
         body: CompiledBlock {
@@ -21719,12 +21704,12 @@ fn program_source_sacrifice_receipt_is_typed_same_block_and_unambiguous() {
             (id: "choose_sacrifice", bind: ["sacrificed"], kind: Choose(
                 choice: "sacrifice_choice", chooser: Controller, optional: false,
                 branches: [
-                    (branch_id: "first", presentation: Fallback, cost: None,
+                    (branch_id: "first", cost: None,
                         requirement: Always,
                         body: (steps: [(id: "sacrifice_first", bind: ["first_result"],
                             kind: Perform(Sacrifice(subject: Source)))],
                             yields: ["first_result"])),
-                    (branch_id: "second", presentation: Fallback, cost: None,
+                    (branch_id: "second", cost: None,
                         requirement: Always,
                         body: (steps: [(id: "sacrifice_second", bind: ["second_result"],
                             kind: Perform(Sacrifice(subject: Source)))],
@@ -22225,15 +22210,15 @@ const ARCANE_DELAYED_PROGRAM_BODY: &str = r#"(steps: [
     (id: "choose_count", kind: Choose(
         choice: "draw_count", chooser: AffectedPlayer, optional: false,
         branches: [
-            (branch_id: "draw_zero", presentation: Fallback,
+            (branch_id: "draw_zero",
                 cost: None, requirement: Always,
                 body: (steps: [(id: "draw_zero",
                     kind: Perform(Draw(who: AffectedPlayer, count: 0)))], yields: [])),
-            (branch_id: "draw_one", presentation: Fallback,
+            (branch_id: "draw_one",
                 cost: None, requirement: Always,
                 body: (steps: [(id: "draw_one",
                     kind: Perform(Draw(who: AffectedPlayer, count: 1)))], yields: [])),
-            (branch_id: "draw_two", presentation: Fallback,
+            (branch_id: "draw_two",
                 cost: None, requirement: Always,
                 body: (steps: [(id: "draw_two",
                     kind: Perform(Draw(who: AffectedPlayer, count: 2)))], yields: [])),
@@ -22678,7 +22663,7 @@ mod combustible_gearhulk_program_compiler_tests {
                         group_index: {chooser_group}, kind: {chooser_kind},
                     ), optional: true,
                     branches: [(
-                        branch_id: "draw", presentation: Fallback,
+                        branch_id: "draw",
                         cost: None, requirement: Always,
                         body: (steps: [
                             (id: "draw_three", bind: [], input: None,
@@ -22712,7 +22697,7 @@ mod combustible_gearhulk_program_compiler_tests {
                         group_index: 0, kind: OpponentPlayer,
                     ), optional: true,
                     branches: [(
-                        branch_id: "draw", presentation: Fallback,
+                        branch_id: "draw",
                         cost: None, requirement: Always,
                         body: (steps: [
                             (id: "draw_three", bind: [], input: None,
@@ -22824,7 +22809,7 @@ mod combustible_gearhulk_program_compiler_tests {
                 (id: "outer_choice", bind: [], input: None, kind: Choose(
                     choice: "outer", chooser: Controller, optional: true,
                     branches: [(
-                        branch_id: "outer_draw", presentation: Fallback,
+                        branch_id: "outer_draw",
                         cost: None, requirement: Always,
                         body: (steps: [
                             (id: "outer_draw_one", bind: [], input: None,
@@ -22837,7 +22822,7 @@ mod combustible_gearhulk_program_compiler_tests {
                                 group_index: 0, kind: OpponentPlayer,
                             ), optional: true,
                             branches: [(
-                                branch_id: "draw", presentation: Fallback,
+                                branch_id: "draw",
                                 cost: None, requirement: Always,
                                 body: (steps: [
                                     (id: "draw_three", bind: [], input: None,
@@ -23039,7 +23024,7 @@ mod combustible_gearhulk_program_compiler_tests {
                     group_index: 0, kind: OpponentPlayer,
                 ), optional: true,
                 branches: [(
-                    branch_id: "draw", presentation: Fallback,
+                    branch_id: "draw",
                     cost: None, requirement: Always,
                     body: (steps: [
                         (id: "draw_three", bind: [], input: None,

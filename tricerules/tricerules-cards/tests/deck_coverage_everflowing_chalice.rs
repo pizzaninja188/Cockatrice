@@ -1,6 +1,7 @@
 use tricerules_cards::primitives::{CountExpression, ManaCostChoiceKind, StaticAbilityDef};
 use tricerules_cards::{
-    AbilityCost, AbilityPresentation, CounterKind, Layout, ManaAmount, SpellEffectKind,
+    AbilityCost, AbilityPresentation, ChoicePresentation, CounterKind, Layout, ManaAmount,
+    SpellEffectKind,
 };
 
 #[test]
@@ -38,7 +39,7 @@ fn everflowing_chalice_registers_its_complete_typed_face() {
     };
     assert_eq!(*kind, ManaCostChoiceKind::Multikicker);
     assert_eq!(cost.to_string(), "{2}");
-    assert_eq!(*presentation, AbilityPresentation::OracleLines(vec![1]));
+    assert_eq!(*presentation, ChoicePresentation::OracleLines(vec![1]));
     assert_eq!(face.static_abilities.len(), 1);
     assert_eq!(
         face.static_abilities[0].presentation,

@@ -1784,7 +1784,7 @@ TEST_F(RuledE2ESmokeTest, EarthbendBadgeRowsAndGenerationBoundReturnReachBothCli
             ASSERT_TRUE(client->latestTrigger->has_primary_presentation());
             const auto &presentation = client->latestTrigger->primary_presentation();
             EXPECT_EQ(presentation.fallback_text(), "When it dies or is exiled, return it to the battlefield tapped.");
-            EXPECT_EQ(presentation.oracle_line_indices_size(), 0);
+            EXPECT_EQ(presentation.oracle_spans_size(), 0);
             EXPECT_EQ(presentation.external_card_name(), "Rebellious Captives");
             client->latestTrigger.reset();
         }
