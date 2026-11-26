@@ -58,6 +58,20 @@ fn cases() -> Vec<Case> {
             toughness: 4,
         },
         Case {
+            id: "drowned",
+            cast: ManaGift {
+                u: 1,
+                c: 1,
+                ..Default::default()
+            },
+            regenerate: ManaGift {
+                b: 1,
+                ..Default::default()
+            },
+            power: 1,
+            toughness: 1,
+        },
+        Case {
             id: "dutiful_thrull",
             cast: ManaGift {
                 w: 1,

@@ -15,7 +15,7 @@ pub use card_def::{
     TriggerModeSelectionRestriction, CREATURE_TYPES,
 };
 pub use identity::{
-    ability_fallback, choice_fallback, external_oracle_lines, mode_fallback,
+    ability_fallback, choice_fallback, external_oracle_lines, is_non_game_layout, mode_fallback,
     resolve_external_presentation, AbilityDefinitionId, AbilityId, AbilityLinkId,
     AbilityPresentation, CardFaceDefinitionId, CardFaceId, ChoiceId, ExiledCohortId,
     IdentifiedAbility, ModeId, ProgramOwnerId,

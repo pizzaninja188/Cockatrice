@@ -1,0 +1,21 @@
+// Oracle 3da87e58-6a4b-48c3-873c-bc654277d4df; source/rulings checked 2026-11-25 against the
+// pinned Scryfall bulk SHA-256 0516f05397c02e093ec03c9cd02bcf4d8d629f1678e7ec8f4b016df7a01d86de.
+// CR 701.19a-c (regenerate). Same printed clause as Metathran Zombie; admitted after issue #517
+// stopped the same-name Foundations Jumpstart front_card from shadowing its presentation source.
+(
+  id: "drowned",
+  name: "Drowned",
+  face_id: "drowned",
+  mana_cost: "{1}{U}",
+  types: ["Creature", "Zombie"],
+  power: 1,
+  toughness: 1,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{B}")],
+      effect: [Regenerate(subject: Source)],
+    ),
+  ],
+)

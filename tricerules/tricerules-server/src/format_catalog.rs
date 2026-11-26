@@ -126,10 +126,12 @@ impl Catalog {
         Some((id, self.cards.get(id)?))
     }
     fn insert(&mut self, record: Value) -> Result<(), String> {
-        if matches!(
-            record["layout"].as_str(),
-            Some("token" | "double_faced_token" | "emblem" | "art_series")
-        ) {
+        // Display-only records (tokens, emblems, art cards, front cards) share names with real
+        // cards; registering them would make the real card's name ambiguous (Drowned).
+        if record["layout"]
+            .as_str()
+            .is_some_and(tricerules_cards::is_non_game_layout)
+        {
             return Ok(());
         }
         let name = text(&record, "name");

@@ -2,7 +2,8 @@
 //!
 //! Every included card is a normal-layout creature with one `{cost}: Regenerate this creature.`
 //! activated ability. Card names, costs, types and stats are printed data; the shared scenario
-//! executes every card. Rimebound Dead is excluded by the snow-mana blocker (issue #516). Each
+//! executes every card. Rimebound Dead is excluded by the snow-mana blocker (issue #516). Drowned
+//! was admitted once its same-name front_card stopped shadowing its presentation source (#517). Each
 //! fingerprint is SHA-256 of the exact pinned normalized Oracle text.
 
 use tricerules_cards::primitives::{AbilityCost, EffectSubject, SpellEffectKind};
@@ -45,6 +46,15 @@ const CARDS: &[Card] = &[
         4,
         4,
         "{3}",
+    ),
+    (
+        "drowned",
+        "Drowned",
+        "{1}{U}",
+        &["Creature", "Zombie"],
+        1,
+        1,
+        "{B}",
     ),
     (
         "dutiful_thrull",
@@ -155,6 +165,11 @@ const FINGERPRINTS: &[Fingerprint] = &[
         "diabolic_machine",
         "Diabolic Machine",
         "9f2a6b1f4e64a5f787fd54e24b0e81923961f6524a12c5b7abc569b2bc5d0b75",
+    ),
+    (
+        "drowned",
+        "Drowned",
+        "8b04509688b929df87398e2b998a5281a2cced08222e2c99ecabea5900a0b845",
     ),
     (
         "dutiful_thrull",

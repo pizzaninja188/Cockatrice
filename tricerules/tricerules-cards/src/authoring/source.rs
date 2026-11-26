@@ -6,7 +6,7 @@ use flate2::read::GzDecoder;
 use serde::Deserialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
 use std::io::{self, BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
@@ -157,12 +157,10 @@ pub fn normalized_oracle_text_sha256(text: &str) -> String {
 }
 
 pub fn source_presentation_card(card: &Value) -> Option<SourcePresentationCard> {
-    // Token variants have their own display identity. A same-name token must not make a
-    // normal card's fingerprint ambiguous (Ajani's Pridemate and Spellgorger Weird).
-    if matches!(
-        str_field(card, "layout"),
-        "token" | "double_faced_token" | "emblem"
-    ) {
+    // Tokens, emblems, art cards and front cards have their own display identity. A same-name
+    // display record must not make a real card's fingerprint ambiguous (Ajani's Pridemate,
+    // Spellgorger Weird, Drowned).
+    if crate::is_non_game_layout(str_field(card, "layout")) {
         return None;
     }
     let name = str_field(card, "name").trim();
@@ -205,23 +203,39 @@ pub fn source_presentation_card(card: &Value) -> Option<SourcePresentationCard> 
     })
 }
 
-pub fn add_presentation_source(
-    sources: &mut HashMap<String, SourcePresentationCard>,
-    ambiguous: &mut HashSet<String>,
-    card_id: &str,
-    card: &Value,
-) {
-    if ambiguous.contains(card_id) {
-        return;
-    }
-    if let Some(source) = source_presentation_card(card) {
-        match sources.get(card_id) {
+/// Pinned presentation sources keyed by registry card id.
+#[derive(Debug, Default)]
+pub struct PresentationSources {
+    pub cards: HashMap<String, SourcePresentationCard>,
+    /// Card ids whose same-name records disagree, with every layout that contributed. These fail
+    /// closed (no fingerprint) and the audit names the layouts so a new display-only layout is
+    /// diagnosed directly.
+    pub ambiguous: BTreeMap<String, BTreeSet<String>>,
+    layouts: HashMap<String, BTreeSet<String>>,
+}
+
+impl PresentationSources {
+    pub fn add(&mut self, card_id: &str, card: &Value) {
+        let Some(source) = source_presentation_card(card) else {
+            return;
+        };
+        let layout = match str_field(card, "layout") {
+            "" => "unknown",
+            layout => layout,
+        };
+        let layouts = self.layouts.entry(card_id.to_string()).or_default();
+        layouts.insert(layout.to_string());
+        if let Some(ambiguous) = self.ambiguous.get_mut(card_id) {
+            ambiguous.insert(layout.to_string());
+            return;
+        }
+        match self.cards.get(card_id) {
             Some(existing) if existing != &source => {
-                sources.remove(card_id);
-                ambiguous.insert(card_id.to_string());
+                self.cards.remove(card_id);
+                self.ambiguous.insert(card_id.to_string(), layouts.clone());
             }
             None => {
-                sources.insert(card_id.to_string(), source);
+                self.cards.insert(card_id.to_string(), source);
             }
             _ => {}
         }
@@ -231,12 +245,11 @@ pub fn add_presentation_source(
 pub fn collect_presentation_sources(
     input: &Path,
     registry: &CardRegistry,
-) -> Result<HashMap<String, SourcePresentationCard>, String> {
-    let mut sources = HashMap::new();
-    let mut ambiguous = HashSet::new();
+) -> Result<PresentationSources, String> {
+    let mut sources = PresentationSources::default();
     for_each_gzipped_jsonl(input, |card| {
         if let Some(card_id) = registry.id_for_name(str_field(&card, "name")) {
-            add_presentation_source(&mut sources, &mut ambiguous, card_id, &card);
+            sources.add(card_id, &card);
         }
         true
     })?;
@@ -416,15 +429,50 @@ mod tests {
     fn token_sources_do_not_shadow_card_fingerprints_and_conflicts_fail_closed() {
         let token = json!({"name":"Shared Name", "layout":"token", "oracle_text":"Token"});
         assert!(source_presentation_card(&token).is_none());
-        let mut sources = HashMap::new();
-        let mut ambiguous = HashSet::new();
+        let mut sources = PresentationSources::default();
         let card = json!({"name":"Shared Name", "layout":"normal", "oracle_text":"Card"});
-        add_presentation_source(&mut sources, &mut ambiguous, "shared_name", &card);
-        add_presentation_source(&mut sources, &mut ambiguous, "shared_name", &card);
-        assert!(sources.contains_key("shared_name"));
-        let other = json!({"name":"Shared Name", "layout":"normal", "oracle_text":"Other"});
-        add_presentation_source(&mut sources, &mut ambiguous, "shared_name", &other);
-        assert!(ambiguous.contains("shared_name"));
-        assert!(!sources.contains_key("shared_name"));
+        sources.add("shared_name", &card);
+        sources.add("shared_name", &token);
+        sources.add("shared_name", &card);
+        assert!(sources.cards.contains_key("shared_name"));
+        assert!(sources.ambiguous.is_empty());
+        let other = json!({"name":"Shared Name", "layout":"saga", "oracle_text":"Other"});
+        sources.add("shared_name", &other);
+        assert!(!sources.cards.contains_key("shared_name"));
+        assert_eq!(
+            sources.ambiguous["shared_name"],
+            BTreeSet::from(["normal".to_string(), "saga".to_string()])
+        );
+        // A later identical record cannot resurrect a failed-closed source.
+        sources.add("shared_name", &card);
+        assert!(!sources.cards.contains_key("shared_name"));
+    }
+
+    #[test]
+    fn front_card_records_do_not_make_drowned_ambiguous() {
+        // Pinned Oracle 3da87e58-6a4b-48c3-873c-bc654277d4df and the Foundations Jumpstart
+        // front card 4808e39c-213b-4034-bbc4-f8450b82817d share the name with different text.
+        let drowned = json!({
+            "oracle_id":"3da87e58-6a4b-48c3-873c-bc654277d4df", "name":"Drowned",
+            "layout":"normal", "oracle_text":"{B}: Regenerate this creature."
+        });
+        let front = json!({
+            "oracle_id":"4808e39c-213b-4034-bbc4-f8450b82817d", "name":"Drowned",
+            "layout":"front_card", "oracle_text":"(Theme color: {U}.)"
+        });
+        assert!(source_presentation_card(&front).is_none());
+        let expected = source_presentation_card(&drowned).unwrap();
+        for order in [[&drowned, &front], [&front, &drowned]] {
+            let mut sources = PresentationSources::default();
+            for record in order {
+                sources.add("drowned", record);
+            }
+            assert!(sources.ambiguous.is_empty());
+            assert_eq!(sources.cards["drowned"], expected);
+            assert_eq!(
+                sources.cards["drowned"].faces[0].oracle_text_sha256,
+                normalized_oracle_text_sha256("{B}: Regenerate this creature.")
+            );
+        }
     }
 }

@@ -174,7 +174,7 @@ fn run() -> Result<Value, String> {
         let registry = tricerules_cards::registry::from_embedded()
             .map_err(|error| format!("failed to load embedded card registry: {error}"))?;
         let sources = source::collect_presentation_sources(&bulk, &registry)?;
-        let expected = source::render_presentation_registry(&provenance, &registry, &sources);
+        let expected = source::render_presentation_registry(&provenance, &registry, &sources.cards);
         if refresh {
             let changed = source::refresh_presentation_registry(&registry_path, &expected)
                 .map_err(|error| format!("cannot refresh Oracle fingerprints: {error}"))?;
@@ -188,9 +188,11 @@ fn run() -> Result<Value, String> {
             return Err(format!("presentation audit failed\n{report}"));
         }
         source::check_presentation_registry(&registry_path, &expected)?;
-        return Ok(json!({"mode":"check","presentation_sources":sources.len(),
+        return Ok(
+            json!({"mode":"check","presentation_sources":sources.cards.len(),
             "path":registry_path,"provenance":provenance,
-            "meaning":"Verified source metadata, presentation mappings and fingerprints; no files changed"}));
+            "meaning":"Verified source metadata, presentation mappings and fingerprints; no files changed"}),
+        );
     }
     if command == "presentation-audit" {
         let bulk = options

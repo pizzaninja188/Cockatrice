@@ -268,6 +268,37 @@ fn catalogue_provenance_and_unknown_status_fail_closed() {
 }
 
 #[test]
+fn display_only_records_do_not_make_a_real_card_name_ambiguous() {
+    let mut rows = records();
+    let mut drowned = card(
+        "Drowned",
+        "Creature — Zombie",
+        &["U", "B"],
+        "{B}: Regenerate this creature.",
+    );
+    drowned["oracle_id"] = json!("3da87e58-6a4b-48c3-873c-bc654277d4df");
+    let mut front = card("Drowned", "Card", &[], "(Theme color: {U}.)");
+    front["oracle_id"] = json!("4808e39c-213b-4034-bbc4-f8450b82817d");
+    front["layout"] = json!("front_card");
+    let mut token = card("Bear", "Token Creature — Bear", &["G"], "");
+    token["oracle_id"] = json!("bear-token");
+    token["layout"] = json!("token");
+    rows.extend([front.clone(), drowned.clone(), token]);
+    let c = catalog(rows);
+    let (id, found) = c.find("Drowned").expect("real Drowned resolves");
+    assert_eq!(id, "3da87e58-6a4b-48c3-873c-bc654277d4df");
+    assert_eq!(found.name, "Drowned");
+    assert!(!c.cards.contains_key("4808e39c-213b-4034-bbc4-f8450b82817d"));
+    assert_eq!(c.find("Bear").map(|(id, _)| id), Some("Bear"));
+    assert!(!c.cards.contains_key("bear-token"));
+    // Two real game cards sharing a name still fail closed.
+    let mut other = drowned;
+    other["oracle_id"] = json!("other-drowned");
+    let c = catalog(vec![front, other, card("Drowned", "Creature", &[], "")]);
+    assert!(c.find("Drowned").is_none());
+}
+
+#[test]
 fn multi_face_aliases_share_copy_limits_and_all_face_identity() {
     let mut rows = records();
     let mut modal = card("Green Face // Blue Face", "", &["G", "U"], "");

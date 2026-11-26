@@ -199,6 +199,17 @@ pub fn external_oracle_lines(text: &str) -> Vec<String> {
         .collect()
 }
 
+/// Whether an external (Scryfall) record layout is a display-only identity rather than a game
+/// card. Tokens, emblems, art-series cards and Jumpstart/Mystery Booster front cards can share a
+/// name with a real card (Ajani's Pridemate, Drowned) while carrying different text, so
+/// name-keyed lookups must skip them instead of treating the name as ambiguous.
+pub fn is_non_game_layout(layout: &str) -> bool {
+    matches!(
+        layout,
+        "token" | "double_faced_token" | "emblem" | "art_series" | "front_card"
+    )
+}
+
 /// Resolve an all-or-fallback external presentation mapping.
 pub fn resolve_external_presentation(
     presentation: &AbilityPresentation,
@@ -255,6 +266,35 @@ mod tests {
     struct FaceIdProbe {
         id: String,
         face_id: CardFaceId,
+    }
+
+    #[test]
+    fn non_game_layouts_are_display_identities_only() {
+        for layout in [
+            "token",
+            "double_faced_token",
+            "emblem",
+            "art_series",
+            "front_card",
+        ] {
+            assert!(is_non_game_layout(layout), "{layout}");
+        }
+        for layout in [
+            "normal",
+            "transform",
+            "modal_dfc",
+            "split",
+            "flip",
+            "adventure",
+            "meld",
+            "saga",
+            "class",
+            "leveler",
+            "prototype",
+            "",
+        ] {
+            assert!(!is_non_game_layout(layout), "{layout}");
+        }
     }
 
     #[test]

@@ -4,13 +4,13 @@
 use super::normalize_name;
 #[cfg(test)]
 use super::source::source_presentation_card;
-use super::source::{collect_ron_files, SourcePresentationCard};
+use super::source::{collect_ron_files, PresentationSources};
 use crate::card_def::RawCardDefinition;
 #[cfg(test)]
 use crate::primitives::StaticAbilityDef;
 use crate::{ActivatedAbilityDef, TriggeredAbilityDef};
 use serde_json::Value;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fs;
 use std::path::PathBuf;
 
@@ -176,8 +176,26 @@ fn report_node(
     )
 }
 
+fn missing_face_line(token: bool, ambiguous_layouts: Option<&BTreeSet<String>>) -> String {
+    if token {
+        return "  Token template: normal-card Oracle fingerprints do not bind token variants.\n"
+            .into();
+    }
+    match ambiguous_layouts {
+        Some(layouts) => {
+            let layouts = layouts.iter().map(String::as_str).collect::<Vec<_>>();
+            format!(
+                "  MISSING FACE DATA: ambiguous source; same-name records disagree \
+                 (layouts: {}).\n",
+                layouts.join(", ")
+            )
+        }
+        None => "  MISSING FACE DATA: no exact unambiguous face in the pinned input.\n".into(),
+    }
+}
+
 pub fn run(
-    sources: &HashMap<String, SourcePresentationCard>,
+    sources: &PresentationSources,
     selected: Option<&str>,
 ) -> Result<(String, usize), String> {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -234,7 +252,7 @@ pub fn run(
         for face in faces {
             let face_id = face["face_id"].as_str().ok_or("face identity missing")?;
             let face_name = face["name"].as_str().ok_or("face name missing")?;
-            let source = sources.get(&id).and_then(|source| {
+            let source = sources.cards.get(&id).and_then(|source| {
                 source
                     .faces
                     .iter()
@@ -256,7 +274,7 @@ pub fn run(
                     report.push_str(&format!("  Oracle {}: {line}\n", index + 1));
                 }
             } else {
-                report.push_str(if token { "  Token template: normal-card Oracle fingerprints do not bind token variants.\n" } else { "  MISSING FACE DATA: no exact unambiguous face in the pinned input.\n" });
+                report.push_str(&missing_face_line(token, sources.ambiguous.get(&id)));
             }
             for (node_path, node) in entries {
                 let node_path = node_path.trim_start_matches('/');
@@ -300,6 +318,19 @@ pub fn run(
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn missing_face_line_names_ambiguous_layouts() {
+        let layouts = BTreeSet::from(["normal".to_string(), "saga".to_string()]);
+        let line = missing_face_line(false, Some(&layouts));
+        assert!(
+            line.contains("MISSING FACE DATA: ambiguous source"),
+            "{line}"
+        );
+        assert!(line.contains("(layouts: normal, saga)"), "{line}");
+        assert!(missing_face_line(false, None).contains("no exact unambiguous face"));
+        assert!(missing_face_line(true, Some(&layouts)).contains("Token template"));
+    }
 
     #[test]
     fn scoped_activated_grants_keep_parent_and_child_presentation_paths() {
