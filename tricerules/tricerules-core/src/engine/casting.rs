@@ -6,7 +6,7 @@ use super::payment::PaidCardCost;
 use super::payment::{commit_mana_payment, pay_mana, plan_mana_payment_with_reduction};
 use super::presentation::{
     ability_presentation, activated_stack_mode_presentation, child_presentation_ref,
-    spell_stack_presentation, PresentationPath,
+    spell_stack_presentation,
 };
 use super::targeting::{
     capture_stack_target, face_mode_program, face_program, runtime_target_schema,
@@ -18,6 +18,7 @@ use super::*;
 use crate::engine::events::ev_log_ability;
 use prost::Message;
 use tricerules_card_model::ActivationTiming;
+use tricerules_card_model::PresentationPathComponent;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum LimitedActivationUse {
@@ -4241,7 +4242,7 @@ impl GameEngine {
                 child_presentation_ref(
                     self.registry,
                     parent,
-                    PresentationPath::ManaRestriction(&restriction.restriction_id),
+                    PresentationPathComponent::ManaRestriction(restriction.restriction_id.clone()),
                     &restriction.presentation,
                     restriction.fallback_label(),
                 )

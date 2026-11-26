@@ -1,10 +1,9 @@
 //! CR 702.185: Warp's cast receipt, delayed exile, and owner casting permission.
 //! Shared by Knight Luminary, Weftblade Enhancer, and Perigee Beckoner.
 
-use super::presentation::{
-    stack_child_presentation_ref, PresentationPath, StackPresentationSource,
-};
+use super::presentation::{stack_child_presentation_ref, StackPresentationSource};
 use super::*;
+use tricerules_card_model::PresentationPathComponent;
 
 impl GameEngine {
     pub(super) fn register_warp_entry(&mut self, item: &StackItem, object_id: ObjectId) {
@@ -57,7 +56,7 @@ impl GameEngine {
             &item.card_id,
             item.face_index,
             StackPresentationSource::PhysicalSpell,
-            PresentationPath::Ability(&ability.ability_id),
+            PresentationPathComponent::Ability(ability.ability_id.clone()),
             &ability.presentation,
             ability_text,
         );

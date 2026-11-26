@@ -3,6 +3,7 @@ use super::events::object_display_name;
 use super::triggers::CollectedTrigger;
 use super::*;
 use crate::state::{DiscardBatch, DiscardCause, DiscardReceipt};
+use tricerules_card_model::PresentationPathComponent;
 
 /// Only the closed Memory Jar delayed child carries this private occurrence key. Its discard
 /// replacement is already part of a begun resolution, even when its controller has departed.
@@ -795,8 +796,8 @@ impl GameEngine {
                 .face(0)
                 .unwrap()
                 .face_id,
-            [super::presentation::PresentationPath::Ability(
-                &static_ability.ability_id,
+            [PresentationPathComponent::Ability(
+                static_ability.ability_id.clone(),
             )],
             &static_ability.presentation,
             "Madness".into(),

@@ -1,12 +1,13 @@
 use super::damage::{DamageClassification, DamageRecipient};
 use super::events::{ev_log, ev_priority_changed, ev_trigger_order_required};
-use super::presentation::{ability_presentation, child_presentation_ref, PresentationPath};
+use super::presentation::{ability_presentation, child_presentation_ref};
 use super::targeting::{
     ability_mode_program, ability_program, compute_ability_targets_with_context_and_program,
     legal_target_group_has_minimum, target_schema_with_program, TargetSourceIdentity,
 };
 use super::*;
 use crate::engine::events::ev_log_ability;
+use tricerules_card_model::PresentationPathComponent;
 
 fn collect_source_chosen_creature_type_links(
     filter: &PermanentEventFilter,
@@ -90,8 +91,8 @@ impl GameEngine {
             &captured.card_id,
             &face.face_id,
             [
-                PresentationPath::Ability(&captured.parent_ability_id),
-                PresentationPath::Ability(&captured.ability.ability_id),
+                PresentationPathComponent::Ability(captured.parent_ability_id.clone()),
+                PresentationPathComponent::Ability(captured.ability.ability_id.clone()),
             ],
             &captured.ability.presentation,
             ability_text.clone(),
@@ -3512,7 +3513,7 @@ impl GameEngine {
                             child_presentation_ref(
                                 self.registry,
                                 parent,
-                                PresentationPath::Mode(&mode.mode_id),
+                                PresentationPathComponent::Mode(mode.mode_id.clone()),
                                 &mode.presentation,
                                 mode_fallback(ability_text, &mode.mode_id),
                             )

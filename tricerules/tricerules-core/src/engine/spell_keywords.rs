@@ -1,11 +1,10 @@
 //! Cast-time trigger capture for spell keyword abilities.
 
-use super::presentation::{
-    stack_child_presentation_ref, PresentationPath, StackPresentationSource,
-};
+use super::presentation::{stack_child_presentation_ref, StackPresentationSource};
 use super::triggers::CollectedTrigger;
 use super::*;
 use crate::state::SpellKeywordOrigin;
+use tricerules_card_model::PresentationPathComponent;
 
 impl GameEngine {
     /// Collect printed and granted spell keywords at the successful-cast boundary. Effects are
@@ -203,7 +202,7 @@ impl GameEngine {
                     .and_then(|value| value.primary.as_ref()),
                 true,
             ),
-            PresentationPath::Ability(&ability_id),
+            PresentationPathComponent::Ability(ability_id.clone()),
             &ability.presentation,
             ability_text.clone(),
         );

@@ -106,6 +106,7 @@ fn grow_from_the_ashes_publishes_and_records_kicker_as_part_of_total_cost() {
             .kind,
         PresentationPathKind::CastCostOption as i32
     );
+    assert_authored_presentation_path(&pushed.chosen_cast_cost_presentations[0]);
 
     let first = e.state.priority_player_id();
     let second = if first == 0 { 1 } else { 0 };

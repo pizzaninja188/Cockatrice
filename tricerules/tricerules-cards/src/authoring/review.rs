@@ -110,9 +110,11 @@ struct NumberedLine {
     text: String,
 }
 
+/// One presentation node, named by the exact `PresentationRef` identity the engine publishes.
 #[derive(Debug, Serialize)]
 struct PresentationEntry {
-    typed_path: String,
+    face_id: String,
+    presentation_path: String,
     value: Value,
 }
 
@@ -569,27 +571,25 @@ fn collect_token_references(value: &Value, tokens: &mut BTreeSet<String>) {
     }
 }
 
-fn collect_presentations(value: &Value, path: &str, result: &mut Vec<PresentationEntry>) {
-    match value {
-        Value::Object(map) => {
-            for (key, value) in map {
-                let next = format!("{path}/{}", key.replace('~', "~0").replace('/', "~1"));
-                if key == "presentation" {
-                    result.push(PresentationEntry {
-                        typed_path: next.clone(),
-                        value: value.clone(),
-                    });
+fn collect_presentations(definition: &CardDefinition) -> Vec<PresentationEntry> {
+    let mut result = Vec::new();
+    for face in &definition.faces {
+        crate::visit_face_presentations(face, |node| {
+            let value = match node.subject.presentation() {
+                crate::NodePresentation::Ability(presentation) => {
+                    serde_json::to_value(presentation)
                 }
-                collect_presentations(value, &next, result);
+                crate::NodePresentation::Choice(presentation) => serde_json::to_value(presentation),
             }
-        }
-        Value::Array(values) => {
-            for (index, value) in values.iter().enumerate() {
-                collect_presentations(value, &format!("{path}/{index}"), result);
-            }
-        }
-        _ => {}
+            .expect("presentation mappings serialize");
+            result.push(PresentationEntry {
+                face_id: face.face_id.to_string(),
+                presentation_path: node.path.to_string(),
+                value,
+            });
+        });
     }
+    result
 }
 
 fn structural_attributes(definition: &CardDefinition) -> BTreeSet<String> {
@@ -733,9 +733,10 @@ fn build_packet_from_sources(
             declared_tokens, actual_tokens
         ));
     }
-    let mut presentation = Vec::new();
-    collect_presentations(&typed, "", &mut presentation);
-    presentation.sort_by(|left, right| left.typed_path.cmp(&right.typed_path));
+    let mut presentation = collect_presentations(definition);
+    presentation.sort_by(|left, right| {
+        (&left.face_id, &left.presentation_path).cmp(&(&right.face_id, &right.presentation_path))
+    });
 
     let source_faces = source_faces(source);
     let identity_faces = definition
@@ -1022,23 +1023,20 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn card_data_presentation_walker_includes_nested_program_choose_branches() {
-        let definition = json!({
-            "spell_program": {"body": {"steps": [{
-                "id": "choose",
-                "kind": {"Choose": {"branches": [{
-                    "branch_id": "waterbend_2",
-                    "presentation": "Fallback"
-                }]}}
-            }]}}
-        });
-        let mut entries = Vec::new();
-        collect_presentations(&definition, "", &mut entries);
-        assert_eq!(entries.len(), 1);
-        assert_eq!(
-            entries[0].typed_path,
-            "/spell_program/body/steps/0/kind/Choose/branches/0/presentation"
+    fn card_data_presentation_entries_use_engine_presentation_paths() {
+        let definition = crate::registry::global()
+            .get("arcane_denial")
+            .expect("corpus card");
+        let entries = collect_presentations(definition);
+        let paths = entries
+            .iter()
+            .map(|entry| entry.presentation_path.as_str())
+            .collect::<Vec<_>>();
+        assert!(
+            paths.contains(&"spell/ability:delayed_01/resolution_branch:draw_one"),
+            "{paths:?}"
         );
+        assert!(entries.iter().all(|entry| entry.face_id == "arcane_denial"));
     }
 
     #[test]

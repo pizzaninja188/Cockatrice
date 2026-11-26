@@ -1,6 +1,7 @@
 //! One-shot cast observers share normal trigger ordering and the ordinary copy executor.
 use super::triggers::CollectedTrigger;
 use super::*;
+use tricerules_card_model::PresentationPathComponent;
 use tricerules_card_model::{AbilityPresentation, SpellCastFilter};
 
 impl GameEngine {
@@ -57,7 +58,7 @@ impl GameEngine {
                     .and_then(|p| p.primary.as_ref()),
                 top.ability_text.is_none(),
             ),
-            super::presentation::PresentationPath::Ability(&ability.ability_id),
+            PresentationPathComponent::Ability(ability.ability_id.clone()),
             &ability.presentation,
             format!("{label} — copy the next instant or sorcery"),
         );

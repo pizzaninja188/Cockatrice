@@ -1,8 +1,6 @@
 use super::super::events::ev_log_private;
 use super::super::events::finish_with_events;
-use super::super::presentation::{
-    stack_child_presentation_ref, PresentationPath, StackPresentationSource,
-};
+use super::super::presentation::{stack_child_presentation_ref, StackPresentationSource};
 use super::candidate_identities;
 use super::*;
 use crate::state::{
@@ -10,6 +8,7 @@ use crate::state::{
     OwnerZoneDestination, PendingLinkedExileAction, PendingLinkedExileChoiceStage,
     SpecialCastCompletion,
 };
+use tricerules_card_model::PresentationPathComponent;
 
 fn entry_counter_instruction(
     actor: PlayerId,
@@ -7037,7 +7036,7 @@ pub(in crate::engine) fn park_zone_search_choice(
                         .and_then(|stack| stack.primary.as_ref()),
                     top.ability_text.is_none(),
                 ),
-                PresentationPath::SearchSlot(&slot.slot_id),
+                PresentationPathComponent::SearchSlot(slot.slot_id.clone()),
                 &slot.presentation,
                 slot.fallback_label(),
             ),

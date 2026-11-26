@@ -1,8 +1,9 @@
 use super::*;
-use crate::engine::presentation::{child_presentation_ref, PresentationPath};
+use crate::engine::presentation::child_presentation_ref;
 use crate::engine::targeting::{
     ability_mode_program, ability_program, validate_ability_targets_with_context_and_program,
 };
+use tricerules_card_model::PresentationPathComponent;
 
 impl GameEngine {
     pub(in crate::engine) fn choose_trigger_target(
@@ -191,7 +192,7 @@ impl GameEngine {
                         child_presentation_ref(
                             self.registry,
                             parent,
-                            PresentationPath::Mode(&mode.mode_id),
+                            PresentationPathComponent::Mode(mode.mode_id.clone()),
                             &mode.presentation,
                             mode_fallback(&pending.ability_text, &mode.mode_id),
                         )

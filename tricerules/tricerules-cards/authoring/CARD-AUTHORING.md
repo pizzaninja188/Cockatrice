@@ -1481,6 +1481,30 @@ text, and repeating the complete rules text inside `Choose a target for ...` obs
 Nested spell choices still use stable paths beginning with the spell node, but that path component
 does not require its own presentation mapping.
 
+### Presentation paths
+
+Every presentation node is identified by the exact `PresentationRef.path` the engine publishes for
+it. The text form used by the audit, exception rows and review packets writes each component as
+`kind:id`, joins the components with `/`, and writes the spell component as plain `spell`:
+
+| Node | Path |
+|---|---|
+| Printed, class-level or characteristic-defining ability | `ability:activated_01` |
+| Ability granted by a static ability | `ability:static_01/ability:triggered_01` |
+| Spell mode / ability mode | `spell/mode:mode_02`, `ability:triggered_01/mode:mode_01` |
+| Cast-cost group and option | `spell/cast_cost_group:kicker`, `spell/cast_cost_group:kicker/cast_cost_option:pay` |
+| `Choose` branch (or each `DrawCountChoice` alternative) | `spell/resolution_branch:waterbend_2`, `ability:parent/resolution_branch:child` |
+| Search slot / mana restriction | `spell/search_slot:slot_01`, `ability:activated_01/mana_restriction:restriction_01` |
+| Delayed trigger created by a spell | `spell/ability:delayed_01` |
+| Emblem trigger | `ability:<creating ability>/ability:<emblem ability>` |
+| Reflexive trigger, ability granted by a resolving effect | `ability:granted_01` |
+
+Program structure (step indexes, `Choose` ids, serde variant names) never appears in a path. A
+mode's resolution children hang off the spell or ability that resolves, not off the mode. Because
+reflexive and resolving-grant abilities publish their own id alone, give them an id distinct from
+every other ability on the face (the corpus uses `granted_01`). The audit reports a
+`DUPLICATE PRESENTATION PATH` when two different nodes on one face share a path.
+
 ### Token and state-marker display prerequisites
 
 `CreateTokenBatch(tokens: [...])` creates one of each distinct registered token simultaneously
@@ -1602,8 +1626,11 @@ decision, not a TODO marker. Add a short RON comment when the reason is not obvi
 implementation gap belongs in `partial-cards.tsv`; `Fallback` does not record partial support.
 
 Record every intentional authored `Fallback` in [presentation-exceptions.tsv](presentation-exceptions.tsv)
-with four tab-separated fields: card ID, face ID, node path, and a specific reason. Copy the node
-path from the audit output; ability and choice IDs identify array entries. Generated choice labels
+with four tab-separated fields: card ID, face ID, presentation path, and a specific reason. Copy the
+presentation path from the audit output, for example
+`fire_nation_cadets	fire_nation_cadets	ability:static_01/ability:triggered_01	<reason>`. The path
+is exactly the identity a client receives (see [Presentation paths](#presentation-paths)), and a row
+whose path does not parse is rejected. Generated choice labels
 never need a row; the audit rejects one. Token templates use
 intentional fallback because they have no normal-card Oracle fingerprint. Their artwork matching
 keeps stable identity markers separate from readable menu and stack labels.

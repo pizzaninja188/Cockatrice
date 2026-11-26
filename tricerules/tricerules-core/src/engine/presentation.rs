@@ -1,6 +1,6 @@
 use tricerules_card_model::{
-    AbilityId, AbilityPresentation, ActivatedAbilityDef, CardFaceId, CardRegistry, ChoiceId,
-    ChoicePresentation, ModeId,
+    AbilityPresentation, ActivatedAbilityDef, CardFaceId, CardRegistry, ChoicePresentation,
+    PresentationPathComponent, PresentationPathKind,
 };
 use tricerules_proto::ruled::v1 as rv1;
 
@@ -8,36 +8,20 @@ use crate::state::{AbilityDefinitionId, CastCostReceipt, ChosenMode, StackPresen
 
 type ActivatedModePresentation = (Vec<u32>, Vec<String>, Vec<rv1::PresentationRef>);
 
-#[derive(Clone, Copy)]
-pub(super) enum PresentationPath<'a> {
-    Spell,
-    Ability(&'a AbilityId),
-    Mode(&'a ModeId),
-    CastCostGroup(&'a ChoiceId),
-    CastCostOption(&'a ChoiceId),
-    ResolutionBranch(&'a ChoiceId),
-    SearchSlot(&'a ChoiceId),
-    ManaRestriction(&'a ChoiceId),
-}
-
-impl PresentationPath<'_> {
-    fn into_proto(self) -> rv1::PresentationPathComponent {
-        let (kind, id) = match self {
-            Self::Spell => (rv1::PresentationPathKind::Spell, "spell"),
-            Self::Ability(id) => (rv1::PresentationPathKind::Ability, id.as_str()),
-            Self::Mode(id) => (rv1::PresentationPathKind::Mode, id.as_str()),
-            Self::CastCostGroup(id) => (rv1::PresentationPathKind::CastCostGroup, id.as_str()),
-            Self::CastCostOption(id) => (rv1::PresentationPathKind::CastCostOption, id.as_str()),
-            Self::ResolutionBranch(id) => {
-                (rv1::PresentationPathKind::ResolutionBranch, id.as_str())
-            }
-            Self::SearchSlot(id) => (rv1::PresentationPathKind::SearchSlot, id.as_str()),
-            Self::ManaRestriction(id) => (rv1::PresentationPathKind::ManaRestriction, id.as_str()),
-        };
-        rv1::PresentationPathComponent {
-            kind: kind as i32,
-            id: id.to_owned(),
-        }
+fn component_to_proto(component: &PresentationPathComponent) -> rv1::PresentationPathComponent {
+    let kind = match component.kind() {
+        PresentationPathKind::Spell => rv1::PresentationPathKind::Spell,
+        PresentationPathKind::Ability => rv1::PresentationPathKind::Ability,
+        PresentationPathKind::Mode => rv1::PresentationPathKind::Mode,
+        PresentationPathKind::CastCostGroup => rv1::PresentationPathKind::CastCostGroup,
+        PresentationPathKind::CastCostOption => rv1::PresentationPathKind::CastCostOption,
+        PresentationPathKind::ResolutionBranch => rv1::PresentationPathKind::ResolutionBranch,
+        PresentationPathKind::SearchSlot => rv1::PresentationPathKind::SearchSlot,
+        PresentationPathKind::ManaRestriction => rv1::PresentationPathKind::ManaRestriction,
+    };
+    rv1::PresentationPathComponent {
+        kind: kind as i32,
+        id: component.id().to_owned(),
     }
 }
 
@@ -88,12 +72,12 @@ fn oracle_spans(
 pub(super) fn child_presentation_ref<'p>(
     registry: &CardRegistry,
     parent: &rv1::PresentationRef,
-    child: PresentationPath<'_>,
+    child: PresentationPathComponent,
     presentation: impl Into<PresentationMapping<'p>>,
     fallback_text: String,
 ) -> rv1::PresentationRef {
     let mut path = parent.path.clone();
-    path.push(child.into_proto());
+    path.push(component_to_proto(&child));
     rv1::PresentationRef {
         card_id: parent.card_id.clone(),
         face_id: parent.face_id.clone(),
@@ -143,7 +127,7 @@ pub(super) fn activated_stack_mode_presentation(
             presentations.push(child_presentation_ref(
                 registry,
                 parent,
-                PresentationPath::Mode(&mode.mode_id),
+                PresentationPathComponent::Mode(mode.mode_id.clone()),
                 &mode.presentation,
                 label,
             ));
@@ -180,7 +164,7 @@ pub(super) fn stack_child_presentation_ref<'a, 'p>(
     card_id: &str,
     face_index: usize,
     source: StackPresentationSource<'a>,
-    child: PresentationPath<'a>,
+    child: PresentationPathComponent,
     presentation: impl Into<PresentationMapping<'p>>,
     fallback_text: String,
 ) -> Option<rv1::PresentationRef> {
@@ -201,17 +185,17 @@ pub(super) fn stack_child_presentation_ref<'a, 'p>(
         registry,
         card_id,
         &face.face_id,
-        [PresentationPath::Spell, child],
+        [PresentationPathComponent::Spell, child],
         presentation,
         fallback_text,
     ))
 }
 
-pub(super) fn presentation_ref<'a, 'p>(
+pub(super) fn presentation_ref<'p>(
     registry: &CardRegistry,
     card_id: &str,
     face_id: &CardFaceId,
-    path: impl IntoIterator<Item = PresentationPath<'a>>,
+    path: impl IntoIterator<Item = PresentationPathComponent>,
     presentation: impl Into<PresentationMapping<'p>>,
     fallback_text: String,
 ) -> rv1::PresentationRef {
@@ -228,7 +212,10 @@ pub(super) fn presentation_ref<'a, 'p>(
     rv1::PresentationRef {
         card_id: card_id.to_owned(),
         face_id: face_id.as_str().to_owned(),
-        path: path.into_iter().map(PresentationPath::into_proto).collect(),
+        path: path
+            .into_iter()
+            .map(|component| component_to_proto(&component))
+            .collect(),
         oracle_spans: oracle_spans(registry, card_id, face_id.as_str(), presentation.into()),
         fallback_text,
         external_card_name,
@@ -256,8 +243,8 @@ pub(super) fn spell_stack_presentation(
                 card_id,
                 &face.face_id,
                 [
-                    PresentationPath::Spell,
-                    PresentationPath::Mode(&mode.mode_id),
+                    PresentationPathComponent::Spell,
+                    PresentationPathComponent::Mode(mode.mode_id.clone()),
                 ],
                 &mode.presentation,
                 tricerules_card_model::mode_fallback(&face.name, &mode.mode_id),
@@ -310,9 +297,9 @@ pub(super) fn spell_stack_presentation(
                 card_id,
                 &face.face_id,
                 [
-                    PresentationPath::Spell,
-                    PresentationPath::CastCostGroup(&group.group_id),
-                    PresentationPath::CastCostOption(option_id),
+                    PresentationPathComponent::Spell,
+                    PresentationPathComponent::CastCostGroup(group.group_id.clone()),
+                    PresentationPathComponent::CastCostOption(option_id.clone()),
                 ],
                 // The number paid is a runtime rules fact, absent from the static Oracle line.
                 // Preserve that complete annotation while offers retain their Oracle mapping.
@@ -348,7 +335,8 @@ pub(super) fn ability_presentation(
         definition
             .ability_path
             .iter()
-            .map(PresentationPath::Ability),
+            .cloned()
+            .map(PresentationPathComponent::Ability),
         mapping,
         fallback,
     )
@@ -358,6 +346,52 @@ pub(super) fn ability_presentation(
 mod tests {
     use super::*;
     use crate::state::CastCostReceipt;
+    use tricerules_card_model::ModeId;
+
+    /// The published path round-trips through the shared type and is one the authoring visitor
+    /// (and so the presentation audit) yields for that exact face.
+    fn assert_authored_path(reference: &rv1::PresentationRef) {
+        let path =
+            tricerules_card_model::PresentationPath::new(reference.path.iter().map(|wire| {
+                let kind = PresentationPathKind::ALL
+                    .into_iter()
+                    .find(|kind| {
+                        component_to_proto(
+                            &PresentationPathComponent::from_parts(
+                                *kind,
+                                if *kind == PresentationPathKind::Spell {
+                                    "spell"
+                                } else {
+                                    "probe"
+                                },
+                            )
+                            .unwrap(),
+                        )
+                        .kind
+                            == wire.kind
+                    })
+                    .expect("published kind maps to the shared kind");
+                PresentationPathComponent::from_parts(kind, &wire.id).unwrap()
+            }));
+        let reproto = path
+            .components()
+            .iter()
+            .map(component_to_proto)
+            .collect::<Vec<_>>();
+        assert_eq!(reproto, reference.path);
+        let face = tricerules_cards::registry::global()
+            .get(&reference.card_id)
+            .and_then(|card| {
+                card.faces
+                    .iter()
+                    .find(|face| face.face_id.as_str() == reference.face_id)
+            })
+            .expect("authored face");
+        assert!(
+            tricerules_card_model::face_presentation_paths(face).contains(&path),
+            "{path} is not an authored presentation path"
+        );
+    }
 
     #[test]
     fn real_card_cost_mapping_carries_stable_path_and_external_face_fingerprint() {
@@ -382,6 +416,7 @@ mod tests {
             .chosen_cast_costs
             .first()
             .expect("mapped kicker option");
+        assert_authored_path(option);
         assert_eq!(option.card_id, "grow_from_the_ashes");
         assert_eq!(option.face_id, "grow_from_the_ashes");
         assert_eq!(option.external_card_name, "Grow from the Ashes");
@@ -466,7 +501,7 @@ mod tests {
             "aangs_journey",
             0,
             StackPresentationSource::PhysicalSpell,
-            PresentationPath::Ability(&ability_id),
+            PresentationPathComponent::Ability(ability_id.clone()),
             &AbilityPresentation::Fallback,
             "Delayed test".into(),
         )
@@ -484,7 +519,7 @@ mod tests {
             "aangs_journey",
             0,
             StackPresentationSource::Missing,
-            PresentationPath::Ability(&ability_id),
+            PresentationPathComponent::Ability(ability_id.clone()),
             &AbilityPresentation::Fallback,
             "Delayed test".into(),
         )
@@ -504,6 +539,7 @@ mod tests {
             &[],
         );
         let mode = presentation.chosen_modes.first().expect("chosen mode");
+        assert_authored_path(mode);
         assert_eq!(mode.card_id, "boros_charm");
         assert_eq!(mode.face_id, "boros_charm");
         assert_eq!(mode.whole_oracle_lines(), [3]);

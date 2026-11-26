@@ -1,5 +1,6 @@
 //! Exact-cast Rebound grants and delayed upkeep consumption.
 use super::*;
+use tricerules_card_model::PresentationPathComponent;
 use tricerules_card_model::{AbilityPresentation, SpellCastFilter};
 
 impl GameEngine {
@@ -45,7 +46,7 @@ impl GameEngine {
                 &scheduled.card_id,
                 scheduled.source_face_index,
                 super::presentation::StackPresentationSource::PhysicalSpell,
-                super::presentation::PresentationPath::Ability(&ability.ability_id),
+                PresentationPathComponent::Ability(ability.ability_id.clone()),
                 &ability.presentation,
                 fallback_text,
             );
@@ -125,7 +126,7 @@ impl GameEngine {
                     .and_then(|presentation| presentation.primary.as_ref()),
                 top.ability_text.is_none(),
             ),
-            super::presentation::PresentationPath::Ability(&ability.ability_id),
+            PresentationPathComponent::Ability(ability.ability_id.clone()),
             &ability.presentation,
             format!("{label} — grant Rebound to the captured spell"),
         );

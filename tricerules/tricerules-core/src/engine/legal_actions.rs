@@ -2,9 +2,7 @@ use super::casting::castable_at_instant_speed;
 use super::combat::priority_locked_for_combat_declaration;
 use super::events::object_display_name;
 use super::payment::components::ObjectPaymentComponent;
-use super::presentation::{
-    ability_presentation, child_presentation_ref, presentation_ref, PresentationPath,
-};
+use super::presentation::{ability_presentation, child_presentation_ref, presentation_ref};
 use super::priority::{instant_timing_step_allowed, sorcery_speed_available};
 use super::targeting::{
     ability_program, compute_ability_targets_with_context_and_program,
@@ -13,6 +11,7 @@ use super::targeting::{
     TargetSourceIdentity,
 };
 use super::*;
+use tricerules_card_model::PresentationPathComponent;
 
 pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
     let _memo = eng.read_memo_scope();
@@ -198,7 +197,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                                         child_presentation_ref(
                                             eng.registry,
                                             parent,
-                                            PresentationPath::Mode(&mode.mode_id),
+                                            PresentationPathComponent::Mode(mode.mode_id.clone()),
                                             &mode.presentation,
                                             label,
                                         )
@@ -915,7 +914,8 @@ pub(super) fn activated_ability_info(
                     definition
                         .ability_path
                         .iter()
-                        .map(PresentationPath::Ability),
+                        .cloned()
+                        .map(PresentationPathComponent::Ability),
                     &ability.presentation,
                     fallback.clone(),
                 )
@@ -1686,9 +1686,11 @@ fn legal_spell_cost_choices(
                             card_id,
                             &face.face_id,
                             [
-                                PresentationPath::Spell,
-                                PresentationPath::CastCostGroup(&group.group_id),
-                                PresentationPath::CastCostOption(option.option_id()),
+                                PresentationPathComponent::Spell,
+                                PresentationPathComponent::CastCostGroup(group.group_id.clone()),
+                                PresentationPathComponent::CastCostOption(
+                                    option.option_id().clone(),
+                                ),
                             ],
                             option.presentation(),
                             option.fallback_label(),
@@ -1892,8 +1894,8 @@ fn legal_spell_cost_choices(
                     card_id,
                     &face.face_id,
                     [
-                        PresentationPath::Spell,
-                        PresentationPath::CastCostGroup(&group.group_id),
+                        PresentationPathComponent::Spell,
+                        PresentationPathComponent::CastCostGroup(group.group_id.clone()),
                     ],
                     &group.presentation,
                     group.fallback_prompt(),
@@ -2071,8 +2073,8 @@ fn legal_spell_modes(
                     card_id,
                     &face.face_id,
                     [
-                        PresentationPath::Spell,
-                        PresentationPath::Mode(&mode.mode_id),
+                        PresentationPathComponent::Spell,
+                        PresentationPathComponent::Mode(mode.mode_id.clone()),
                     ],
                     &mode.presentation,
                     mode_fallback(&face.name, &mode.mode_id),

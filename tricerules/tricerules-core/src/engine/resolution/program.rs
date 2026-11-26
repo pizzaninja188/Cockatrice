@@ -5,9 +5,7 @@
 //! has not completed yet.
 
 use super::*;
-use crate::engine::presentation::{
-    stack_child_presentation_ref, PresentationPath, StackPresentationSource,
-};
+use crate::engine::presentation::{stack_child_presentation_ref, StackPresentationSource};
 use crate::state::{
     DiscardCardTypeKnowledge, ProgramArm, ProgramDiscardResult, ProgramFrame, ProgramPathStep,
     ProgramRunState, ProgramValue,
@@ -19,6 +17,7 @@ use tricerules_card_model::primitives::{
     HandChoiceVisibility, ObjectFilter, PermanentTypeFilter, ProgramRequiredInput, ResolutionCost,
     ResultSlotId, ResultType, SpellEffectKind, TargetKind,
 };
+use tricerules_card_model::PresentationPathComponent;
 
 #[cfg(test)]
 #[path = "program_search_tests.rs"]
@@ -1964,7 +1963,7 @@ crate::state::ResolutionContinuation::EquipmentReceiptAttach {
                                         .and_then(|presentation| presentation.primary.as_ref()),
                                     stack.item.ability_text.is_none(),
                                 ),
-                                PresentationPath::ResolutionBranch(&branch.branch_id),
+                                PresentationPathComponent::ResolutionBranch(branch.branch_id.clone()),
                                 &branch.presentation,
                                 label,
                             ),

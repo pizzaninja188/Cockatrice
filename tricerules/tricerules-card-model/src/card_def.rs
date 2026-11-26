@@ -1046,7 +1046,8 @@ impl CardFace {
 pub type FaceRef<'a> = &'a CardFace;
 
 /// The authored RON shape of a card, deserialized as-is and immediately converted to a
-/// [`CardDefinition`] by [`Self::into_definition`]. Nothing outside registry load sees it.
+/// [`CardDefinition`] by [`Self::into_definition`]. Only registry load and the read-only
+/// authoring tools see it.
 ///
 /// Single-face cards are authored flat (no `faces:` wrapper) — this is the schema the ~870
 /// hand-authored and generated files use, and it is deliberately unchanged.
@@ -1152,7 +1153,7 @@ impl RawCardDefinition {
     /// `faces[0]`, a multi-face card keeps its authored faces. Returns the reason string for an
     /// authoring mistake the schema itself cannot express (registry load turns it into
     /// `RegistryError::InvalidCard`).
-    pub(crate) fn into_definition(self) -> Result<CardDefinition, String> {
+    pub fn into_definition(self) -> Result<CardDefinition, String> {
         let multiface_layout = self.layout != Layout::Normal;
         if multiface_layout && self.faces.is_empty() {
             return Err(format!(

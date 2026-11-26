@@ -5,6 +5,8 @@ pub mod identity;
 pub mod mana;
 pub mod oracle_fragment;
 pub mod presentation;
+pub mod presentation_path;
+pub mod presentation_visit;
 pub mod primitives;
 pub mod registry;
 pub mod slug;
@@ -24,6 +26,11 @@ pub use identity::{
 pub use mana::{ColorPip, ManaCost, ManaSymbol};
 pub use oracle_fragment::{resolve_oracle_fragment, FragmentError, OracleFragmentPart};
 pub use presentation::PresentationFaceMetadata;
+pub use presentation_path::{PresentationPath, PresentationPathComponent, PresentationPathKind};
+pub use presentation_visit::{
+    duplicate_face_presentation_paths, face_presentation_paths, visit_face_presentations,
+    NodePresentation, PresentationNode, PresentationSubject,
+};
 pub use primitives::{
     AbilityCost, AbilitySourceZone, ActivatedAbilityDef, ActivationTiming, AdditionalCost, Amount,
     AttackGroupDestination, AttackGroupTriggerTiming, AuthoredBlock, BasePowerToughnessValue,

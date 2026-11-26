@@ -1,5 +1,6 @@
 use super::destruction::{attempt_destroy, DestroyLogStyle, DestroyOutcome, DestroySnapshot};
 use super::*;
+use tricerules_card_model::PresentationPathComponent;
 
 /// CR 606.3 and 609.4: a resolution grants its controller one independently usable permission
 /// for each planeswalker incarnation; the source need not remain on the battlefield.
@@ -65,9 +66,7 @@ pub(super) fn solve_case(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineE
     }
     Ok(EffectOutcome::Continue)
 }
-use crate::engine::presentation::{
-    stack_child_presentation_ref, PresentationPath, StackPresentationSource,
-};
+use crate::engine::presentation::{stack_child_presentation_ref, StackPresentationSource};
 use crate::engine::{prepare_and_commit_untaps, set_tapped};
 
 /// Mycosynth Gardens applies a layer-1 copy effect to its exact source incarnation. The target
@@ -954,7 +953,7 @@ fn create_delayed_trigger_inner(
         &cx.top.card_id,
         cx.top.face_index,
         StackPresentationSource::for_stack(parent, cx.top.ability_text.is_none()),
-        PresentationPath::Ability(&ability.ability_id),
+        PresentationPathComponent::Ability(ability.ability_id.clone()),
         &ability.presentation,
         ability_text,
     );

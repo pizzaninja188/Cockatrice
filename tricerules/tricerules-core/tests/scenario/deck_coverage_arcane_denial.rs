@@ -1295,6 +1295,7 @@ fn runtime_proof_assert_arcane_branch_presentation(
             .collect::<Vec<_>>(),
         ["spell", "delayed_01", branch_id]
     );
+    assert_authored_presentation_path(presentation);
 }
 
 fn runtime_proof_assert_all_arcane_branch_presentations(offer: &ResolutionChoiceRequired) {

@@ -1,7 +1,7 @@
 use super::{EffectCx, EffectOutcome};
 use crate::engine::events::{ev_log, object_display_name};
 use crate::engine::presentation::{
-    ability_presentation, stack_child_presentation_ref, PresentationPath, StackPresentationSource,
+    ability_presentation, stack_child_presentation_ref, StackPresentationSource,
 };
 use crate::engine::targeting::{counter_move_target_pair_is_current, TargetSourceIdentity};
 use crate::engine::{rv1, AmountContext, ConditionContext, EngineError};
@@ -20,6 +20,7 @@ use tricerules_card_model::primitives::{
     ResolutionBranchRequirement, ResolutionCost, ResultType, SpellEffectKind, TargetController,
     TargetKind, TriggerCondition, TriggeredAbilityDef,
 };
+use tricerules_card_model::PresentationPathComponent;
 
 /// Current positive counter kinds on the exact target incarnation that passed the initial
 /// resolution target check. Deliberately does not repeat targetability or controller checks: CR
@@ -2146,7 +2147,7 @@ pub(in crate::engine) fn authored_resolution_branch_choice_event(
                                 .and_then(|presentation| presentation.primary.as_ref()),
                             stack.item.ability_text.is_none(),
                         ),
-                        PresentationPath::ResolutionBranch(&option.branch_id),
+                        PresentationPathComponent::ResolutionBranch(option.branch_id.clone()),
                         &option.presentation,
                         option.fallback_label(),
                     ),

@@ -659,6 +659,7 @@ fn assert_emblem_stack_presentation(
         .path
         .iter()
         .all(|part| part.kind == PresentationPathKind::Ability as i32));
+    assert_authored_presentation_path(presentation);
 }
 
 #[test]

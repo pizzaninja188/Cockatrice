@@ -276,26 +276,16 @@ fn matching_source_face<'a>(
 pub fn face_fragment_selectors(
     face: &crate::CardFace,
 ) -> Result<BTreeSet<(u16, crate::OracleFragmentPart)>, String> {
-    fn walk(value: &Value, found: &mut BTreeSet<(u16, crate::OracleFragmentPart)>) {
-        match value {
-            Value::Object(map) => {
-                if map.len() == 1 && map.contains_key("OracleFragment") {
-                    if let Ok(crate::AbilityPresentation::OracleFragment { line, part }) =
-                        serde_json::from_value(value.clone())
-                    {
-                        found.insert((line, part));
-                        return;
-                    }
-                }
-                map.values().for_each(|child| walk(child, found));
-            }
-            Value::Array(items) => items.iter().for_each(|child| walk(child, found)),
-            _ => {}
-        }
-    }
-    let value = serde_json::to_value(face).map_err(|error| error.to_string())?;
     let mut found = BTreeSet::new();
-    walk(&value, &mut found);
+    crate::visit_face_presentations(face, |node| {
+        if let crate::NodePresentation::Ability(crate::AbilityPresentation::OracleFragment {
+            line,
+            part,
+        }) = node.subject.presentation()
+        {
+            found.insert((*line, *part));
+        }
+    });
     Ok(found)
 }
 

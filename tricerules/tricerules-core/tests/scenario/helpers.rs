@@ -14,6 +14,57 @@ pub(crate) mod semantic;
 
 pub use tricerules_cards::primitives::HandCardAction;
 
+/// The typed path a published `PresentationRef` names.
+pub fn published_presentation_path(
+    presentation: &tricerules_proto::ruled::v1::PresentationRef,
+) -> tricerules_cards::PresentationPath {
+    use tricerules_cards::PresentationPathKind as Kind;
+    use tricerules_proto::ruled::v1::PresentationPathKind as Wire;
+    tricerules_cards::PresentationPath::new(presentation.path.iter().map(|component| {
+        let kind = match Wire::try_from(component.kind).expect("known presentation path kind") {
+            Wire::Spell => Kind::Spell,
+            Wire::Ability => Kind::Ability,
+            Wire::Mode => Kind::Mode,
+            Wire::CastCostGroup => Kind::CastCostGroup,
+            Wire::CastCostOption => Kind::CastCostOption,
+            Wire::ResolutionBranch => Kind::ResolutionBranch,
+            Wire::SearchSlot => Kind::SearchSlot,
+            Wire::ManaRestriction => Kind::ManaRestriction,
+            other => panic!("the engine never publishes {other:?}"),
+        };
+        tricerules_cards::PresentationPathComponent::from_parts(kind, &component.id)
+            .expect("published path components are stable ids")
+    }))
+}
+
+/// Asserts that a published presentation names an authored node: its typed path is one the
+/// authoring visitor (and so the presentation audit and its exception rows) yields for that face.
+pub fn assert_authored_presentation_path(
+    presentation: &tricerules_proto::ruled::v1::PresentationRef,
+) {
+    let path = published_presentation_path(presentation);
+    let face = tricerules_cards::registry::global()
+        .get(&presentation.card_id)
+        .and_then(|card| {
+            card.faces
+                .iter()
+                .find(|face| face.face_id.as_str() == presentation.face_id)
+        })
+        .expect("published presentation names an authored face");
+    let authored = tricerules_cards::face_presentation_paths(face);
+    assert!(
+        authored.contains(&path),
+        "{} / {} publishes {path}, which the audit does not name; authored paths: {}",
+        presentation.card_id,
+        presentation.face_id,
+        authored
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+}
+
 fn fixture_token_origin(card_id: &str) -> Option<tricerules_core::state::CopiableValues> {
     let registry = tricerules_cards::registry::global();
     if !registry.is_token(card_id) {

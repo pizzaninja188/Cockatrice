@@ -3,14 +3,13 @@
 use super::characteristics::creature_matches_scope;
 use super::events::{ev_log, ev_priority_changed, finish_with_events};
 use super::history::player_life_aggregate_value;
-use super::presentation::{
-    stack_child_presentation_ref, PresentationPath, StackPresentationSource,
-};
+use super::presentation::{stack_child_presentation_ref, StackPresentationSource};
 use super::resolution::{
     move_object_to_zone, permanent_moved_event, permanent_moved_event_with_library_position,
 };
 use super::targeting::{battlefield_objects_matching, object_matches_mass_filter};
 use super::*;
+use tricerules_card_model::PresentationPathComponent;
 
 mod counter_placement;
 mod distributed_counters;
@@ -4109,7 +4108,7 @@ impl GameEngine {
                     &item.card_id,
                     item.face_index,
                     StackPresentationSource::for_stack(parent, item.ability_text.is_none()),
-                    PresentationPath::Ability(&ability.ability_id),
+                    PresentationPathComponent::Ability(ability.ability_id.clone()),
                     &ability.presentation,
                     ability_text,
                 );
