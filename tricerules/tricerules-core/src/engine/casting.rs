@@ -5,7 +5,7 @@ use super::payment::PaidCardCost;
 #[cfg(test)]
 use super::payment::{commit_mana_payment, pay_mana, plan_mana_payment_with_reduction};
 use super::presentation::{
-    ability_presentation, activated_stack_mode_presentation, child_presentation_ref,
+    activated_stack_mode_presentation, child_presentation_ref, node_presentation_ref,
     spell_stack_presentation,
 };
 use super::targeting::{
@@ -3117,12 +3117,12 @@ impl GameEngine {
         };
         let ability_text = ability.fallback_text_with_path(&card_name, &effective.ability_path());
         let primary_presentation = (!concealed)
-            .then_some(effective.presentation_definition.as_ref())
+            .then(|| effective.presentation_node())
             .flatten()
-            .map(|definition| {
-                ability_presentation(
+            .map(|node| {
+                node_presentation_ref(
                     self.registry,
-                    definition,
+                    &node,
                     &ability.presentation,
                     ability_text.clone(),
                 )
@@ -4171,17 +4171,14 @@ impl GameEngine {
                 .effective_face(permanent_id)
                 .map(|face| face.name.clone())
                 .unwrap_or_else(|| card_id.to_owned());
-            effective
-                .presentation_definition
-                .as_ref()
-                .map(|definition| {
-                    ability_presentation(
-                        self.registry,
-                        definition,
-                        &ability.presentation,
-                        ability.fallback_text_with_path(&face_name, ability_path),
-                    )
-                })
+            effective.presentation_node().map(|node| {
+                node_presentation_ref(
+                    self.registry,
+                    &node,
+                    &ability.presentation,
+                    ability.fallback_text_with_path(&face_name, ability_path),
+                )
+            })
         };
 
         let mana_restriction = ability.mana_restriction().cloned();

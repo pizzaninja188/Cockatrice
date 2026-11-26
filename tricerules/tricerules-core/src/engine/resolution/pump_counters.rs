@@ -750,8 +750,14 @@ pub(super) fn apply_permanent_modifier(
     };
     let kinds = materialize_resolving_modifier(modifier);
     for kind in kinds {
+        let trigger_grant_origin = match &kind {
+            ContinuousEffectKind::GrantActivatedAbility(ability) => {
+                Some(resolving_grant_origin(cx, &ability.ability_id))
+            }
+            _ => None,
+        };
         let effect = ContinuousEffect {
-            trigger_grant_origin: None,
+            trigger_grant_origin,
             source_id,
             affected: AffectedScope::Single(object_id),
             kind,
@@ -931,6 +937,31 @@ pub(super) fn grant_protection(
     Ok(EffectOutcome::Continue)
 }
 
+/// A fresh resolving-grant occurrence whose child node publishes on the granting card, under
+/// the resolving stack item (or `spell`), exactly like a delayed child.
+fn resolving_grant_origin(
+    cx: &mut EffectCx<'_>,
+    child: &tricerules_card_model::AbilityId,
+) -> crate::state::TriggerAbilityOrigin {
+    let parent = cx
+        .engine
+        .state
+        .stack_presentations
+        .get(&cx.top.id)
+        .and_then(|stack| stack.primary.as_ref());
+    let node = crate::engine::presentation::stack_child_presentation_node(
+        cx.engine.registry,
+        &cx.top.card_id,
+        cx.top.face_index,
+        crate::engine::presentation::StackPresentationSource::for_stack(
+            parent,
+            cx.top.ability_text.is_none(),
+        ),
+        tricerules_card_model::PresentationPathComponent::Ability(child.clone()),
+    );
+    cx.engine.state.allocate_resolving_grant_origin(None, node)
+}
+
 pub(super) fn grant_triggered_ability(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
@@ -956,10 +987,11 @@ pub(super) fn grant_triggered_ability(
 
     let target_name = object_display_name(&cx.engine.state, cx.engine.registry, tid);
     let ability_text = ability.fallback_text(cx.spell_label);
+    let origin = resolving_grant_origin(cx, &ability.ability_id);
     cx.engine
         .state
         .add_triggered_ability_grant(ContinuousEffect {
-            trigger_grant_origin: None,
+            trigger_grant_origin: Some(origin),
             source_id: effect_source_id,
             affected: AffectedScope::Single(tid),
             kind: ContinuousEffectKind::GrantTriggeredAbility(ability),

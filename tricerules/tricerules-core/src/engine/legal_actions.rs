@@ -2,7 +2,7 @@ use super::casting::castable_at_instant_speed;
 use super::combat::priority_locked_for_combat_declaration;
 use super::events::object_display_name;
 use super::payment::components::ObjectPaymentComponent;
-use super::presentation::{ability_presentation, child_presentation_ref, presentation_ref};
+use super::presentation::{child_presentation_ref, node_presentation_ref, presentation_ref};
 use super::priority::{instant_timing_step_allowed, sorcery_speed_available};
 use super::targeting::{
     ability_program, compute_ability_targets_with_context_and_program,
@@ -146,18 +146,14 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                             &object_display_name(&eng.state, eng.registry, poid),
                             &effective.ability_path(),
                         );
-                        let parent_presentation =
-                            effective
-                                .presentation_definition
-                                .as_ref()
-                                .map(|definition| {
-                                    ability_presentation(
-                                        eng.registry,
-                                        definition,
-                                        &ability.presentation,
-                                        ability_text.clone(),
-                                    )
-                                });
+                        let parent_presentation = effective.presentation_node().map(|node| {
+                            node_presentation_ref(
+                                eng.registry,
+                                &node,
+                                &ability.presentation,
+                                ability_text.clone(),
+                            )
+                        });
                         let modes = modal
                             .modes
                             .iter()
@@ -903,23 +899,9 @@ pub(super) fn activated_ability_info(
     let presentation = if concealed || ability.intrinsic_land_mana {
         None
     } else {
-        effective
-            .presentation_definition
-            .as_ref()
-            .map(|definition| {
-                presentation_ref(
-                    eng.registry,
-                    &definition.card_id,
-                    &definition.face_id,
-                    definition
-                        .ability_path
-                        .iter()
-                        .cloned()
-                        .map(PresentationPathComponent::Ability),
-                    &ability.presentation,
-                    fallback.clone(),
-                )
-            })
+        effective.presentation_node().map(|node| {
+            node_presentation_ref(eng.registry, &node, &ability.presentation, fallback.clone())
+        })
     };
     rv1::AbilityInfo {
         text: fallback.clone(),

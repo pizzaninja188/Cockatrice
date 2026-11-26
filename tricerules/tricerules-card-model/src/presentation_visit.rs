@@ -308,9 +308,9 @@ impl<'a, F: FnMut(PresentationNode<'_, 'a>)> FaceVisitor<'_, F> {
     }
 
     /// Mirrors where the engine publishes each effect-owned node. Search slots, mana
-    /// restrictions and delayed children hang off the resolving stack item. Emblem triggers
-    /// keep only their immediate parent ability. Reflexive triggers and resolving grants are
-    /// published under their own ability id alone.
+    /// restrictions, delayed children, reflexive triggers and resolving grants hang off the
+    /// resolving stack item, on the face that authored them (never the grant's recipient).
+    /// Emblem triggers keep only their immediate parent ability.
     fn effect(&mut self, owner: &PresentationPath, effect: &'a SpellEffectKind) {
         match effect {
             SpellEffectKind::Conditional { effect, .. }
@@ -349,15 +349,15 @@ impl<'a, F: FnMut(PresentationNode<'_, 'a>)> FaceVisitor<'_, F> {
                 self.triggered(&parent, ability)
             }
             SpellEffectKind::GrantTriggeredAbility { ability, .. } => {
-                self.triggered(&PresentationPath::default(), ability)
+                self.triggered(owner, ability)
             }
             SpellEffectKind::CreateReflexiveTrigger { ability, .. } => {
-                let path = ability_child(&PresentationPath::default(), &ability.ability_id);
+                let path = ability_child(owner, &ability.ability_id);
                 self.emit(&path, PresentationSubject::Reflexive(ability));
                 self.effects(&path, &ability.effect);
             }
             SpellEffectKind::ApplyPermanentModifier { modifier, .. } => {
-                self.permanent_modifier(modifier)
+                self.permanent_modifier(owner, modifier)
             }
             SpellEffectKind::MoveGraveyardCards {
                 entry_modifiers, ..
@@ -366,16 +366,20 @@ impl<'a, F: FnMut(PresentationNode<'_, 'a>)> FaceVisitor<'_, F> {
                 entry_modifiers, ..
             } => {
                 for modifier in entry_modifiers {
-                    self.permanent_modifier(modifier);
+                    self.permanent_modifier(owner, modifier);
                 }
             }
             _ => {}
         }
     }
 
-    fn permanent_modifier(&mut self, modifier: &'a ResolvingPermanentModifier) {
+    fn permanent_modifier(
+        &mut self,
+        owner: &PresentationPath,
+        modifier: &'a ResolvingPermanentModifier,
+    ) {
         if let ResolvingPermanentModifier::GrantActivatedAbility(ability) = modifier {
-            self.activated(&PresentationPath::default(), ability);
+            self.activated(owner, ability);
         }
     }
 }

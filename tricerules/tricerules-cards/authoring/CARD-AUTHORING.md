@@ -1496,14 +1496,15 @@ it. The text form used by the audit, exception rows and review packets writes ea
 | `Choose` branch (or each `DrawCountChoice` alternative) | `spell/resolution_branch:waterbend_2`, `ability:parent/resolution_branch:child` |
 | Search slot / mana restriction | `spell/search_slot:slot_01`, `ability:activated_01/mana_restriction:restriction_01` |
 | Delayed trigger created by a spell | `spell/ability:delayed_01` |
+| Reflexive trigger, ability granted by a resolving effect | `ability:triggered_01/ability:granted_01`, `spell/ability:granted_01` |
 | Emblem trigger | `ability:<creating ability>/ability:<emblem ability>` |
-| Reflexive trigger, ability granted by a resolving effect | `ability:granted_01` |
 
 Program structure (step indexes, `Choose` ids, serde variant names) never appears in a path. A
-mode's resolution children hang off the spell or ability that resolves, not off the mode. Because
-reflexive and resolving-grant abilities publish their own id alone, give them an id distinct from
-every other ability on the face (the corpus uses `granted_01`). The audit reports a
-`DUPLICATE PRESENTATION PATH` when two different nodes on one face share a path.
+mode's resolution children hang off the spell or ability that resolves, not off the mode. A
+resolving grant publishes on the granting card's face, under the resolving spell or ability,
+never on the permanent that receives it; its Oracle spans and fingerprint are the granting card's.
+The audit reports a `DUPLICATE PRESENTATION PATH` when two different nodes on one face share a
+path.
 
 ### Token and state-marker display prerequisites
 

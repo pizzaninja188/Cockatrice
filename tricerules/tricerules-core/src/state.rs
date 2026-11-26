@@ -328,7 +328,31 @@ pub enum TriggerAbilityOrigin {
         /// Optional immutable definition for an authored delayed child. The occurrence remains
         /// the identity; this definition only binds program compilation and presentation.
         definition: Option<AbilityDefinitionId>,
+        /// Where the granted ability's authored node publishes: the granting card face, under
+        /// the resolving stack item that created the grant. Fixed at resolution, so it is a pure
+        /// function of the occurrence and never distinguishes otherwise-equal origins.
+        presentation: Option<PresentationNode>,
     },
+}
+
+/// One authored presentation node's published location: an exact card face and the node's full
+/// path within it (the same key the authoring visitor and presentation audit use).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct PresentationNode {
+    pub card_id: String,
+    pub face_id: tricerules_card_model::CardFaceId,
+    pub path: tricerules_card_model::PresentationPath,
+}
+
+impl serde::Serialize for PresentationNode {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeStruct;
+        let mut node = serializer.serialize_struct("PresentationNode", 3)?;
+        node.serialize_field("card_id", &self.card_id)?;
+        node.serialize_field("face_id", &self.face_id)?;
+        node.serialize_field("path", &self.path.to_string())?;
+        node.end()
+    }
 }
 
 /// Provenance for one spell-keyword trigger instance captured when a spell becomes cast.
@@ -4928,16 +4952,27 @@ impl GameState {
     }
 
     pub(crate) fn allocate_trigger_grant_origin(&mut self) -> TriggerAbilityOrigin {
-        self.allocate_trigger_grant_origin_with_definition(None)
+        self.allocate_resolving_grant_origin(None, None)
     }
 
     pub(crate) fn allocate_trigger_grant_origin_with_definition(
         &mut self,
         definition: Option<AbilityDefinitionId>,
     ) -> TriggerAbilityOrigin {
+        self.allocate_resolving_grant_origin(definition, None)
+    }
+
+    /// A fresh resolving-grant occurrence. `presentation` places the granted node on the
+    /// granting card when a resolving stack item creates the grant.
+    pub(crate) fn allocate_resolving_grant_origin(
+        &mut self,
+        definition: Option<AbilityDefinitionId>,
+        presentation: Option<PresentationNode>,
+    ) -> TriggerAbilityOrigin {
         let origin = TriggerAbilityOrigin::ResolvingGrant {
             occurrence: self.next_trigger_grant_id,
             definition,
+            presentation,
         };
         self.next_trigger_grant_id += 1;
         origin

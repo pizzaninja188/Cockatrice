@@ -75,6 +75,23 @@ impl EffectiveActivatedAbility {
         }
     }
 
+    /// Where this occurrence's authored node publishes. A printed or static-granted ability
+    /// publishes at its definition; a resolving grant at the node fixed on the granting card.
+    pub fn presentation_node(&self) -> Option<crate::state::PresentationNode> {
+        if let Some(definition) = &self.presentation_definition {
+            return Some(super::presentation::definition_presentation_node(
+                definition,
+            ));
+        }
+        match &self.occurrence {
+            ActivatedAbilityOccurrence::Granted(TriggerAbilityOrigin::ResolvingGrant {
+                presentation: Some(node),
+                ..
+            }) if !self.definition.intrinsic_land_mana => Some(node.clone()),
+            _ => None,
+        }
+    }
+
     pub fn ability_path(&self) -> Vec<tricerules_card_model::AbilityId> {
         self.presentation_definition
             .as_ref()

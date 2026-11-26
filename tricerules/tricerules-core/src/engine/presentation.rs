@@ -1,15 +1,17 @@
 use tricerules_card_model::{
     AbilityPresentation, ActivatedAbilityDef, CardFaceId, CardRegistry, ChoicePresentation,
-    PresentationPathComponent, PresentationPathKind,
+    PresentationPath, PresentationPathComponent, PresentationPathKind,
 };
 use tricerules_proto::ruled::v1 as rv1;
 
-use crate::state::{AbilityDefinitionId, CastCostReceipt, ChosenMode, StackPresentation};
+use crate::state::{
+    AbilityDefinitionId, CastCostReceipt, ChosenMode, PresentationNode, StackPresentation,
+};
 
 type ActivatedModePresentation = (Vec<u32>, Vec<String>, Vec<rv1::PresentationRef>);
 
-fn component_to_proto(component: &PresentationPathComponent) -> rv1::PresentationPathComponent {
-    let kind = match component.kind() {
+fn kind_to_proto(kind: PresentationPathKind) -> rv1::PresentationPathKind {
+    match kind {
         PresentationPathKind::Spell => rv1::PresentationPathKind::Spell,
         PresentationPathKind::Ability => rv1::PresentationPathKind::Ability,
         PresentationPathKind::Mode => rv1::PresentationPathKind::Mode,
@@ -18,11 +20,24 @@ fn component_to_proto(component: &PresentationPathComponent) -> rv1::Presentatio
         PresentationPathKind::ResolutionBranch => rv1::PresentationPathKind::ResolutionBranch,
         PresentationPathKind::SearchSlot => rv1::PresentationPathKind::SearchSlot,
         PresentationPathKind::ManaRestriction => rv1::PresentationPathKind::ManaRestriction,
-    };
+    }
+}
+
+fn component_to_proto(component: &PresentationPathComponent) -> rv1::PresentationPathComponent {
     rv1::PresentationPathComponent {
-        kind: kind as i32,
+        kind: kind_to_proto(component.kind()) as i32,
         id: component.id().to_owned(),
     }
+}
+
+/// The typed form of one published component; `None` for a kind or id the model rejects.
+fn component_from_proto(
+    wire: &rv1::PresentationPathComponent,
+) -> Option<PresentationPathComponent> {
+    let kind = PresentationPathKind::ALL
+        .into_iter()
+        .find(|kind| kind_to_proto(*kind) as i32 == wire.kind)?;
+    PresentationPathComponent::from_parts(kind, &wire.id).ok()
 }
 
 /// An authored presentation of either kind: printed abilities, modes and cost groups carry an
@@ -191,6 +206,76 @@ pub(super) fn stack_child_presentation_ref<'a, 'p>(
     ))
 }
 
+/// Where a child authored by the resolving stack item publishes: under the item's primary
+/// presentation, or directly under `spell` for a physical spell. Shared by every node the
+/// resolving item creates for later publication, such as resolving grants.
+pub(super) fn stack_child_presentation_node(
+    registry: &CardRegistry,
+    card_id: &str,
+    face_index: usize,
+    source: StackPresentationSource<'_>,
+    child: PresentationPathComponent,
+) -> Option<PresentationNode> {
+    match source {
+        StackPresentationSource::Parent(parent) => {
+            let mut path = PresentationPath::new(
+                parent
+                    .path
+                    .iter()
+                    .map(component_from_proto)
+                    .collect::<Option<Vec<_>>>()?,
+            );
+            path.push(child);
+            Some(PresentationNode {
+                card_id: parent.card_id.clone(),
+                face_id: CardFaceId::new(&parent.face_id).ok()?,
+                path,
+            })
+        }
+        StackPresentationSource::PhysicalSpell => {
+            let face = registry.get(card_id)?.face(face_index)?;
+            Some(PresentationNode {
+                card_id: card_id.to_owned(),
+                face_id: face.face_id.clone(),
+                path: PresentationPath::new([PresentationPathComponent::Spell, child]),
+            })
+        }
+        StackPresentationSource::Missing => None,
+    }
+}
+
+/// The published reference for an authored node whose location was fixed earlier.
+pub(super) fn node_presentation_ref<'p>(
+    registry: &CardRegistry,
+    node: &PresentationNode,
+    presentation: impl Into<PresentationMapping<'p>>,
+    fallback_text: String,
+) -> rv1::PresentationRef {
+    presentation_ref(
+        registry,
+        &node.card_id,
+        &node.face_id,
+        node.path.components().iter().cloned(),
+        presentation,
+        fallback_text,
+    )
+}
+
+/// The node an authored ability definition publishes as: its face and ability-only path.
+pub(super) fn definition_presentation_node(definition: &AbilityDefinitionId) -> PresentationNode {
+    PresentationNode {
+        card_id: definition.card_id.clone(),
+        face_id: definition.face_id.clone(),
+        path: PresentationPath::new(
+            definition
+                .ability_path
+                .iter()
+                .cloned()
+                .map(PresentationPathComponent::Ability),
+        ),
+    }
+}
+
 pub(super) fn presentation_ref<'p>(
     registry: &CardRegistry,
     card_id: &str,
@@ -351,28 +436,12 @@ mod tests {
     /// The published path round-trips through the shared type and is one the authoring visitor
     /// (and so the presentation audit) yields for that exact face.
     fn assert_authored_path(reference: &rv1::PresentationRef) {
-        let path =
-            tricerules_card_model::PresentationPath::new(reference.path.iter().map(|wire| {
-                let kind = PresentationPathKind::ALL
-                    .into_iter()
-                    .find(|kind| {
-                        component_to_proto(
-                            &PresentationPathComponent::from_parts(
-                                *kind,
-                                if *kind == PresentationPathKind::Spell {
-                                    "spell"
-                                } else {
-                                    "probe"
-                                },
-                            )
-                            .unwrap(),
-                        )
-                        .kind
-                            == wire.kind
-                    })
-                    .expect("published kind maps to the shared kind");
-                PresentationPathComponent::from_parts(kind, &wire.id).unwrap()
-            }));
+        let path = tricerules_card_model::PresentationPath::new(
+            reference
+                .path
+                .iter()
+                .map(|wire| component_from_proto(wire).expect("published component is typed")),
+        );
         let reproto = path
             .components()
             .iter()

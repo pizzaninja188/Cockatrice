@@ -166,6 +166,53 @@ fn issue_148_perigee_excludes_self_and_returns_other_creature_tapped_once() {
     assert_eq!(e.state.objects[&bear].zone, Zone::Graveyard);
 }
 
+/// The granted dies trigger is authored inside Perigee Beckoner's enters trigger, so it publishes
+/// on Perigee Beckoner's face under that ability, never on the Grizzly Bears that receives it.
+#[test]
+fn perigee_granted_trigger_publishes_on_the_granting_card_under_its_resolving_ability() {
+    use tricerules_proto::ruled::v1::PresentationPathKind;
+    let mut e = engine();
+    let bear = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    let beckoner = cast(&mut e, "perigee_beckoner", CastMethod::Warp, vec![]);
+    pass_both_players(&mut e);
+    e.apply_scenario_command(0, &choose(target_object(bear)))
+        .unwrap();
+    resolve_entire_stack_two_player(&mut e);
+    assert_ne!(beckoner, bear);
+    cast(&mut e, "shock", CastMethod::Normal, target_object(bear));
+    let batch = pass_both_players_with_batch(&mut e);
+    let pushed = batch
+        .events
+        .iter()
+        .find_map(|event| match &event.ev {
+            Some(Ev::StackPushed(pushed)) if pushed.is_triggered => Some(pushed),
+            _ => None,
+        })
+        .expect("the granted dies trigger is put on the stack");
+    let presentation = pushed
+        .primary_presentation
+        .as_ref()
+        .expect("granted trigger presentation");
+    assert_eq!(presentation.card_id, "perigee_beckoner");
+    assert_eq!(presentation.face_id, "perigee_beckoner");
+    assert_eq!(
+        presentation
+            .path
+            .iter()
+            .map(|part| (part.kind, part.id.as_str()))
+            .collect::<Vec<_>>(),
+        [
+            (PresentationPathKind::Ability as i32, "triggered_01"),
+            (PresentationPathKind::Ability as i32, "granted_01"),
+        ]
+    );
+    assert!(
+        !presentation.oracle_spans.is_empty(),
+        "the quoted grant maps onto Perigee Beckoner's Oracle text"
+    );
+    assert_authored_presentation_path(presentation);
+}
+
 #[test]
 fn issue_148_void_consumers_check_their_own_timing() {
     for active in [false, true] {

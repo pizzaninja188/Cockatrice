@@ -254,6 +254,24 @@ impl GameEngine {
         if concealed {
             return None;
         }
+        let path = origin
+            .map(|origin| trigger_ability_path(origin, ability))
+            .unwrap_or_else(|| vec![ability.ability_id.clone()]);
+        let fallback = ability.fallback_text_with_path(public_name, &path);
+        // A resolving grant publishes on the granting card, under the stack item that granted
+        // it; the recipient's own face never owns that authored node.
+        if let Some(TriggerAbilityOrigin::ResolvingGrant {
+            presentation: Some(node),
+            ..
+        }) = origin
+        {
+            return Some(super::presentation::node_presentation_ref(
+                self.registry,
+                node,
+                &ability.presentation,
+                fallback,
+            ));
+        }
         let definition = origin
             .and_then(|origin| match origin {
                 TriggerAbilityOrigin::Printed(definition)
@@ -270,14 +288,11 @@ impl GameEngine {
             .unwrap_or_else(|| {
                 self.ability_definition(source_id, face_index, vec![ability.ability_id.clone()])
             });
-        let path = origin
-            .map(|origin| trigger_ability_path(origin, ability))
-            .unwrap_or_else(|| vec![ability.ability_id.clone()]);
         Some(ability_presentation(
             self.registry,
             &definition,
             &ability.presentation,
-            ability.fallback_text_with_path(public_name, &path),
+            fallback,
         ))
     }
 

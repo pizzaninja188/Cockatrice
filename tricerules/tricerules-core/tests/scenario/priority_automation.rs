@@ -377,6 +377,7 @@ fn trigger_rules_use_origin_controller_and_source_incarnation_not_text() {
         .ability_origin = tricerules_core::state::TriggerAbilityOrigin::ResolvingGrant {
         occurrence: 55_000,
         definition: None,
+        presentation: None,
     };
     let b = e.initial_response_batch();
     assert_eq!(

@@ -1,8 +1,6 @@
 use super::{EffectCx, EffectOutcome};
 use crate::engine::events::{ev_log, object_display_name};
-use crate::engine::presentation::{
-    ability_presentation, stack_child_presentation_ref, StackPresentationSource,
-};
+use crate::engine::presentation::{stack_child_presentation_ref, StackPresentationSource};
 use crate::engine::targeting::{counter_move_target_pair_is_current, TargetSourceIdentity};
 use crate::engine::{rv1, AmountContext, ConditionContext, EngineError};
 use crate::state::{
@@ -2388,17 +2386,23 @@ pub(super) fn create_reflexive_trigger(
         .map(|definition| definition.name.clone())
         .unwrap_or_else(|| cx.top.card_id.clone());
     let ability_text = ability.fallback_text(&card_name);
-    let definition = cx.engine.ability_definition(
-        source_id,
-        cx.top.face_index,
-        vec![ability.ability_id.clone()],
-    );
-    let presentation = Some(ability_presentation(
+    // CR 603.12: the reflexive trigger is authored inside the resolving ability, so it
+    // publishes under that stack item rather than as a top-level ability of its source.
+    let parent = cx
+        .engine
+        .state
+        .stack_presentations
+        .get(&cx.top.id)
+        .and_then(|stack| stack.primary.as_ref());
+    let presentation = stack_child_presentation_ref(
         cx.engine.registry,
-        &definition,
+        &cx.top.card_id,
+        cx.top.face_index,
+        StackPresentationSource::for_stack(parent, cx.top.ability_text.is_none()),
+        PresentationPathComponent::Ability(ability.ability_id.clone()),
         &ability.presentation,
         ability_text.clone(),
-    ));
+    );
     cx.engine
         .state
         .staged_trigger_groups

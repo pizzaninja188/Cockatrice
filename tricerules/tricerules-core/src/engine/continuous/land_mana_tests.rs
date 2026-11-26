@@ -907,6 +907,7 @@ fn intrinsic_land_mana_targeted_granted_trigger_captures_concealed_label_before_
         .trigger_grant_origin = Some(TriggerAbilityOrigin::ResolvingGrant {
         occurrence: 305_028,
         definition: None,
+        presentation: None,
     });
     let collected = engine.matching_triggered_abilities("sol_ring", source, 0, 0, |_| true);
     assert_eq!(collected.len(), 1);
@@ -1121,6 +1122,7 @@ fn lantern_granted_slots_do_not_rebind_after_an_earlier_occurrence_expires() {
             Some(TriggerAbilityOrigin::ResolvingGrant {
                 occurrence,
                 definition: None,
+                presentation: None,
             })
         );
     }
@@ -1142,6 +1144,7 @@ fn lantern_granted_slots_do_not_rebind_after_an_earlier_occurrence_expires() {
             != Some(TriggerAbilityOrigin::ResolvingGrant {
                 occurrence: 0,
                 definition: None,
+                presentation: None,
             })
     });
     engine.apply_scenario_command(0, &pass).unwrap();
