@@ -1,0 +1,25 @@
+// Oracle 30255f36-2e26-4990-8b54-27f38130d45b; source/rulings checked 2026-11-26 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.1/602.2 (activation and printed cost), 107.5/118.3 ({T} cost), 701.23a-b (a library
+// search with a stated quality may fail to find) and 701.24 (shuffle), 702.7 (first strike).
+// Pinned 2004-10-04: the search may fail to find.
+// Copy of the reviewed Ramosian Sergeant search with the printed {5} cost and cap 4.
+(
+  id: "ramosian_captain",
+  name: "Ramosian Captain",
+  face_id: "ramosian_captain",
+  mana_cost: "{1}{W}{W}",
+  types: ["Creature", "Human", "Rebel"],
+  power: 2,
+  toughness: 2,
+  keywords: [FirstStrike],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    costs: [Mana("{5}"), Tap],
+    effect: [SearchLibrary(
+      filter: Some((card_type: Some(NonlandPermanent), required_subtypes: ["Rebel"], max_mana_value: Some(4))),
+      destination: Battlefield(tapped: false),
+    )],
+  )],
+)

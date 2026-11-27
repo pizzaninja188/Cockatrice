@@ -1,0 +1,88 @@
+{
+  "format_version": 1,
+  "oracle_id": "dc206e6a-e447-48d4-a91a-7c746320e2b4",
+  "spans": [
+    {
+      "face_id": "defiant_falcon",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "defiant_falcon",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "CardTypeFilter::NonlandPermanent",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/SearchLibrary/filter/card_type"
+    },
+    {
+      "symbol": "ZoneCardFilter.required_subtypes: [\"Rebel\"]",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/SearchLibrary/filter/required_subtypes"
+    },
+    {
+      "symbol": "ZoneCardFilter.max_mana_value",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/SearchLibrary/filter/max_mana_value"
+    },
+    {
+      "symbol": "SearchDestination::Battlefield",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/SearchLibrary/destination"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q87_batch_a::q87_rebel_cards_apply_their_printed_cap_and_keyword",
+      "covers": "shared 01-rebel-tutor evidence"
+    },
+    {
+      "test": "scenario q87_batch_a::q87_rebel_cards_offer_noncreature_rebel_permanents",
+      "covers": "shared 01-rebel-tutor evidence"
+    },
+    {
+      "test": "scenario q87_batch_a::q87_rebel_cards_can_fail_to_find_and_still_shuffle",
+      "covers": "shared 01-rebel-tutor evidence"
+    },
+    {
+      "test": "scenario q87_batch_a::q87_rebel_cards_reject_activation_without_the_printed_mana",
+      "covers": "shared 01-rebel-tutor evidence"
+    },
+    {
+      "test": "scenario q87_batch_a::q87_rebel_canary_simplest_finds_a_legal_rebel",
+      "covers": "actual defiant_falcon canary"
+    },
+    {
+      "test": "mechanic_registry::q87_batch_a::q87_rebel_tutor_maps_definitions",
+      "covers": "actual defiant_falcon registry identity, activation cost and search filter"
+    },
+    {
+      "test": "mechanic_registry::q87_batch_a::q87_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for defiant_falcon"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

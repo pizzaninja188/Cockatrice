@@ -1,0 +1,26 @@
+// Oracle c8a20fc7-025b-403a-b893-ff5efcbdc9d8; source/rulings checked 2026-11-26 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 510.1-510.2 (combat damage), 603.2 (trigger), 122.1 (the +1/+1 counter) and 702.35a-d
+// (madness discards into exile and casts from there). The nine pinned 2022-12-08 madness rulings
+// are the ones the shipped Arrogant Wurm / Fiery Temper path already asserts.
+// Copy of Slith Firewalker's combat-damage counter plus Arrogant Wurm's Madness static.
+(
+  id: "bloodmad_vampire",
+  name: "Bloodmad Vampire",
+  face_id: "bloodmad_vampire",
+  mana_cost: "{2}{R}",
+  types: ["Creature", "Vampire", "Berserker"],
+  power: 4,
+  toughness: 1,
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([2]),
+    definition: Madness(cost: "{1}{R}"),
+  )],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverSelfDealsCombatDamageToPlayer,
+    effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
+  )],
+)

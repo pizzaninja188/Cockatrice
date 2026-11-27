@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "ed4d4084-739b-43ac-bd2b-a86d1ecd7bbd",
+  "spans": [
+    {
+      "face_id": "nim_grotesque",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::CountScaledSelfPt",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "CountExpression::BattlefieldPermanents",
+      "typed_path": "/faces/0/static_abilities/0/definition/CountScaledSelfPt/count"
+    },
+    {
+      "symbol": "PermanentTypeFilter::Artifact",
+      "typed_path": "/faces/0/static_abilities/0/definition/CountScaledSelfPt/count/BattlefieldPermanents/filter"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q87_batch_a::q87_nim_cards_carry_their_exact_printed_characteristics",
+      "covers": "shared 03-artifact-count-pump evidence"
+    },
+    {
+      "test": "mechanic_registry::q87_batch_a::q87_artifact_count_pump_maps_definitions",
+      "covers": "actual nim_grotesque registry identity and counted-artifact static"
+    },
+    {
+      "test": "mechanic_registry::q87_batch_a::q87_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for nim_grotesque"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "774e474a-f2a1-4b62-8cfe-40ad509f9062",
+  "spans": [
+    {
+      "face_id": "markov_blademaster",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "markov_blademaster",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::DoubleStrike",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverSelfDealsCombatDamageToPlayer",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "CounterKind::PlusOnePlusOne",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Source",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q87_batch_a::q87_combat_counter_cards_add_one_counter_and_publish_their_rider",
+      "covers": "shared 02-combat-damage-counter evidence"
+    },
+    {
+      "test": "scenario q87_batch_a::q87_combat_counter_cards_use_the_combat_damage_trigger",
+      "covers": "shared 02-combat-damage-counter evidence"
+    },
+    {
+      "test": "scenario q87_batch_a::q87_combat_counter_canary_hardest_double_strike_triggers_twice",
+      "covers": "actual markov_blademaster canary"
+    },
+    {
+      "test": "mechanic_registry::q87_batch_a::q87_combat_counter_maps_definitions",
+      "covers": "actual markov_blademaster registry identity, rider and combat-damage trigger"
+    },
+    {
+      "test": "mechanic_registry::q87_batch_a::q87_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for markov_blademaster"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

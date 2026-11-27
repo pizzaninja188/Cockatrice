@@ -1,0 +1,25 @@
+// Oracle dc206e6a-e447-48d4-a91a-7c746320e2b4; source/rulings checked 2026-11-26 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.1/602.2 (activation and printed cost), 107.5/118.3 ({T} cost), 701.23a-b (a library
+// search with a stated quality may fail to find) and 701.24 (shuffle), 702.9a-b (flying).
+// Pinned 2004-10-04: the search may fail to find; this card is both a Rebel and a Bird.
+// Copy of the reviewed Ramosian Sergeant search with the printed {4} cost and cap 3.
+(
+  id: "defiant_falcon",
+  name: "Defiant Falcon",
+  face_id: "defiant_falcon",
+  mana_cost: "{1}{W}",
+  types: ["Creature", "Rebel", "Bird"],
+  power: 1,
+  toughness: 1,
+  keywords: [Flying],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    costs: [Mana("{4}"), Tap],
+    effect: [SearchLibrary(
+      filter: Some((card_type: Some(NonlandPermanent), required_subtypes: ["Rebel"], max_mana_value: Some(3))),
+      destination: Battlefield(tapped: false),
+    )],
+  )],
+)

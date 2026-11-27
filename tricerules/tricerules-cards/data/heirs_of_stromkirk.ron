@@ -1,0 +1,21 @@
+// Oracle 7149de06-d676-47bc-a50f-e1058d89c890; source/rulings checked 2026-11-26 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.13a-c (intimidate's artifact/color blocking restriction), 510.1-510.2 (combat damage),
+// 603.2 (trigger) and 122.1 (the +1/+1 counter). The card has no pinned ruling.
+// Copy of Accursed Spirit's Intimidate plus Slith Firewalker's combat-damage counter.
+(
+  id: "heirs_of_stromkirk",
+  name: "Heirs of Stromkirk",
+  face_id: "heirs_of_stromkirk",
+  mana_cost: "{2}{R}{R}",
+  types: ["Creature", "Vampire"],
+  power: 2,
+  toughness: 2,
+  keywords: [Intimidate],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WheneverSelfDealsCombatDamageToPlayer,
+    effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
+  )],
+)

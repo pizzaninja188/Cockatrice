@@ -1,0 +1,24 @@
+// Oracle 1dff7c82-e49f-45e8-8f66-d5801f420fa6; source/rulings checked 2026-11-26 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 613.4c (layer-7c continuous self pump), 611.3a, 109.5 ("you" is the controller) and
+// 702.9a-b (flying, which the counted bonus does not touch). The card has no pinned ruling.
+// Copy of Guidelight Synergist's counted-artifact static with a +1/+0 bonus.
+(
+  id: "nim_shrieker",
+  name: "Nim Shrieker",
+  face_id: "nim_shrieker",
+  mana_cost: "{3}{B}",
+  types: ["Creature", "Zombie"],
+  power: 0,
+  toughness: 1,
+  keywords: [Flying],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([2]),
+    definition: CountScaledSelfPt(
+      count: BattlefieldPermanents(filter: (controllers: Controller, matching: (kind: AnyPermanent, permanent_types: [Artifact]))),
+      power_per_match: 1,
+      toughness_per_match: 0,
+    ),
+  )],
+)
