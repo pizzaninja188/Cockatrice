@@ -1,0 +1,27 @@
+// Oracle 34bdf2f1-0cc9-4588-9a3e-5cfe5cde815d; source/rulings checked 2026-11-27 against the pinned Scryfall bulk
+// SHA-256 1cee09ee1ac70977c46171f4abf5cdfe170ab43bc32232af9138404e27524ce6 (and unchanged under
+// the older pin a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853).
+// CR 602.1a/602.2 (activation and printed cost), 602.5b (once each turn), 611.2c/613.4c
+// (pump), 514.2 (cleanup) and 702.4a-b (double strike). The printed limit is activation_limit.
+// Copy of the reviewed Darkthicket Wolf / Frilled Oculus / Rootwalla once-each-turn pump; the
+// two-color {B}{G} activation is the family's cost-shape difference.
+
+(
+  id: "viashino_slaughtermaster",
+  name: "Viashino Slaughtermaster",
+  face_id: "viashino_slaughtermaster",
+  mana_cost: "{1}{R}",
+  types: ["Creature", "Lizard", "Warrior"],
+  power: 1,
+  toughness: 1,
+  keywords: [DoubleStrike],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Mana("{B}{G}")],
+      effect: [PumpTarget(power: 1, toughness: 1, subject: Source)],
+      activation_limit: Some(PerTurn(max_activations: 1)),
+    ),
+  ],
+)

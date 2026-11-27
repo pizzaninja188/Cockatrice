@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "2375a9c6-28ef-4c8f-909c-0aa7e5fc085c",
+  "spans": [
+    {
+      "face_id": "twinblade_slasher",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords/0"
+      ]
+    },
+    {
+      "face_id": "twinblade_slasher",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword",
+      "typed_path": "/faces/0/keywords/0"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "ActivationLimit::PerTurn",
+      "typed_path": "/faces/0/activated_abilities/0/activation_limit"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q89_batch_a::q89_once_pump_cards_pump_once_each_turn_and_require_their_controller",
+      "covers": "actual twinblade_slasher is exercised by the shared q89 once-pump scenario"
+    },
+    {
+      "test": "scenario q89_batch_a::q89_once_pump_cards_reset_the_limit_on_a_new_turn",
+      "covers": "actual twinblade_slasher is exercised by the shared q89 once-pump scenario"
+    },
+    {
+      "test": "scenario q89_batch_a::q89_once_pump_cards_keep_the_limit_after_a_control_change",
+      "covers": "actual twinblade_slasher is exercised by the shared q89 once-pump scenario"
+    },
+    {
+      "test": "mechanic_registry::q89_batch_a::q89_global_once_pump_cards_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of twinblade_slasher"
+    },
+    {
+      "test": "mechanic_registry::q89_batch_a::q89_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for twinblade_slasher"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

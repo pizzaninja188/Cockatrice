@@ -1,0 +1,72 @@
+{
+  "format_version": 1,
+  "oracle_id": "c13c5f07-dac5-47d0-a088-e24b9fbec3c5",
+  "spans": [
+    {
+      "face_id": "turbulent_shore",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "turbulent_shore",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::EntersTapped",
+      "typed_path": "/faces/0/static_abilities/0"
+    },
+    {
+      "symbol": "GameCondition::BattlefieldAggregate",
+      "typed_path": "/faces/0/static_abilities/0"
+    },
+    {
+      "symbol": "RelativePlayerSet::Opponents",
+      "typed_path": "/faces/0/static_abilities/0"
+    },
+    {
+      "symbol": "PermanentTypeFilter::Land",
+      "typed_path": "/faces/0/static_abilities/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q89_batch_a::q89_turbulent_land_canary_simplest_checks_the_live_opponent_land_count",
+      "covers": "canary actual turbulent_shore entry replacement and printed mana pair"
+    },
+    {
+      "test": "scenario q89_batch_a::q89_turbulent_lands_apply_their_printed_colors_and_entry_replacement",
+      "covers": "actual turbulent_shore is exercised by the shared q89 land scenario"
+    },
+    {
+      "test": "scenario q89_batch_a::q89_turbulent_lands_count_only_the_opponents_lands",
+      "covers": "actual turbulent_shore is exercised by the shared q89 land scenario"
+    },
+    {
+      "test": "mechanic_registry::q89_batch_a::q89_turbulent_dual_lands_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of turbulent_shore"
+    },
+    {
+      "test": "mechanic_registry::q89_batch_a::q89_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for turbulent_shore"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

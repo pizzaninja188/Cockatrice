@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "765a12fc-9b66-4bb7-88f6-6e7bd2d2f8c7",
+  "spans": [
+    {
+      "face_id": "gobbling_ooze",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::SacrificePermanent",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q89_batch_a::q89_sac_counter_canary_simplest_sacrifices_another_creature_for_one_counter",
+      "covers": "canary actual gobbling_ooze sacrifice cost and resolved counter"
+    },
+    {
+      "test": "scenario q89_batch_a::q89_sac_counter_cards_require_mana_another_creature_and_their_controller",
+      "covers": "actual gobbling_ooze is exercised by the shared q89 sacrifice scenario"
+    },
+    {
+      "test": "scenario q89_batch_a::q89_sac_counter_cards_stack_one_counter_per_sacrifice",
+      "covers": "actual gobbling_ooze is exercised by the shared q89 sacrifice scenario"
+    },
+    {
+      "test": "mechanic_registry::q89_batch_a::q89_sac_creature_counter_cards_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of gobbling_ooze"
+    },
+    {
+      "test": "mechanic_registry::q89_batch_a::q89_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for gobbling_ooze"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

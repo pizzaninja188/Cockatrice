@@ -1,0 +1,26 @@
+// Oracle 2375a9c6-28ef-4c8f-909c-0aa7e5fc085c; source/rulings checked 2026-11-27 against the pinned Scryfall bulk
+// SHA-256 1cee09ee1ac70977c46171f4abf5cdfe170ab43bc32232af9138404e27524ce6 (and unchanged under
+// the older pin a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853).
+// CR 602.1a/602.2 (activation and printed cost), 602.5b (once each turn), 611.2c/613.4c
+// (pump), 514.2 (cleanup) and 702.80a (wither). The printed limit is activation_limit.
+// Copy of the reviewed Darkthicket Wolf / Frilled Oculus / Rootwalla once-each-turn pump.
+
+(
+  id: "twinblade_slasher",
+  name: "Twinblade Slasher",
+  face_id: "twinblade_slasher",
+  mana_cost: "{G}",
+  types: ["Creature", "Elf", "Warrior"],
+  power: 1,
+  toughness: 1,
+  keywords: [Wither],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Mana("{1}{G}")],
+      effect: [PumpTarget(power: 2, toughness: 2, subject: Source)],
+      activation_limit: Some(PerTurn(max_activations: 1)),
+    ),
+  ],
+)

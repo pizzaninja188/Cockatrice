@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "e9ccec56-ec2b-4ab8-b929-6e4795711db9",
+  "spans": [
+    {
+      "face_id": "ravenous_harpy",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords/0"
+      ]
+    },
+    {
+      "face_id": "ravenous_harpy",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword",
+      "typed_path": "/faces/0/keywords/0"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::SacrificePermanent",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q89_batch_a::q89_sac_counter_canary_hardest_keeps_its_keyword_and_cannot_sacrifice_itself",
+      "covers": "canary actual ravenous_harpy sacrifice cost and resolved counter"
+    },
+    {
+      "test": "scenario q89_batch_a::q89_sac_counter_cards_require_mana_another_creature_and_their_controller",
+      "covers": "actual ravenous_harpy is exercised by the shared q89 sacrifice scenario"
+    },
+    {
+      "test": "scenario q89_batch_a::q89_sac_counter_cards_stack_one_counter_per_sacrifice",
+      "covers": "actual ravenous_harpy is exercised by the shared q89 sacrifice scenario"
+    },
+    {
+      "test": "mechanic_registry::q89_batch_a::q89_sac_creature_counter_cards_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of ravenous_harpy"
+    },
+    {
+      "test": "mechanic_registry::q89_batch_a::q89_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for ravenous_harpy"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
