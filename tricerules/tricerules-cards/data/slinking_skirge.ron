@@ -1,0 +1,23 @@
+// Oracle 82875793-b264-4ceb-8525-ef3b6d086072; source/rulings checked 2026-11-26 against the pinned
+// Scryfall bulk SHA-256 1cee09ee1ac70977c46171f4abf5cdfe170ab43bc32232af9138404e27524ce6.
+// CR 602.1/602.2 (activation), 118.3a (costs are paid on activation) and 701.21a
+// (sacrificing a permanent as a cost), 121.1 (draw) and 702.9a-b (flying).
+// Same typed cost/effect pair as the shipped Illvoi Galeblade, plus the printed flying.
+(
+  id: "slinking_skirge",
+  name: "Slinking Skirge",
+  face_id: "slinking_skirge",
+  mana_cost: "{3}{B}",
+  types: ["Creature", "Phyrexian", "Imp"],
+  power: 2,
+  toughness: 1,
+  keywords: [Flying],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Mana("{2}"), SacrificeSelf],
+      effect: [Draw(count: 1)],
+    ),
+  ],
+)

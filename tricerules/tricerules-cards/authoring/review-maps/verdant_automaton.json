@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "d3af1c69-42ae-4d29-a9f1-72f862d26303",
+  "spans": [
+    {
+      "face_id": "verdant_automaton",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "CounterKind::PlusOnePlusOne",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/PutCounters/counter"
+    },
+    {
+      "symbol": "EffectSubject::Source",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/PutCounters/subject"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q88_batch_a::q88_counter_cards_add_one_counter_each_activation_and_survive_a_failed_one",
+      "covers": "actual verdant_automaton clause coverage"
+    },
+    {
+      "test": "scenario q88_batch_a::q88_counter_cards_require_their_controller",
+      "covers": "actual verdant_automaton clause coverage"
+    },
+    {
+      "test": "mechanic_registry::q88_batch_a::q88_counter_cards_map_definitions",
+      "covers": "reviewed identity, body and typed definition of verdant_automaton"
+    },
+    {
+      "test": "mechanic_registry::q88_batch_a::q88_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for verdant_automaton"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

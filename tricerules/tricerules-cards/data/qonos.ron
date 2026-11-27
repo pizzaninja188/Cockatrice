@@ -1,0 +1,39 @@
+// Oracle cab718af-8e6f-4766-856e-3a61ba98f94d; source/rulings checked 2026-11-26 against the pinned Scryfall bulk
+// SHA-256 1cee09ee1ac70977c46171f4abf5cdfe170ab43bc32232af9138404e27524ce6.
+// CR 205.3i/305.5 (Planet is a land type) and the pinned 2026-10-07 ruling that Planet
+// grants no intrinsic ability; 614.1d/614.12 (the enters-tapped replacement), 603.6a/603.6d
+// (the entry trigger), 119.3 (life gain) and 605.1a/605.3b (the mana ability).
+// Copy of the reviewed Akoum Refuge with the printed Planet subtype and its two colors.
+(
+  id: "qonos",
+  name: "Qo'noS",
+  face_id: "qonos",
+  mana_cost: "",
+  types: ["Land", "Planet"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([3]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [
+        (b: 1),
+        (r: 1),
+      ])],
+    ),
+  ],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [GainLife(amount: 1)],
+    ),
+  ],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: EntersTapped(affected: Self_),
+    ),
+  ],
+)

@@ -1,0 +1,23 @@
+// Oracle 41c06726-0360-4488-8dc3-ec257386a372; source/rulings checked 2026-11-26 against the pinned
+// Scryfall bulk SHA-256 1cee09ee1ac70977c46171f4abf5cdfe170ab43bc32232af9138404e27524ce6.
+// CR 602.1/602.2 (activation), 107.4a/118.3a (mana payment), 122.1a (a +1/+1 counter
+// modifies power and toughness) and 702.20a-b (vigilance).
+// Copy of the reviewed Toadstool Admirer counter activation plus the printed vigilance.
+(
+  id: "unholy_officiant",
+  name: "Unholy Officiant",
+  face_id: "unholy_officiant",
+  mana_cost: "{W}",
+  types: ["Creature", "Vampire", "Cleric"],
+  power: 1,
+  toughness: 2,
+  keywords: [Vigilance],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Mana("{4}{W}")],
+      effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
+    ),
+  ],
+)

@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "2f299e69-d82b-48c9-b7f5-cf07cd9dced2",
+  "spans": [
+    {
+      "face_id": "jungle_delver",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "CounterKind::PlusOnePlusOne",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/PutCounters/counter"
+    },
+    {
+      "symbol": "EffectSubject::Source",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/PutCounters/subject"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q88_batch_a::q88_counter_cards_add_one_counter_each_activation_and_survive_a_failed_one",
+      "covers": "actual jungle_delver clause coverage"
+    },
+    {
+      "test": "scenario q88_batch_a::q88_counter_cards_require_their_controller",
+      "covers": "actual jungle_delver clause coverage"
+    },
+    {
+      "test": "scenario q88_batch_a::q88_counter_canary_simplest_adds_one_counter",
+      "covers": "actual jungle_delver canary"
+    },
+    {
+      "test": "mechanic_registry::q88_batch_a::q88_counter_cards_map_definitions",
+      "covers": "reviewed identity, body and typed definition of jungle_delver"
+    },
+    {
+      "test": "mechanic_registry::q88_batch_a::q88_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for jungle_delver"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

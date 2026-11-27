@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "82875793-b264-4ceb-8525-ef3b6d086072",
+  "spans": [
+    {
+      "face_id": "slinking_skirge",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "slinking_skirge",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::SacrificeSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q88_batch_a::q88_sac_draw_cards_require_the_printed_mana_and_their_controller",
+      "covers": "actual slinking_skirge clause coverage"
+    },
+    {
+      "test": "scenario q88_batch_a::q88_sac_draw_cards_draw_one_and_leave_the_graveyard_alone",
+      "covers": "actual slinking_skirge clause coverage"
+    },
+    {
+      "test": "scenario q88_batch_a::q88_sac_draw_canary_hardest_keeps_its_keyword_and_sacrifices_itself",
+      "covers": "actual slinking_skirge canary"
+    },
+    {
+      "test": "mechanic_registry::q88_batch_a::q88_sac_draw_cards_map_definitions",
+      "covers": "reviewed identity, body and typed definition of slinking_skirge"
+    },
+    {
+      "test": "mechanic_registry::q88_batch_a::q88_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for slinking_skirge"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

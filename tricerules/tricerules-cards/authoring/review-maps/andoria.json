@@ -1,0 +1,80 @@
+{
+  "format_version": 1,
+  "oracle_id": "79134f5e-94db-4a40-ba75-2569b839cf35",
+  "spans": [
+    {
+      "face_id": "andoria",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "andoria",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "andoria",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::EntersTapped",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "EntersTappedAffected::Self_",
+      "typed_path": "/faces/0/static_abilities/0/definition/EntersTapped/affected"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q88_batch_a::q88_planet_refuges_apply_their_printed_colors_and_entry_replacement",
+      "covers": "actual andoria clause coverage"
+    },
+    {
+      "test": "scenario q88_batch_a::q88_planet_refuges_do_not_gain_life_when_they_do_not_enter",
+      "covers": "actual andoria clause coverage"
+    },
+    {
+      "test": "scenario q88_batch_a::q88_planet_refuge_canary_simplest_enters_tapped_gains_life_and_taps",
+      "covers": "actual andoria canary"
+    },
+    {
+      "test": "mechanic_registry::q88_batch_a::q88_planet_refuges_map_definitions",
+      "covers": "reviewed identity, Planet type line and typed definition of andoria"
+    },
+    {
+      "test": "mechanic_registry::q88_batch_a::q88_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for andoria"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

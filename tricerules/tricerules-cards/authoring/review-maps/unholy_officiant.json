@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "41c06726-0360-4488-8dc3-ec257386a372",
+  "spans": [
+    {
+      "face_id": "unholy_officiant",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "unholy_officiant",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Vigilance",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "CounterKind::PlusOnePlusOne",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/PutCounters/counter"
+    },
+    {
+      "symbol": "EffectSubject::Source",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/PutCounters/subject"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q88_batch_a::q88_counter_cards_add_one_counter_each_activation_and_survive_a_failed_one",
+      "covers": "actual unholy_officiant clause coverage"
+    },
+    {
+      "test": "scenario q88_batch_a::q88_counter_cards_require_their_controller",
+      "covers": "actual unholy_officiant clause coverage"
+    },
+    {
+      "test": "scenario q88_batch_a::q88_counter_canary_hardest_charges_its_exact_cost_and_keeps_its_keyword",
+      "covers": "actual unholy_officiant canary"
+    },
+    {
+      "test": "mechanic_registry::q88_batch_a::q88_counter_cards_map_definitions",
+      "covers": "reviewed identity, body and typed definition of unholy_officiant"
+    },
+    {
+      "test": "mechanic_registry::q88_batch_a::q88_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for unholy_officiant"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

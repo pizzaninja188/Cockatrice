@@ -1,0 +1,80 @@
+{
+  "format_version": 1,
+  "oracle_id": "c7b6bc1f-9161-415e-a097-d9c8cd81d4ae",
+  "spans": [
+    {
+      "face_id": "vulcan",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "vulcan",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "vulcan",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::EntersTapped",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "EntersTappedAffected::Self_",
+      "typed_path": "/faces/0/static_abilities/0/definition/EntersTapped/affected"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q88_batch_a::q88_planet_refuges_apply_their_printed_colors_and_entry_replacement",
+      "covers": "actual vulcan clause coverage"
+    },
+    {
+      "test": "scenario q88_batch_a::q88_planet_refuges_do_not_gain_life_when_they_do_not_enter",
+      "covers": "actual vulcan clause coverage"
+    },
+    {
+      "test": "scenario q88_batch_a::q88_planet_refuge_canary_wu_pair_offers_both_printed_colors_and_rejects_a_second_activation",
+      "covers": "actual vulcan canary"
+    },
+    {
+      "test": "mechanic_registry::q88_batch_a::q88_planet_refuges_map_definitions",
+      "covers": "reviewed identity, Planet type line and typed definition of vulcan"
+    },
+    {
+      "test": "mechanic_registry::q88_batch_a::q88_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for vulcan"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

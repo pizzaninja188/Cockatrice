@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "9e660f66-0a94-4694-95e0-25296799b193",
+  "spans": [
+    {
+      "face_id": "parcel_myr",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::SacrificeSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q88_batch_a::q88_sac_draw_cards_require_the_printed_mana_and_their_controller",
+      "covers": "actual parcel_myr clause coverage"
+    },
+    {
+      "test": "scenario q88_batch_a::q88_sac_draw_cards_draw_one_and_leave_the_graveyard_alone",
+      "covers": "actual parcel_myr clause coverage"
+    },
+    {
+      "test": "mechanic_registry::q88_batch_a::q88_sac_draw_cards_map_definitions",
+      "covers": "reviewed identity, body and typed definition of parcel_myr"
+    },
+    {
+      "test": "mechanic_registry::q88_batch_a::q88_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for parcel_myr"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
