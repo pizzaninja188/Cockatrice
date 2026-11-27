@@ -1,0 +1,88 @@
+{
+  "format_version": 1,
+  "oracle_id": "6487fc1b-5c83-4d09-94d3-175725bcb922",
+  "spans": [
+    {
+      "face_id": "brigid_s_command",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/modal_spell"
+      ]
+    },
+    {
+      "face_id": "brigid_s_command",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/modal_spell/modes/0"
+      ]
+    },
+    {
+      "face_id": "brigid_s_command",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/modal_spell/modes/1"
+      ]
+    },
+    {
+      "face_id": "brigid_s_command",
+      "start_line": 4,
+      "end_line": 4,
+      "typed_paths": [
+        "/faces/0/modal_spell/modes/2"
+      ]
+    },
+    {
+      "face_id": "brigid_s_command",
+      "start_line": 5,
+      "end_line": 5,
+      "typed_paths": [
+        "/faces/0/modal_spell/modes/3"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CreateTokenCopies",
+      "typed_path": "/faces/0/modal_spell/modes/0/effects/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/modal_spell/modes/1/effects/0"
+    },
+    {
+      "symbol": "PlayerRecipient::TargetedPlayer",
+      "typed_path": "/faces/0/modal_spell/modes/1/effects/0/CreateTokens/who"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/modal_spell/modes/2/effects/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Fight",
+      "typed_path": "/faces/0/modal_spell/modes/3/effects/0"
+    }
+  ],
+  "tokens": ["kithkin_gw_1_1"],
+  "semantic_fixtures": [
+    {
+      "test": "mechanic_registry::issue_445_target_player_tokens::issue_445_commands_have_exact_identity_and_four_printed_modes",
+      "covers": "registered identity, Kindred Sorcery type line, choose-two bounds and four printed mode presentations"
+    },
+    {
+      "test": "mechanic_registry::issue_445_target_player_tokens::issue_445_token_modes_bind_the_recipient_to_one_player_target",
+      "covers": "the Kithkin mode is one untapped kithkin_gw_1_1 for exactly one targeted player"
+    },
+    {
+      "test": "scenario issue_445_target_player_tokens::issue_445_brigid_multiplayer_gives_only_the_target_a_green_white_kithkin",
+      "covers": "in a three-player game only the targeted player creates the 1/1 Kithkin and the pump mode gives +3/+3"
+    },
+    {
+      "test": "scenario issue_445_target_player_tokens::issue_445_token_mode_rejects_an_object_or_absent_player_target",
+      "covers": "the token mode rejects a permanent or absent-player target before casting"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

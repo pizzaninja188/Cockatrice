@@ -177,6 +177,8 @@ mod issue_430_direct_ron;
 mod issue_434_tapped_supertype_scopes;
 #[path = "../issue_444_commands.rs"]
 mod issue_444_commands;
+#[path = "../issue_445_target_player_tokens.rs"]
+mod issue_445_target_player_tokens;
 #[path = "../issue_448_semantic_mapping.rs"]
 mod issue_448_semantic_mapping;
 #[path = "../issue_452_direct_ron.rs"]

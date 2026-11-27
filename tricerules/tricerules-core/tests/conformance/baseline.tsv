@@ -167,6 +167,7 @@ asgardian_citadel	0	ability:0	exercised
 asgardian_citadel	0	land	exercised
 ashcoat_bear	0	cast	exercised
 ashioks_reaper	0	cast	exercised
+ashlings_command	0	cast	exercised
 assassinate	0	cast	exercised
 assault_griffin	0	cast	exercised
 assault_zeppelid	0	cast	exercised
@@ -438,6 +439,7 @@ brightclimb_pathway_grimclimb_pathway	1	ability:0	exercised
 brightclimb_pathway_grimclimb_pathway	1	land	exercised
 brightwood_tracker	0	ability:0	exercised
 brightwood_tracker	0	cast	exercised
+brigids_command	0	cast	exercised
 brilliant_plan	0	cast	exercised
 bring_to_trial	0	cast	exercised
 bristlepack_sentry	0	cast	exercised

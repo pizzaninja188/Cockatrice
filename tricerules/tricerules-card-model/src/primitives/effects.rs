@@ -3499,6 +3499,12 @@ impl SpellEffectKind {
                 chooser: PlayerRecipient::TargetedPlayer { group_index, kind },
                 ..
             }
+            // "Target player creates ..." (CR 111.2, 115.1): the token recipient is the mode's
+            // own player target, so the effect owns that target role.
+            | Self::CreateTokens {
+                who: PlayerRecipient::TargetedPlayer { group_index, kind },
+                ..
+            }
             | Self::ShuffleNonlandPermanentsIntoOwnersLibraries {
                 players: RelativePlayerSet::TargetedPlayer { group_index, kind },
             }

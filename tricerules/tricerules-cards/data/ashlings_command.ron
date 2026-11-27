@@ -1,0 +1,52 @@
+// Source: Scryfall oracle_cards 27bf3214-1271-490b-bdfe-c0be6c23d02e (Ashling's Command, #445).
+// CR 700.2: the two chosen modes resolve in printed order; each "target player" mode owns its
+// own player target group (CR 115.1), so the token recipient is the chosen player (CR 111.2).
+(
+  id: "ashlings_command",
+  name: "Ashling's Command",
+  face_id: "ashling_s_command",
+  mana_cost: "{3}{U}{R}",
+  types: ["Kindred", "Instant", "Elemental"],
+  modal_spell: (
+    min_modes: 2,
+    max_modes: 2,
+    modes: [
+      (
+        mode_id: "mode_01",
+        presentation: OracleLines([2]),
+        effects: [
+          CreateTokenCopies(
+            count: 1,
+            source: Chosen((kind: Creature, controller: You, required_subtypes: ["Elemental"])),
+          ),
+        ],
+        targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target Elemental you control", effect_indices: [0])])),
+      ),
+      (
+        mode_id: "mode_02",
+        presentation: OracleLines([3]),
+        effects: [TargetPlayerDraws(count: 2, target: (kind: AnyPlayer))],
+        targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
+      ),
+      (
+        mode_id: "mode_03",
+        presentation: OracleLines([4]),
+        effects: [DamageAll(amount: 2, players: TargetedPlayer(group_index: 0, kind: AnyPlayer))],
+        targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
+      ),
+      (
+        mode_id: "mode_04",
+        presentation: OracleLines([5]),
+        effects: [
+          CreateTokens(
+            token: "treasure",
+            count: 2,
+            who: TargetedPlayer(group_index: 0, kind: AnyPlayer),
+            
+          ),
+        ],
+        targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
+      ),
+    ],
+  ),
+)

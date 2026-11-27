@@ -1,0 +1,92 @@
+{
+  "format_version": 1,
+  "oracle_id": "9651d197-a408-4665-a292-58d5471f4ffc",
+  "spans": [
+    {
+      "face_id": "ashling_s_command",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/modal_spell"
+      ]
+    },
+    {
+      "face_id": "ashling_s_command",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/modal_spell/modes/0"
+      ]
+    },
+    {
+      "face_id": "ashling_s_command",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/modal_spell/modes/1"
+      ]
+    },
+    {
+      "face_id": "ashling_s_command",
+      "start_line": 4,
+      "end_line": 4,
+      "typed_paths": [
+        "/faces/0/modal_spell/modes/2"
+      ]
+    },
+    {
+      "face_id": "ashling_s_command",
+      "start_line": 5,
+      "end_line": 5,
+      "typed_paths": [
+        "/faces/0/modal_spell/modes/3"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CreateTokenCopies",
+      "typed_path": "/faces/0/modal_spell/modes/0/effects/0"
+    },
+    {
+      "symbol": "SpellEffectKind::TargetPlayerDraws",
+      "typed_path": "/faces/0/modal_spell/modes/1/effects/0"
+    },
+    {
+      "symbol": "SpellEffectKind::DamageAll",
+      "typed_path": "/faces/0/modal_spell/modes/2/effects/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/modal_spell/modes/3/effects/0"
+    },
+    {
+      "symbol": "PlayerRecipient::TargetedPlayer",
+      "typed_path": "/faces/0/modal_spell/modes/3/effects/0/CreateTokens/who"
+    }
+  ],
+  "tokens": ["treasure"],
+  "semantic_fixtures": [
+    {
+      "test": "mechanic_registry::issue_445_target_player_tokens::issue_445_commands_have_exact_identity_and_four_printed_modes",
+      "covers": "registered identity, Kindred Instant type line, choose-two bounds and four printed mode presentations"
+    },
+    {
+      "test": "mechanic_registry::issue_445_target_player_tokens::issue_445_token_modes_bind_the_recipient_to_one_player_target",
+      "covers": "the Treasure mode is two untapped Treasures for exactly one targeted player and the damage mode scopes to its targeted player"
+    },
+    {
+      "test": "scenario issue_445_target_player_tokens::issue_445_ashling_targeted_opponent_creates_two_treasures_and_caster_none",
+      "covers": "the targeted opponent creates two Treasures, the caster none, and the draw-two mode draws for its own target"
+    },
+    {
+      "test": "scenario issue_445_target_player_tokens::issue_445_ashling_can_target_its_caster_for_treasures",
+      "covers": "the caster can target themself for Treasures while the damage mode kills the other target player's creature"
+    },
+    {
+      "test": "scenario issue_445_target_player_tokens::issue_445_token_mode_creates_nothing_when_its_target_player_has_left",
+      "covers": "a token mode whose target player left creates nothing while the other chosen mode still resolves"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

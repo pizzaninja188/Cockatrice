@@ -80,12 +80,10 @@ fn issue_428_registers_return_from_the_wilds_and_keeps_unfinished_commands_out()
         "every printed mode is untargeted"
     );
 
-    for excluded in ["ashlings_command", "brigids_command", "grubs_command"] {
-        assert!(
-            registry.get(excluded).is_none(),
-            "{excluded} must stay unregistered while a printed mode lacks shipped vocabulary"
-        );
-    }
+    assert!(
+        registry.get("grubs_command").is_none(),
+        "grubs_command must stay unregistered while a printed mode lacks shipped vocabulary"
+    );
 }
 
 #[test]

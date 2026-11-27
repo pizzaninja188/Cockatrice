@@ -1,0 +1,58 @@
+// Source: Scryfall oracle_cards 27bf3214-1271-490b-bdfe-c0be6c23d02e (Brigid's Command, #445).
+// CR 700.2: the two chosen modes resolve in printed order; the token mode targets a player
+// (CR 115.1), who creates the predefined Kithkin token (CR 111.2).
+(
+  id: "brigids_command",
+  name: "Brigid's Command",
+  face_id: "brigid_s_command",
+  mana_cost: "{1}{G}{W}",
+  types: ["Kindred", "Sorcery", "Kithkin"],
+  modal_spell: (
+    min_modes: 2,
+    max_modes: 2,
+    modes: [
+      (
+        mode_id: "mode_01",
+        presentation: OracleLines([2]),
+        effects: [
+          CreateTokenCopies(
+            count: 1,
+            source: Chosen((kind: Creature, controller: You, required_subtypes: ["Kithkin"])),
+          ),
+        ],
+        targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target Kithkin you control", effect_indices: [0])])),
+      ),
+      (
+        mode_id: "mode_02",
+        presentation: OracleLines([3]),
+        effects: [
+          CreateTokens(
+            token: "kithkin_gw_1_1",
+            count: 1,
+            who: TargetedPlayer(group_index: 0, kind: AnyPlayer),
+            
+          ),
+        ],
+        targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
+      ),
+      (
+        mode_id: "mode_03",
+        presentation: OracleLines([4]),
+        effects: [PumpTarget(power: 3, toughness: 3, subject: Chosen((kind: Creature, controller: You)))],
+        targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature you control", effect_indices: [0])])),
+      ),
+      (
+        mode_id: "mode_04",
+        presentation: OracleLines([5]),
+        effects: [Fight(
+          first: Chosen((kind: Creature, controller: You)),
+          second: Chosen((kind: Creature, controller: Opponent)),
+        )],
+        targeting: Some((groups: [
+          (min: 1, max: 1, prompt: "Choose target creature you control", effect_indices: [0]),
+          (min: 1, max: 1, prompt: "Choose target creature an opponent controls", effect_indices: [0], distinct_from: [0]),
+        ])),
+      ),
+    ],
+  ),
+)

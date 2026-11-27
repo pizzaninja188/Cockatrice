@@ -1,6 +1,6 @@
 //! Pinned Oracle identities 7fe5baab-b182-4cd9-bea5-912ce9b1464a and
-//! ecc4e230-a546-4cb4-987c-87300060bbe2. The other #444 Commands remain
-//! unregistered while #445 and #446 own their final printed bullets.
+//! ecc4e230-a546-4cb4-987c-87300060bbe2. Grub's Command stays unregistered while #446 owns its
+//! final printed bullet; #445 shipped Ashling's and Brigid's Command.
 
 use tricerules_cards::primitives::{
     CreatureScopeController, MassPlayerSet, SpellEffectKind, TargetKind,
@@ -50,9 +50,7 @@ fn issue_444_complete_commands_have_exact_four_mode_presentation() {
             );
         }
     }
-    for excluded in ["ashlings_command", "grubs_command"] {
-        assert!(registry.get(excluded).is_none());
-    }
+    assert!(registry.get("grubs_command").is_none());
 }
 
 #[test]

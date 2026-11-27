@@ -275,6 +275,23 @@ pub(super) fn create_tokens(
     else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
+    // "Target player creates ..." owns its player target role (role 0). CR 608.2b: when that
+    // target is no longer legal (or has left the game), the instruction creates nothing.
+    if let PlayerRecipient::TargetedPlayer { group_index, .. } = who {
+        let current = cx.targets.first().copied().is_some_and(|target| {
+            cx.target_is_current_in_role(target, 0)
+                && target_player_from_group(cx.target_receipts, group_index)
+                    == Some(target as PlayerId)
+                && cx
+                    .engine
+                    .state
+                    .player_idx(target as PlayerId)
+                    .is_some_and(|idx| !cx.engine.state.players[idx].has_lost)
+        });
+        if !current {
+            return Ok(EffectOutcome::Continue);
+        }
+    }
     let item = cx.top.clone();
     let parked_stack = cx.parked_stack();
     let recipients = player_recipients(cx, who);

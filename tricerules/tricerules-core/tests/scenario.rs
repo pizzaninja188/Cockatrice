@@ -1123,6 +1123,8 @@ mod issue_433_multicolored_count;
 mod issue_434_tapped_scopes;
 #[path = "scenario/issue_444_commands.rs"]
 mod issue_444_commands;
+#[path = "scenario/issue_445_target_player_tokens.rs"]
+mod issue_445_target_player_tokens;
 #[path = "scenario/issue_452_direct_ron.rs"]
 mod issue_452_direct_ron;
 #[path = "scenario/issue_452_fixed_damage_family.rs"]

@@ -3055,6 +3055,53 @@ mod tests {
     }
 
     #[test]
+    fn issue_445_targeted_token_recipient_owns_one_player_target() {
+        let effects: Vec<SpellEffectKind> = ron::from_str(
+            r#"[CreateTokens(token: "treasure", count: 2, who: TargetedPlayer(group_index: 0, kind: AnyPlayer))]"#,
+        )
+        .expect("targeted token recipient parses");
+        assert!(effects[0].needs_target(), "the recipient is a target role");
+        assert!(
+            TargetSchema::compile(&effects, None).is_err(),
+            "an untargeted authoring cannot bind the recipient"
+        );
+        let group = |min, max, group_count: usize| TargetingDef {
+            groups: (0..group_count)
+                .map(|_| TargetGroupDef {
+                    controlled_by_chooser: false,
+                    for_each_opponent: false,
+                    chooser: Default::default(),
+                    min,
+                    max,
+                    prompt: "Choose target player".into(),
+                    effect_indices: vec![0],
+                    distinct_from: Vec::new(),
+                    relation: None,
+                    cast_cost_expansion: None,
+                })
+                .collect(),
+        };
+        assert!(TargetSchema::compile(&effects, Some(&group(1, 1, 1))).is_ok());
+        assert!(TargetSchema::compile(&effects, Some(&group(0, 1, 1))).is_err());
+        assert!(TargetSchema::compile(&effects, Some(&group(1, 2, 1))).is_err());
+        assert!(TargetSchema::compile(&effects, Some(&group(1, 1, 2))).is_err());
+
+        let mismatched: Vec<SpellEffectKind> = ron::from_str(
+            r#"[CreateTokens(token: "treasure", count: 2, who: TargetedPlayer(group_index: 1, kind: AnyPlayer))]"#,
+        )
+        .expect("mismatched group parses for validation");
+        assert!(TargetSchema::compile(&mismatched, Some(&group(1, 1, 1))).is_err());
+
+        let wrong: Vec<SpellEffectKind> = ron::from_str(
+            r#"[CreateTokens(token: "treasure", count: 2, who: TargetedPlayer(group_index: 0, kind: Creature))]"#,
+        )
+        .expect("wrong kind parses for validation");
+        assert!(wrong[0]
+            .validate(super::super::EffectContext::Spell)
+            .is_err());
+    }
+
+    #[test]
     fn issue_114_disjunctive_filter_shapes_deserialize_and_validate() {
         let make_your_move = target_filter(
             "(any_of: Some([(kind: AnyPermanent, permanent_types: [Artifact]), (kind: AnyPermanent, permanent_types: [Enchantment]), (kind: Creature, power: Some(AtLeast(4)))]))",
