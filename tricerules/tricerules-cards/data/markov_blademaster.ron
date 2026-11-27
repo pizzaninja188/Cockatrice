@@ -1,5 +1,5 @@
 // Oracle 774e474a-f2a1-4b62-8cfe-40ad509f9062; source/rulings checked 2026-11-26 against the
-// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// pinned Scryfall bulk SHA-256 1cee09ee1ac70977c46171f4abf5cdfe170ab43bc32232af9138404e27524ce6.
 // CR 702.4a-d (double strike assigns damage in both combat damage steps), 510.1-510.2, 603.2
 // (trigger) and 122.1 (the +1/+1 counter). Pinned 2011-01-22: the first-strike counter is not
 // on the creature in time for that step but does raise the regular-step damage; a simultaneous
