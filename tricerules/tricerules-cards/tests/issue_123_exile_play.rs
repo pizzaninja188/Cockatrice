@@ -93,6 +93,7 @@ fn impossible_inferno_uses_the_exact_targeted_delirium_program() {
             player: PlayerRecipient::Controller,
             count: 1,
             count_by_cast_cost: None,
+            duration: tricerules_cards::primitives::ExilePlayPermissionDuration::UntilEndOfRecipientNextTurn,
         }
     );
     assert!(exile_top.input.is_none() && exile_top.outputs.is_empty());

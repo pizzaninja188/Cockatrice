@@ -1,0 +1,74 @@
+{
+  "format_version": 1,
+  "oracle_id": "45e5135b-274c-46b4-8249-7e05e37aaff7",
+  "spans": [
+    {
+      "face_id": "heroes_for_hire",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "heroes_for_hire",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::SacrificePermanent",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ExileTopWithPlayPermission",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "ExilePlayPermissionDuration::ThisTurn",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/ExileTopWithPlayPermission/duration"
+    }
+  ],
+  "tokens": [
+    "treasure"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_536_heroes_for_hire::issue_536_enters_and_creates_exactly_three_treasures",
+      "covers": "Line 1's enters trigger creates exactly three Treasure tokens for the controller."
+    },
+    {
+      "test": "scenario issue_536_heroes_for_hire::issue_536_sacrifice_a_treasure_grants_a_this_turn_permission_for_the_exact_card",
+      "covers": "Line 2 sacrifices one Treasure, exiles the exact top card and grants its controller a generation-bound play permission ending at this turn's cleanup, with a published cast action."
+    },
+    {
+      "test": "scenario issue_536_heroes_for_hire::issue_536_exiled_land_can_be_played_this_turn",
+      "covers": "\"Play\" includes playing an exiled land the same turn."
+    },
+    {
+      "test": "scenario issue_536_heroes_for_hire::issue_536_permission_ends_at_cleanup_and_the_card_stays_exiled",
+      "covers": "The permission is gone on the opponent's turn and the controller's next turn; the card stays in exile."
+    },
+    {
+      "test": "scenario issue_536_heroes_for_hire::issue_536_only_a_treasure_pays_the_cost",
+      "covers": "A non-Treasure artifact can't pay the sacrifice cost and nothing is exiled."
+    },
+    {
+      "test": "mechanic_registry::issue_536_heroes_for_hire::heroes_for_hire_has_its_printed_identity_and_abilities",
+      "covers": "Exact identity, mana, types, the three-Treasure trigger, the Treasure sacrifice cost and the this-turn duration."
+    },
+    {
+      "test": "mechanic_registry::issue_536_heroes_for_hire::heroes_for_hire_fingerprint_matches_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

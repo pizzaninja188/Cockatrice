@@ -1919,14 +1919,20 @@ pub enum SpellEffectKind {
         alternative_cost: ManaCost,
     },
     /// Exile the top card of the named player's library and let that player play the exact
-    /// resulting object until the end of their next turn. Clockwork Percussionist and Impossible
-    /// Inferno share this primitive; the engine owns physical identity, duration, and legality.
+    /// resulting object for the stated window. Clockwork Percussionist and Impossible Inferno
+    /// use the default "until the end of your next turn"; Heroes for Hire uses "this turn". The
+    /// engine owns physical identity, expiry, and legality.
     ExileTopWithPlayPermission {
         player: PlayerRecipient,
         #[serde(default = "default_one")]
         count: u32,
         #[serde(default)]
         count_by_cast_cost: Option<CastCostConditionalAmount>,
+        #[serde(
+            default,
+            skip_serializing_if = "ExilePlayPermissionDuration::is_default"
+        )]
+        duration: ExilePlayPermissionDuration,
     },
     /// CR 701.57: Chimil, the Inner Sun and Geological Appraiser discover a fixed value. Exile
     /// cards until a nonland card with that mana value or less is found; offer a free cast whose
@@ -8112,6 +8118,25 @@ mod program_input_count_flat_admission_tests {
 // ---------------------------------------------------------------------------
 // Continuous effects (layer system, CR 613)
 // ---------------------------------------------------------------------------
+
+/// How long an impulse play permission lasts. The engine turns this into a concrete cleanup
+/// turn instance when the permission is granted.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ExilePlayPermissionDuration {
+    /// "Until the end of your next turn": ends in the cleanup step (CR 514.2) of the recipient's
+    /// next turn (Clockwork Percussionist, Impossible Inferno, Burning Curiosity).
+    #[default]
+    UntilEndOfRecipientNextTurn,
+    /// "You may play it this turn": ends in this turn's cleanup step (CR 514.2). Heroes for Hire,
+    /// Professional Face-Breaker and Act on Impulse print this window.
+    ThisTurn,
+}
+
+impl ExilePlayPermissionDuration {
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
 
 /// How long an authored continuous effect created during resolution lasts. Controller-relative
 /// wording is compiled to a concrete player id when the spell or ability resolves.

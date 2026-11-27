@@ -5148,6 +5148,7 @@ fn compile_operation(
                 player: PlayerRecipient::Controller,
                 count: 1,
                 count_by_cast_cost: None,
+                ..
             } if context == EffectContext::Spell => {
                 effect.validate(context)?;
                 Ok(Vec::new())

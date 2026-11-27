@@ -1,0 +1,22 @@
+// Oracle 45e5135b-274c-46b4-8249-7e05e37aaff7; source checked 2026-11-26 (no rulings).
+// CR 603.6a (enters trigger), 111.10a (Treasure), 118.3 (sacrifice cost) and 514.2 (the
+// "this turn" play permission ends in this turn's cleanup step).
+(
+  id: "heroes_for_hire",
+  name: "Heroes for Hire",
+  face_id: "heroes_for_hire",
+  mana_cost: "{3}{R}{R}",
+  types: ["Enchantment"],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [CreateTokens(token: "treasure", count: 3)],
+  )],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    costs: [SacrificePermanent(filter: (kind: AnyPermanent, controller: You, required_subtypes: ["Treasure"]))],
+    effect: [ExileTopWithPlayPermission(player: Controller, duration: ThisTurn)],
+  )],
+)

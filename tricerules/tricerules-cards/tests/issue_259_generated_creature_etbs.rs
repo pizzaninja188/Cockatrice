@@ -25,6 +25,7 @@ fn issue_259_registers_all_thirteen_generated_cards_with_exact_typed_etbs() {
                 player: PlayerRecipient::Controller,
                 count: 1,
                 count_by_cast_cost: None,
+                duration: tricerules_cards::primitives::ExilePlayPermissionDuration::UntilEndOfRecipientNextTurn,
             }]
         );
     }

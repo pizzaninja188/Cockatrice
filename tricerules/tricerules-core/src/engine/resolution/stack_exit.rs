@@ -644,7 +644,7 @@ impl GameEngine {
             &source_label,
             crate::state::ExilePlayPermissionGrant::printed(
                 crate::state::ExilePlayPermissionScope::CastFace(0),
-                false,
+                crate::state::ExilePlayPermissionExpiry::WhileExiled,
             ),
         )?;
         Ok(())

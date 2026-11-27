@@ -779,17 +779,23 @@ impl GameEngine {
             .state
             .player_idx(player_id)
             .ok_or(EngineError::UnknownPlayer(player_id))?;
-        let expires_at_cleanup_turn_instance = grant.until_end_of_next_turn.then(|| {
-            let player_count = self.state.players.len() as u64;
-            let active = self.state.active_player_idx;
-            let offset = if player_index == active {
-                player_count
-            } else {
-                ((player_index + self.state.players.len() - active) % self.state.players.len())
-                    as u64
-            };
-            self.state.turn_instance.saturating_add(offset)
-        });
+        let expires_at_cleanup_turn_instance = match grant.expiry {
+            crate::state::ExilePlayPermissionExpiry::WhileExiled => None,
+            crate::state::ExilePlayPermissionExpiry::EndOfThisTurn => {
+                Some(self.state.turn_instance)
+            }
+            crate::state::ExilePlayPermissionExpiry::EndOfRecipientNextTurn => {
+                let player_count = self.state.players.len() as u64;
+                let active = self.state.active_player_idx;
+                let offset = if player_index == active {
+                    player_count
+                } else {
+                    ((player_index + self.state.players.len() - active) % self.state.players.len())
+                        as u64
+                };
+                Some(self.state.turn_instance.saturating_add(offset))
+            }
+        };
         let group_id = self.state.next_exile_play_permission_group_id;
         self.state.next_exile_play_permission_group_id = group_id.saturating_add(1);
         let permissions = object_ids
@@ -5720,7 +5726,7 @@ mod attached_subject_tests {
                 "unrelated play permission",
                 crate::state::ExilePlayPermissionGrant::printed(
                     ExilePlayPermissionScope::PlayCard,
-                    false,
+                    crate::state::ExilePlayPermissionExpiry::WhileExiled,
                 ),
             )
             .unwrap();

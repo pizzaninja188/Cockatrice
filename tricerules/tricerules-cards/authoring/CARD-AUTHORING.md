@@ -323,7 +323,8 @@ map](review-maps/trade_route_envoy.json) for its line mapping and executed fixtu
 
 A spell Program also admits the resultless
 `ExileTopWithPlayPermission` leaf only as `player: Controller`, `count: 1`, and
-`count_by_cast_cost: None`. It uses the existing permission operation, keeps ordinary costs and
+`count_by_cast_cost: None`, with either `duration` (the default until-the-end-of-your-next-turn
+window, or `ThisTurn` as on Heroes for Hire). It uses the existing permission operation, keeps ordinary costs and
 timing for playing the exiled card, and creates no permission when the library is empty. Impossible
 Inferno uses this profile in its Delirium arm; its exact source mapping and executed fixtures are in
 the [review map](review-maps/impossible_inferno.json). Burning Curiosity and Clockwork

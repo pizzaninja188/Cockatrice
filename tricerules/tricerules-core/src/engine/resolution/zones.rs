@@ -8,6 +8,7 @@ use crate::state::{
     OwnerZoneDestination, PendingLinkedExileAction, PendingLinkedExileChoiceStage,
     SpecialCastCompletion,
 };
+use tricerules_card_model::primitives::ExilePlayPermissionDuration;
 use tricerules_card_model::PresentationPathComponent;
 
 fn entry_counter_instruction(
@@ -768,9 +769,16 @@ pub(super) fn exile_top_with_play_permission(
         player,
         count,
         count_by_cast_cost,
+        duration,
     } = effect
     else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let window = match duration {
+        ExilePlayPermissionDuration::UntilEndOfRecipientNextTurn => {
+            "until the end of their next turn"
+        }
+        ExilePlayPermissionDuration::ThisTurn => "this turn",
     };
     let count = count_by_cast_cost.map_or(count, |conditional| {
         if cx.top.cast_cost_condition_matches(&conditional.condition) {
@@ -831,11 +839,11 @@ pub(super) fn exile_top_with_play_permission(
             &spell_label,
             crate::state::ExilePlayPermissionGrant::printed(
                 ExilePlayPermissionScope::PlayCard,
-                true,
+                duration.into(),
             ),
         )?;
         cx.events.push(ev_log(format!(
-            "P{recipient} exiles {} and may play those cards until the end of their next turn ({spell_label}).",
+            "P{recipient} exiles {} and may play those cards {window} ({spell_label}).",
             card_names.join(", ")
         )));
     }
@@ -1255,7 +1263,7 @@ pub(super) fn exile_with_owner_cast_permission(
                 ),
                 origin: crate::state::ExilePlayPermissionOrigin::Effect,
                 available_after_turn_instance: None,
-                until_end_of_next_turn: false,
+                expiry: crate::state::ExilePlayPermissionExpiry::WhileExiled,
             },
         )?;
     }

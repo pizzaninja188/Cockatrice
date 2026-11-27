@@ -2733,3 +2733,5 @@ mod q86_batch_c;
 
 #[path = "scenario/issue_535_bounty_hunter.rs"]
 mod issue_535_bounty_hunter;
+#[path = "scenario/issue_536_heroes_for_hire.rs"]
+mod issue_536_heroes_for_hire;

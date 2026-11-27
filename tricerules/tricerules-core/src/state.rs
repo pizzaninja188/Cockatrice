@@ -587,17 +587,41 @@ pub struct ExilePlayPermissionGrant {
     pub cast_cost: ExilePermissionCastCost,
     pub origin: ExilePlayPermissionOrigin,
     pub available_after_turn_instance: Option<u64>,
-    pub until_end_of_next_turn: bool,
+    pub expiry: ExilePlayPermissionExpiry,
+}
+
+/// When a newly granted exile permission ends. The grant resolves this to a concrete cleanup
+/// turn instance (CR 514.2), so inserted and skipped turns need no prediction later.
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExilePlayPermissionExpiry {
+    /// No stated duration: the permission lasts while the exact object stays in exile.
+    WhileExiled,
+    /// "This turn": ends in the current turn's cleanup step.
+    EndOfThisTurn,
+    /// "Until the end of your next turn": ends in the cleanup step of the recipient's next turn.
+    EndOfRecipientNextTurn,
+}
+
+impl From<tricerules_card_model::primitives::ExilePlayPermissionDuration>
+    for ExilePlayPermissionExpiry
+{
+    fn from(duration: tricerules_card_model::primitives::ExilePlayPermissionDuration) -> Self {
+        use tricerules_card_model::primitives::ExilePlayPermissionDuration as Duration;
+        match duration {
+            Duration::UntilEndOfRecipientNextTurn => Self::EndOfRecipientNextTurn,
+            Duration::ThisTurn => Self::EndOfThisTurn,
+        }
+    }
 }
 
 impl ExilePlayPermissionGrant {
-    pub fn printed(scope: ExilePlayPermissionScope, until_end_of_next_turn: bool) -> Self {
+    pub fn printed(scope: ExilePlayPermissionScope, expiry: ExilePlayPermissionExpiry) -> Self {
         Self {
             scope,
             cast_cost: ExilePermissionCastCost::PrintedManaCost,
             origin: ExilePlayPermissionOrigin::Effect,
             available_after_turn_instance: None,
-            until_end_of_next_turn,
+            expiry,
         }
     }
 }

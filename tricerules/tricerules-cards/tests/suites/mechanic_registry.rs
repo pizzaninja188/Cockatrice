@@ -1509,3 +1509,5 @@ mod q86_batch_a;
 
 #[path = "../issue_535_bounty_hunter.rs"]
 mod issue_535_bounty_hunter;
+#[path = "../issue_536_heroes_for_hire.rs"]
+mod issue_536_heroes_for_hire;

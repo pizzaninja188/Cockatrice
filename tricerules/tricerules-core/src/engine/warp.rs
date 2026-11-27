@@ -141,7 +141,7 @@ impl GameEngine {
                     cast_cost: crate::state::ExilePermissionCastCost::PrintedManaCost,
                     origin: crate::state::ExilePlayPermissionOrigin::Warp,
                     available_after_turn_instance: Some(self.state.turn_instance),
-                    until_end_of_next_turn: false,
+                    expiry: crate::state::ExilePlayPermissionExpiry::WhileExiled,
                 },
             )?;
             debug_assert!(self
@@ -350,7 +350,7 @@ mod tests {
                 "new permission",
                 crate::state::ExilePlayPermissionGrant::printed(
                     ExilePlayPermissionScope::CastCard,
-                    false,
+                    crate::state::ExilePlayPermissionExpiry::WhileExiled,
                 ),
             )
             .unwrap();
