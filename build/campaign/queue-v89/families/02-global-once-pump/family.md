@@ -142,6 +142,9 @@ q89 tests observed passing.
 Summary: `build/verification-logs/verify-0133872a-7d0a-435b-acd5-478a839abc33/summary.json`.
 Recorded in `build/campaign/status.tsv`.
 
+Product commit `ac53cc5e9`; evidence commit `a8d9be973`. Pushed to `origin/card-campaign`;
+remote SHA `a8d9be973a9b3752d521ecd34b6373f69cb150e0` verified by `git fetch` and `git rev-parse`.
+
 ## Blockers and gaps
 
 No card in this family is blocked. No partial admission. The activated-modal, hybrid and `{0}`
