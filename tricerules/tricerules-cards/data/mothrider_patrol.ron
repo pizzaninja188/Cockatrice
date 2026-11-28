@@ -1,0 +1,25 @@
+// Oracle c4073754-7d92-4976-8e7d-d6eb85b91608; source/rulings checked 2026-11-27 against the pinned Scryfall bulk
+// SHA-256 1cee09ee1ac70977c46171f4abf5cdfe170ab43bc32232af9138404e27524ce6.
+// CR 602.1/602.2 (activation and costs), 118.3 (mana payment), 701.26 (tap) and 608.2b (resolution
+// revalidation of a stale target). The printed keyword is part of the card; the tap ability is the
+// shipped `Tap(subject: Chosen((kind: Creature)))` shape that akroan_jailer proves. No pinned ruling.
+// Copy of the reviewed Akroan Jailer / Checkpoint Officer tap-target activation.
+
+(
+  id: "mothrider_patrol",
+  name: "Mothrider Patrol",
+  face_id: "mothrider_patrol",
+  mana_cost: "{W}",
+  types: ["Creature", "Fox", "Warrior"],
+  power: 1,
+  toughness: 1,
+  keywords: [Flying],
+  activated_abilities: [
+    (
+      ability_id: "tap_target",
+      presentation: OracleLines([2]),
+      costs: [Mana("{3}{W}"), Tap],
+      effect: [Tap(subject: Chosen((kind: Creature)))],
+    ),
+  ],
+)

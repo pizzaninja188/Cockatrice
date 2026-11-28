@@ -1,0 +1,76 @@
+{
+  "format_version": 1,
+  "oracle_id": "5e2736e6-b812-43a4-bd79-6f6095344fe1",
+  "spans": [
+    {
+      "face_id": "saruli_caretaker",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords/0"
+      ]
+    },
+    {
+      "face_id": "saruli_caretaker",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::TapPermanents",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "ObjectPaymentConstraint::ExactCount",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "Keyword::Defender",
+      "typed_path": "/faces/0/keywords/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q90_batch_a::q90_any_color_canary_taps_a_second_creature_for_one_chosen_color",
+      "covers": "actual card pays the printed tap cost and produces the chosen colour"
+    },
+    {
+      "test": "scenario q90_batch_a::q90_any_color_requires_a_second_untapped_creature",
+      "covers": "the source cannot be the only payer; refusal leaves state unchanged"
+    },
+    {
+      "test": "scenario q90_batch_a::q90_any_color_requires_exactly_one_own_creature",
+      "covers": "controller scope and the printed ExactCount(1) bound"
+    },
+    {
+      "test": "scenario q90_batch_a::q90_any_color_refuses_a_tapped_helper_or_a_tapped_source",
+      "covers": "a tapped payer or a tapped source is refused"
+    },
+    {
+      "test": "scenario q90_batch_a::q90_any_color_creatures_offer_all_five_colors_and_keep_their_keywords",
+      "covers": "all five printed options, exact, with the printed keyword intact"
+    },
+    {
+      "test": "mechanic_registry::q90_batch_a::q90_any_color_tap_creature_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q90_batch_a::q90_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

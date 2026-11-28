@@ -1,0 +1,32 @@
+// Oracle e2f98813-4f39-4135-b05b-407e9eb797f6; source/rulings checked 2026-11-27 against the pinned Scryfall bulk
+// SHA-256 1cee09ee1ac70977c46171f4abf5cdfe170ab43bc32232af9138404e27524ce6.
+// CR 602.1a/602.2 (activation and printed cost), 701.26a (the tap payment), 605.1a (mana ability),
+// 702.17 (reach) and 302.6 (summoning sickness on the source only). The single pinned ruling fixes
+// the misreading that a *second* creature tapped as payment need not have been controlled since the
+// turn began, while the source itself must have been. Copy of the reviewed Springleaf Drum ability.
+
+(
+  id: "jaspera_sentinel",
+  name: "Jaspera Sentinel",
+  face_id: "jaspera_sentinel",
+  mana_cost: "{G}",
+  types: ["Creature", "Elf", "Rogue"],
+  power: 1,
+  toughness: 2,
+  keywords: [Reach],
+  activated_abilities: [
+    (
+      ability_id: "any_color",
+      presentation: OracleLines([2]),
+      costs: [
+        Tap,
+        TapPermanents(
+          constraint: ExactCount(1),
+          filter: (kind: Creature, controller: You),
+          exclude_source: true,
+        ),
+      ],
+      effect: [ProduceMana(options: [(w: 1), (u: 1), (b: 1), (r: 1), (g: 1)])],
+    ),
+  ],
+)

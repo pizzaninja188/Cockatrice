@@ -1,0 +1,25 @@
+// Oracle e49eb21c-2a0d-4fd0-9f69-1bff6e94f9e7; source/rulings checked 2026-11-27 against the pinned Scryfall bulk
+// SHA-256 1cee09ee1ac70977c46171f4abf5cdfe170ab43bc32232af9138404e27524ce6.
+// CR 602.1/602.2 (activation and costs), 118.3 (mana payment), 701.26 (tap) and 608.2b (resolution
+// revalidation of a stale target). The printed keyword is part of the card; the tap ability is the
+// shipped `Tap(subject: Chosen((kind: Creature)))` shape that akroan_jailer proves. No pinned ruling.
+// Copy of the reviewed Akroan Jailer / Checkpoint Officer tap-target activation.
+
+(
+  id: "clockwork_drawbridge",
+  name: "Clockwork Drawbridge",
+  face_id: "clockwork_drawbridge",
+  mana_cost: "{W}",
+  types: ["Artifact", "Creature", "Wall"],
+  power: 0,
+  toughness: 3,
+  keywords: [Defender],
+  activated_abilities: [
+    (
+      ability_id: "tap_target",
+      presentation: OracleLines([2]),
+      costs: [Mana("{2}{W}"), Tap],
+      effect: [Tap(subject: Chosen((kind: Creature)))],
+    ),
+  ],
+)

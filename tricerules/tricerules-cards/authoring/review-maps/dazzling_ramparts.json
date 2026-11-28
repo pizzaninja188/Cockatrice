@@ -1,0 +1,76 @@
+{
+  "format_version": 1,
+  "oracle_id": "0527fc47-2bfc-4d02-90fa-5a1284f89a0a",
+  "spans": [
+    {
+      "face_id": "dazzling_ramparts",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords/0"
+      ]
+    },
+    {
+      "face_id": "dazzling_ramparts",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Defender",
+      "typed_path": "/faces/0/keywords/0"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Chosen",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q90_batch_a::q90_keyword_tap_canary_taps_the_chosen_creature_and_itself",
+      "covers": "actual card taps itself as a cost and the chosen creature on resolution"
+    },
+    {
+      "test": "scenario q90_batch_a::q90_keyword_tap_requires_the_printed_colored_cost",
+      "covers": "a wrong colour and a short printed amount are refused"
+    },
+    {
+      "test": "scenario q90_batch_a::q90_keyword_tap_requires_the_exact_printed_amount",
+      "covers": "the exact printed white/generic amount is spent, nothing left over"
+    },
+    {
+      "test": "scenario q90_batch_a::q90_keyword_tap_fizzles_on_a_stale_target",
+      "covers": "CR 608.2b: a target that left before resolution is not tapped"
+    },
+    {
+      "test": "scenario q90_batch_a::q90_keyword_tap_cards_keep_their_printed_keyword_and_body",
+      "covers": "printed body and keyword"
+    },
+    {
+      "test": "mechanic_registry::q90_batch_a::q90_keyword_tap_target_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q90_batch_a::q90_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

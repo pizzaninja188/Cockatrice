@@ -1,0 +1,46 @@
+// Oracle d35876a3-e891-43d3-a50c-69e8469497e0; source/rulings checked 2026-11-27 against the pinned Scryfall bulk
+// SHA-256 1cee09ee1ac70977c46171f4abf5cdfe170ab43bc32232af9138404e27524ce6.
+// CR 305.6 (the intrinsic basic-land mana ability) and 614.1d/614.12 (the entry replacement inspects
+// the live battlefield before this land enters). `max: Some(0)` is the encoded form of "unless you
+// control a planeswalker": the condition holds only at a zero count, so the replacement applies then
+// and the land enters tapped; at one or more planeswalkers the condition fails and the land enters
+// untapped. Copy of the reviewed Spirebluff Canal / Stormcarved Coast conditional EntersTapped
+// aggregate with matching: Planeswalker instead of Land.
+// The single pinned 2026-08-21 ruling ("a planeswalker entering at the same time is not counted")
+// restates that pre-entry inspection; the shipped entry-layer scenarios
+// `conditional_slow_land_ignores_lands_entering_in_the_same_batch` and
+// `conditional_fast_land_ignores_lands_entering_in_the_same_batch`
+// (tricerules-core/src/engine/replacement/entry_layers_tests.rs) assert it for this typed leaf.
+
+(
+  id: "fatehold_annex",
+  name: "Fatehold Annex",
+  face_id: "fatehold_annex",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [
+    (
+      ability_id: "mana",
+      presentation: OracleLines([2]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [
+        (w: 1),
+        (u: 1),
+      ])],
+    ),
+  ],
+  static_abilities: [
+    (
+      ability_id: "enters_tapped",
+      presentation: OracleLines([1]),
+      definition: EntersTapped(
+        affected: Self_,
+        condition: Some(BattlefieldAggregate(
+          filter: (controllers: Controller, matching: (kind: AnyPermanent, permanent_types: [Planeswalker])),
+          aggregate: Count,
+          max: Some(0),
+        )),
+      ),
+    ),
+  ],
+)
