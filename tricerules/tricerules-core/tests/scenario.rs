@@ -2737,3 +2737,6 @@ mod q86_batch_c;
 mod issue_535_bounty_hunter;
 #[path = "scenario/issue_536_heroes_for_hire.rs"]
 mod issue_536_heroes_for_hire;
+
+#[path = "scenario/issue_538_depletion_lands.rs"]
+mod issue_538_depletion_lands;

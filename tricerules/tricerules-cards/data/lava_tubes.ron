@@ -1,0 +1,34 @@
+// Oracle 2ffb2647-60bb-4916-b919-cbcf18e5e424; source checked 2026-11-28 against the local Scryfall bulk
+// SHA-256 0516f05397c02e093ec03c9cd02bcf4d8d629f1678e7ec8f4b016df7a01d86de (no rulings published).
+// CR 502.3 (the untap-step restriction), 122.1 (depletion is an ordinary named counter),
+// 503.1/603.2 (the upkeep trigger), 605.1a/605.3b (the mana ability, including its trailing
+// counter placement, resolves immediately) and 122.6 (putting a counter).
+(
+  id: "lava_tubes",
+  name: "Lava Tubes",
+  face_id: "lava_tubes",
+  mana_cost: "",
+  types: ["Land"],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: SelfDoesntUntapDuringUntapStepUnless(
+      condition: SourceCounterCount(counter: Depletion, max: Some(0)),
+    ),
+  )],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: AtBeginningOfUpkeep(),
+    effect: [RemoveCounters(counter: Depletion, count: 1, subject: Source)],
+  )],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([3]),
+    costs: [Tap],
+    effect: [
+      ProduceMana(options: [(b: 1), (r: 1)]),
+      PutCounters(subject: Source, counter: Depletion, count: 1),
+    ],
+  )],
+)

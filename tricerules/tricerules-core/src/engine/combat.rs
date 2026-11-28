@@ -465,8 +465,10 @@ impl GameEngine {
                     if moved.destination == rv1::permanent_moved::Destination::Library as i32
             )
         });
+        let source_riders = super::mana_ability_riders::has_source_riders(&ability);
         let simple_tap = ability.costs.as_slice() == [AbilityCost::Tap]
             && ability.mana_ability_damage_to_controller().is_none()
+            && !source_riders
             && !has_cost_triggers
             && activation_uses.is_empty();
         let mana_restriction = ability.mana_restriction().cloned();
@@ -556,6 +558,17 @@ impl GameEngine {
         }
         if receipt.ability_path.last() != Some(&receipt.ability.ability_id) {
             return Some("This attack mana receipt no longer matches its activated ability.");
+        }
+        // Receipt replay re-applies costs, output and damage only. A source rider is not
+        // replayable, so neither its own receipt nor an earlier one beneath it can be rewound.
+        if super::mana_ability_riders::has_source_riders(&receipt.ability) {
+            return Some("This mana ability changed its source after producing mana.");
+        }
+        if receipts[index + 1..]
+            .iter()
+            .any(|later| super::mana_ability_riders::has_source_riders(&later.ability))
+        {
+            return Some("A later mana ability changed its source after producing mana.");
         }
         if receipts[index + 1..].iter().any(|later| {
             later.mana_sources_consumed.iter().any(|consumption| {

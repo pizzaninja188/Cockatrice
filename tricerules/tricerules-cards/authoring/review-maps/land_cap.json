@@ -1,0 +1,72 @@
+{
+  "format_version": 1,
+  "oracle_id": "bfec4d0a-3792-4bc3-bae1-e639da5bb9a6",
+  "spans": [
+    {
+      "face_id": "land_cap",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "land_cap",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "land_cap",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::SelfDoesntUntapDuringUntapStepUnless",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "GameCondition::SourceCounterCount",
+      "typed_path": "/faces/0/static_abilities/0/definition/SelfDoesntUntapDuringUntapStepUnless/condition"
+    },
+    {
+      "symbol": "TriggerCondition::AtBeginningOfUpkeep",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::RemoveCounters",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "ManaAbilityRider::PutSourceCounters",
+      "typed_path": "/faces/0/activated_abilities/0/effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_538_depletion_lands::recharging_depletion_lands_skip_untap_while_charged_and_recover_after_upkeep",
+      "covers": "the activation adds one chosen W or U immediately and puts a depletion counter on the land; the land skips the untap step while charged, the upkeep trigger removes the counter, and it untaps normally once uncharged"
+    },
+    {
+      "test": "mechanic_registry::issue_538_depletion_lands::depletion_lands_are_typed_mana_abilities_with_source_riders",
+      "covers": "registry identity, presentation lines, static, trigger and the typed counter rider"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

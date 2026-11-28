@@ -10,6 +10,79 @@ use super::{
 use crate::{AbilityId, AbilityLinkId, AbilityPresentation, ManaAmount, ModalDef};
 use serde::{Deserialize, Serialize};
 
+/// One instruction that follows a mana ability's production (CR 605.1a). A mana ability has no
+/// stack item (CR 605.3b), so the engine resolves these typed riders directly, in printed order,
+/// immediately after adding the mana. The vocabulary is closed: any other trailing instruction
+/// makes the ability an ordinary stack ability.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ManaAbilityRider {
+    /// Painlands such as Adarkar Wastes and Shivan Reef: "This land deals 1 damage to you."
+    /// It is admitted only as the sole rider, through the shared damage pipeline.
+    DamageController { amount: u32 },
+    /// Veldt and the other Mercadian recharging depletion lands: "Put a depletion counter on
+    /// this land." Placement uses the ordinary counter replacement and trigger path.
+    PutSourceCounters { counter: CounterKind, count: u32 },
+    /// Hickory Woodlot and the other two-counter depletion lands (and Gemstone Mine's mining
+    /// shape): "If there are no <counter> counters on this land, sacrifice it."
+    SacrificeSourceWithoutCounters { counter: CounterKind },
+}
+
+impl ManaAbilityRider {
+    fn parse(effect: &SpellEffectKind) -> Option<Self> {
+        use super::{EffectSubject, PlayerRecipient};
+        match effect {
+            SpellEffectKind::DamagePlayer {
+                amount: Amount::Fixed(1),
+                who: PlayerRecipient::Controller,
+            } => Some(Self::DamageController { amount: 1 }),
+            SpellEffectKind::PutCounters {
+                counter,
+                count: Amount::Fixed(count),
+                subject: EffectSubject::Source,
+            } if *count > 0 => Some(Self::PutSourceCounters {
+                counter: *counter,
+                count: *count,
+            }),
+            SpellEffectKind::Conditional { condition, effect } => {
+                match (condition, effect.as_ref()) {
+                    (
+                        GameCondition::SourceCounterCount {
+                            counter,
+                            min: None,
+                            max: Some(0),
+                        },
+                        SpellEffectKind::Sacrifice {
+                            subject: EffectSubject::Source,
+                        },
+                    ) => Some(Self::SacrificeSourceWithoutCounters { counter: *counter }),
+                    _ => None,
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// Parse a non-empty trailing rider list. Damage stays the sole rider so the existing
+    /// prepared damage pipeline and its attack-payment receipts keep their single-step shape.
+    fn parse_all(effects: &[SpellEffectKind]) -> Option<Vec<Self>> {
+        if effects.is_empty() {
+            return None;
+        }
+        let riders = effects
+            .iter()
+            .map(Self::parse)
+            .collect::<Option<Vec<_>>>()?;
+        if riders.len() > 1
+            && riders
+                .iter()
+                .any(|rider| matches!(rider, Self::DamageController { .. }))
+        {
+            return None;
+        }
+        Some(riders)
+    }
+}
+
 /// The rules zones used by Three Tree Scribe and Slagstone Refinery's departure predicates.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EventZone {
@@ -179,8 +252,8 @@ impl ActivatedAbilityDef {
         crate::ability_fallback(face_name, "activated ability", ability_path)
     }
     /// CR 605.1a: supported mana abilities produce mana, don't target, and aren't loyalty
-    /// abilities. The bounded mana-plus-damage shape below is the only composite effect admitted:
-    /// it is resolved immediately through the shared damage pipeline.
+    /// abilities. The only composite effect admitted is unrestricted mana followed by the typed
+    /// [`ManaAbilityRider`] list, which the engine resolves immediately after adding the mana.
     pub fn mana_options(&self) -> Option<&Vec<ManaAmount>> {
         if let Some(options) = self.commander_color_identity_mana_output() {
             return Some(options);
@@ -201,11 +274,29 @@ impl ActivatedAbilityDef {
                 commander_color_identity: false,
                 restriction: None,
                 conditional: None,
-            }, SpellEffectKind::DamagePlayer {
-                amount: super::Amount::Fixed(1),
-                who: super::PlayerRecipient::Controller,
-            }] => Some(options),
+            }, riders @ ..]
+                if ManaAbilityRider::parse_all(riders).is_some() =>
+            {
+                Some(options)
+            }
             _ => None,
+        }
+    }
+
+    /// The typed instructions that follow this mana ability's production, in printed order.
+    /// Empty for every ability that is not a composite mana ability.
+    pub fn mana_ability_riders(&self) -> Vec<ManaAbilityRider> {
+        if self.is_loyalty_ability() || self.targeting.is_some() {
+            return Vec::new();
+        }
+        match self.effect.as_slice() {
+            [SpellEffectKind::ProduceMana {
+                commander_color_identity: false,
+                restriction: None,
+                conditional: None,
+                ..
+            }, riders @ ..] => ManaAbilityRider::parse_all(riders).unwrap_or_default(),
+            _ => Vec::new(),
         }
     }
 
@@ -252,24 +343,10 @@ impl ActivatedAbilityDef {
     /// controller-damage mana ability shape. Consumers use this to keep the immediate no-stack
     /// path and its consequential float-undo handling aligned with [`Self::mana_options`].
     pub fn mana_ability_damage_to_controller(&self) -> Option<u32> {
-        if self.is_loyalty_ability() || self.targeting.is_some() {
-            return None;
+        match self.mana_ability_riders().as_slice() {
+            [ManaAbilityRider::DamageController { amount }] => Some(*amount),
+            _ => None,
         }
-        matches!(
-            self.effect.as_slice(),
-            [
-                SpellEffectKind::ProduceMana {
-                    restriction: None,
-                    conditional: None,
-                    ..
-                },
-                SpellEffectKind::DamagePlayer {
-                    amount: super::Amount::Fixed(1),
-                    who: super::PlayerRecipient::Controller,
-                },
-            ]
-        )
-        .then_some(1)
     }
 
     /// The storage-land output choice, if this ability has the supported source-bound X cost.

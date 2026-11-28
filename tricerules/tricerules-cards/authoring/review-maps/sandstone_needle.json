@@ -1,0 +1,77 @@
+{
+  "format_version": 1,
+  "oracle_id": "c8e0a1a5-8188-4677-9d8a-a18eb593343a",
+  "spans": [
+    {
+      "face_id": "sandstone_needle",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0",
+        "/faces/0/static_abilities/1"
+      ]
+    },
+    {
+      "face_id": "sandstone_needle",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::EntersTapped",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "StaticAbilityDef::EntersWithCounters",
+      "typed_path": "/faces/0/static_abilities/1/definition"
+    },
+    {
+      "symbol": "CounterKind::Depletion",
+      "typed_path": "/faces/0/static_abilities/1/definition/EntersWithCounters/counter"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::RemoveCounters",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "CounterKind::Depletion",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1/RemoveCounters/counter"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "ManaAbilityRider::SacrificeSourceWithoutCounters",
+      "typed_path": "/faces/0/activated_abilities/0/effect/1"
+    },
+    {
+      "symbol": "GameCondition::SourceCounterCount",
+      "typed_path": "/faces/0/activated_abilities/0/effect/1/Conditional/condition"
+    },
+    {
+      "symbol": "SpellEffectKind::Sacrifice",
+      "typed_path": "/faces/0/activated_abilities/0/effect/1/Conditional/effect"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_538_depletion_lands::two_counter_depletion_lands_enter_tapped_and_sacrifice_only_after_the_last_counter",
+      "covers": "enters tapped with exactly two depletion counters; each activation removes one counter as a cost and immediately adds RR without the stack; the first activation keeps the land, the second sacrifices it, and float-undo is not offered"
+    },
+    {
+      "test": "mechanic_registry::issue_538_depletion_lands::depletion_lands_are_typed_mana_abilities_with_source_riders",
+      "covers": "registry identity, presentation lines, cost shape, output and the typed sacrifice rider"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

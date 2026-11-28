@@ -6574,6 +6574,70 @@ fn damage_mana_ability_classifier_accepts_only_the_bounded_untargeted_shape() {
     );
 }
 
+#[test]
+fn depletion_mana_riders_stay_mana_abilities_in_printed_order() {
+    let with_effects = |effects: &str| {
+        let mut ability = mana_then_controller_damage_ability();
+        ability.effect = ron::Options::default()
+            .with_default_extension(ron::extensions::Extensions::IMPLICIT_SOME)
+            .from_str(effects)
+            .unwrap_or_else(|error| panic!("rider effects parse: {error} in {effects}"));
+        ability
+    };
+    let group_a = with_effects(
+        "[ProduceMana(options: [(g: 2)]), Conditional(condition: SourceCounterCount(counter: Depletion, max: Some(0)), effect: Sacrifice(subject: Source))]",
+    );
+    assert!(group_a.is_mana_ability());
+    assert_eq!(
+        group_a.mana_ability_riders(),
+        vec![super::ManaAbilityRider::SacrificeSourceWithoutCounters {
+            counter: CounterKind::Depletion
+        }]
+    );
+    assert_eq!(group_a.mana_ability_damage_to_controller(), None);
+
+    let group_b = with_effects(
+        "[ProduceMana(options: [(g: 1), (w: 1)]), PutCounters(subject: Source, counter: Depletion, count: 1)]",
+    );
+    assert!(group_b.is_mana_ability());
+    assert_eq!(
+        group_b.mana_ability_riders(),
+        vec![super::ManaAbilityRider::PutSourceCounters {
+            counter: CounterKind::Depletion,
+            count: 1
+        }]
+    );
+
+    assert_eq!(
+        mana_then_controller_damage_ability().mana_ability_riders(),
+        vec![super::ManaAbilityRider::DamageController { amount: 1 }],
+        "the painland shape is the same typed rider vocabulary"
+    );
+
+    for (effects, why) in [
+        (
+            "[ProduceMana(options: [(g: 1)]), PutCounters(subject: Chosen((kind: Creature)), counter: Depletion, count: 1)]",
+            "a chosen counter recipient is not a source rider",
+        ),
+        (
+            "[ProduceMana(options: [(g: 1)]), Conditional(condition: SourceCounterCount(counter: Depletion, min: Some(1)), effect: Sacrifice(subject: Source))]",
+            "only the no-counters sacrifice condition is admitted",
+        ),
+        (
+            "[ProduceMana(options: [(g: 1)]), PutCounters(subject: Source, counter: Depletion, count: X)]",
+            "rider counter counts are fixed",
+        ),
+        (
+            "[ProduceMana(options: [(g: 1)]), DamagePlayer(amount: 1, who: Controller), PutCounters(subject: Source, counter: Depletion, count: 1)]",
+            "damage stays the sole rider",
+        ),
+    ] {
+        let ability = with_effects(effects);
+        assert!(ability.mana_options().is_none(), "{why}");
+        assert!(ability.mana_ability_riders().is_empty(), "{why}");
+    }
+}
+
 fn source_counter_scaled_mana_effect() -> SpellEffectKind {
     SpellEffectKind::ProduceManaPerSourceCounter {
         counter: CounterKind::Charge,
@@ -23971,6 +24035,14 @@ fn bounty_counter_is_ordinary_and_round_trips() {
     let counter: super::CounterKind = ron::from_str("Bounty").expect("bounty counter parses");
     assert_eq!(counter.label(), "bounty");
     assert_eq!(ron::to_string(&counter).unwrap(), "Bounty");
+    assert!(counter.validate().is_ok());
+}
+
+#[test]
+fn depletion_counter_is_ordinary_and_round_trips() {
+    let counter: super::CounterKind = ron::from_str("Depletion").expect("depletion counter parses");
+    assert_eq!(counter.label(), "depletion");
+    assert_eq!(ron::to_string(&counter).unwrap(), "Depletion");
     assert!(counter.validate().is_ok());
 }
 

@@ -1,0 +1,36 @@
+// Oracle a176924c-78fc-4151-b2b5-1547b1114a40; source checked 2026-11-28 against the local Scryfall bulk
+// SHA-256 0516f05397c02e093ec03c9cd02bcf4d8d629f1678e7ec8f4b016df7a01d86de (no rulings published).
+// CR 614.1c/614.12 (enters tapped with counters), 122.1 (depletion is an ordinary named counter),
+// 118.3 (removing the counter is a cost), 605.1a/605.3b (the mana ability resolves immediately,
+// including its trailing sacrifice) and 701.21a (sacrifice).
+(
+  id: "peat_bog",
+  name: "Peat Bog",
+  face_id: "peat_bog",
+  mana_cost: "",
+  types: ["Land"],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: EntersTapped(affected: Self_),
+    ),
+    (
+      ability_id: "static_02",
+      presentation: OracleLines([1]),
+      definition: EntersWithCounters(counter: Depletion, amount: 2),
+    ),
+  ],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    costs: [Tap, RemoveCounters(counter: Some(Depletion), count: 1)],
+    effect: [
+      ProduceMana(options: [(b: 2)]),
+      Conditional(
+        condition: SourceCounterCount(counter: Depletion, max: Some(0)),
+        effect: Sacrifice(subject: Source),
+      ),
+    ],
+  )],
+)

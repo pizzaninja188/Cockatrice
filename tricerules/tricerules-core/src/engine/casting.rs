@@ -4125,6 +4125,13 @@ impl GameEngine {
                 .map(|definition| definition.name.clone())
                 .unwrap_or_else(|| card_id.to_owned())
         };
+        let source_generation = self
+            .state
+            .zone_change_generation
+            .get(&permanent_id)
+            .copied()
+            .unwrap_or(0);
+        let source_riders = super::mana_ability_riders::has_source_riders(ability);
         let mana_damage = ability.mana_ability_damage_to_controller().map(|amount| {
             self.prepare_mana_ability_damage(permanent_id, player, card_name.clone(), amount)
         });
@@ -4276,6 +4283,7 @@ impl GameEngine {
             self.collect_committed_cost_triggers(payment.trigger_events, payment.sacrificed);
         let has_cost_triggers = !cost_triggers.is_empty();
         if mana_damage.is_none()
+            && !source_riders
             && !has_cost_triggers
             && matches!(ability.costs.as_slice(), [AbilityCost::Tap])
         {
@@ -4316,7 +4324,7 @@ impl GameEngine {
             )));
         }
         // A mana ability does not use the stack (CR 605.3a). Cost triggers are staged before its
-        // immediate effect; composite damage also invalidates any earlier float undo.
+        // immediate effect; composite damage and source riders also invalidate earlier float undo.
         let event_time_cost_triggers = cost_triggers.clone();
         self.stage_triggers(cost_triggers);
         let mut attack_mana_damage_results = Vec::new();
@@ -4325,6 +4333,19 @@ impl GameEngine {
             self.state.undoable_mana_abilities.clear();
             (attack_mana_damage_results, attack_mana_damage_triggers) =
                 self.resolve_mana_ability_damage(damage, &mut batch.events)?;
+        }
+        if source_riders {
+            // The source's state changes after production, so earlier floating mana can no
+            // longer be rewound independently of it.
+            self.state.undoable_mana_abilities.clear();
+            self.resolve_mana_ability_source_riders(
+                player,
+                permanent_id,
+                source_generation,
+                &card_name,
+                ability,
+                &mut batch.events,
+            )?;
         }
         if let Some(before_state) = attack_payment_before {
             self.record_attack_mana_ability(super::combat::AttackManaAbilityReceiptInput {

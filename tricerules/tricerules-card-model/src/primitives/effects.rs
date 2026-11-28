@@ -124,6 +124,9 @@ pub enum CounterKind {
     /// Bounty Hunter's ordinary named counter (CR 122.1). It has no rules of its own; only
     /// targeting filters such as `ObjectFilter.required_counter` read it.
     Bounty,
+    /// The Mercadian depletion lands' ordinary named counter (CR 122.1). It has no rules of its
+    /// own; the lands' untap restriction, upkeep removal and mana-ability riders read it.
+    Depletion,
 }
 
 impl CounterKind {
@@ -150,6 +153,7 @@ impl CounterKind {
             CounterKind::Luck => "luck".into(),
             CounterKind::Ghostform => "ghostform".into(),
             CounterKind::Bounty => "bounty".into(),
+            CounterKind::Depletion => "depletion".into(),
         }
     }
 

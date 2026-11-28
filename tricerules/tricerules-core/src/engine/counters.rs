@@ -444,6 +444,7 @@ pub(super) fn counter_option_id(kind: CounterKind) -> u32 {
         CounterKind::Luck => 16,
         CounterKind::Ghostform => 17,
         CounterKind::Bounty => 18,
+        CounterKind::Depletion => 19,
         CounterKind::Keyword(keyword) => 256 + keyword as u32,
     }
 }

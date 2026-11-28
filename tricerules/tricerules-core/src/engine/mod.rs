@@ -233,6 +233,7 @@ mod legendary_cast;
 mod legendary_resolution_cast_tests;
 mod library_choices;
 mod life_numeric;
+mod mana_ability_riders;
 mod mana_spending;
 mod mass_sacrifice;
 #[cfg(test)]
