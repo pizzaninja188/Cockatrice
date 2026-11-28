@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 /// stack item (CR 605.3b), so the engine resolves these typed riders directly, in printed order,
 /// immediately after adding the mana. The vocabulary is closed: any other trailing instruction
 /// makes the ability an ordinary stack ability.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ManaAbilityRider {
     /// Painlands such as Adarkar Wastes and Shivan Reef: "This land deals 1 damage to you."
     /// It is admitted only as the sole rider, through the shared damage pipeline.

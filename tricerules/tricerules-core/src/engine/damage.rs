@@ -132,18 +132,18 @@ pub(crate) struct DamageSpec {
     pub source_has_lifelink: bool,
 }
 
+/// A mana ability's completed damage and the event-time triggers it collected.
+pub(in crate::engine) type ManaAbilityDamageOutcome =
+    (Vec<CompletedDamage>, Vec<super::triggers::CollectedTrigger>);
+
 #[derive(serde::Serialize, Debug, Clone)]
 pub(crate) enum DamageBatchContinuation {
     Combat,
     Stack {
         stack: Box<ParkedStackResolution>,
     },
-    ManaAbility {
-        actor: PlayerId,
-        source_object_id: ObjectId,
-        source_zone_change_generation: u64,
-        resume_resolution: Option<Box<PendingResolution>>,
-    },
+    /// CR 605.3b: painland damage owns the rest of its unstacked mana ability while parked.
+    ManaAbility(Box<crate::state::ManaAbilityResolution>),
 }
 
 impl DamageBatchContinuation {
@@ -155,9 +155,7 @@ impl DamageBatchContinuation {
                 .map(|damage| damage.spec.event.source.object_id)
                 .unwrap_or(0),
             Self::Stack { stack } => stack.item.source_permanent_id.unwrap_or(stack.item.id),
-            Self::ManaAbility {
-                source_object_id, ..
-            } => *source_object_id,
+            Self::ManaAbility(resolution) => resolution.source_object_id,
         }
     }
 
@@ -165,7 +163,7 @@ impl DamageBatchContinuation {
         match self {
             Self::Combat => unreachable!("combat choices require a surviving affected recipient"),
             Self::Stack { stack } => stack.item.controller,
-            Self::ManaAbility { actor, .. } => *actor,
+            Self::ManaAbility(resolution) => resolution.player,
         }
     }
 }
@@ -604,25 +602,7 @@ impl GameEngine {
             return Ok(Some(completed));
         }
 
-        if let DamageBatchContinuation::ManaAbility {
-            actor,
-            resume_resolution,
-            ..
-        } = &mut continuation
-        {
-            if resume_resolution.is_none()
-                && self
-                    .state
-                    .pending_resolution
-                    .as_ref()
-                    .is_some_and(|pending| {
-                        pending.deciding_player == *actor
-                            && pending.continuation.mana_window_undo_start().is_some()
-                    })
-            {
-                *resume_resolution = self.state.pending_resolution.take().map(Box::new);
-            }
-        }
+        self.suspend_mana_ability_payment(&mut continuation);
 
         let completion = crate::state::CounterPlacementCompletion::DamageBatch {
             completed: completed.clone(),
@@ -705,18 +685,16 @@ impl GameEngine {
     }
 
     /// Resolve a mana ability's additional damage effect without creating a stack object or
-    /// handing priority to another player.
+    /// handing priority to another player. `resolution` is the rest of the mana ability: a
+    /// parked choice carries it so the remaining riders and the interrupted payment resume only
+    /// after the damage finishes. `None` means a choice parked.
     pub(super) fn resolve_mana_ability_damage(
         &mut self,
         damage: DamageSpec,
+        resolution: &crate::state::ManaAbilityResolution,
         events: &mut Vec<rv1::RuledEvent>,
-    ) -> Result<(Vec<CompletedDamage>, Vec<super::triggers::CollectedTrigger>), EngineError> {
-        let continuation = DamageBatchContinuation::ManaAbility {
-            actor: damage.event.source.controller,
-            source_object_id: damage.event.source.object_id,
-            source_zone_change_generation: damage.event.source.zone_change_generation.unwrap_or(0),
-            resume_resolution: None,
-        };
+    ) -> Result<Option<ManaAbilityDamageOutcome>, EngineError> {
+        let continuation = DamageBatchContinuation::ManaAbility(Box::new(resolution.clone()));
         let pending = PendingDamageBatch {
             damage: vec![PendingDamageEvent {
                 recipient_generation: self.damage_recipient_generation(&damage.event),
@@ -733,11 +711,11 @@ impl GameEngine {
         };
         let Some(completed) = self.advance_or_park_damage_batch(pending, continuation, events)?
         else {
-            return Ok((Vec::new(), Vec::new()));
+            return Ok(None);
         };
         let triggers =
             self.commit_completed_damage_batch_collecting_triggers(&completed, events)?;
-        Ok((completed, triggers))
+        Ok(Some((completed, triggers)))
     }
 
     fn pending_damage_replacement_candidates(
@@ -988,25 +966,8 @@ impl GameEngine {
     }
 
     fn suspend_mana_ability_payment(&mut self, continuation: &mut DamageBatchContinuation) {
-        let DamageBatchContinuation::ManaAbility {
-            actor,
-            resume_resolution,
-            ..
-        } = continuation
-        else {
-            return;
-        };
-        if resume_resolution.is_none()
-            && self
-                .state
-                .pending_resolution
-                .as_ref()
-                .is_some_and(|pending| {
-                    pending.deciding_player == *actor
-                        && pending.continuation.mana_window_undo_start().is_some()
-                })
-        {
-            *resume_resolution = self.state.pending_resolution.take().map(Box::new);
+        if let DamageBatchContinuation::ManaAbility(resolution) = continuation {
+            self.suspend_mana_ability_resolution_payment(resolution);
         }
     }
 
@@ -1397,17 +1358,9 @@ impl GameEngine {
                         effect_ids: candidate_effect_ids,
                     }
                 }
-                DamageBatchContinuation::ManaAbility {
-                    actor,
-                    source_object_id,
-                    source_zone_change_generation,
-                    resume_resolution,
-                } => ResolutionContinuation::ManaAbilityDamageReplacement {
-                    actor,
-                    source_object_id,
-                    source_zone_change_generation,
-                    resume_resolution,
-                },
+                DamageBatchContinuation::ManaAbility(resolution) => {
+                    ResolutionContinuation::ManaAbilityDamageReplacement { resolution }
+                }
             },
         ));
     }
@@ -1768,17 +1721,9 @@ impl GameEngine {
                     stack: Box::new(stack.clone()),
                 }
             }
-            ResolutionContinuation::ManaAbilityDamageReplacement {
-                actor,
-                source_object_id,
-                source_zone_change_generation,
-                resume_resolution,
-            } => DamageBatchContinuation::ManaAbility {
-                actor: *actor,
-                source_object_id: *source_object_id,
-                source_zone_change_generation: *source_zone_change_generation,
-                resume_resolution: resume_resolution.clone(),
-            },
+            ResolutionContinuation::ManaAbilityDamageReplacement { resolution } => {
+                DamageBatchContinuation::ManaAbility(resolution.clone())
+            }
             _ => return Ok(()),
         };
         let Some(super::replacement::PendingReplacementEvent::Damage(mut batch)) =
@@ -1903,17 +1848,9 @@ impl GameEngine {
                     stack: Box::new(stack.clone()),
                 }
             }
-            ResolutionContinuation::ManaAbilityDamageReplacement {
-                actor,
-                source_object_id,
-                source_zone_change_generation,
-                resume_resolution,
-            } => DamageBatchContinuation::ManaAbility {
-                actor: *actor,
-                source_object_id: *source_object_id,
-                source_zone_change_generation: *source_zone_change_generation,
-                resume_resolution: resume_resolution.clone(),
-            },
+            ResolutionContinuation::ManaAbilityDamageReplacement { resolution } => {
+                DamageBatchContinuation::ManaAbility(resolution.clone())
+            }
             _ => {
                 return Err(EngineError::Illegal(
                     "damage-replacement continuation missing",
@@ -2054,19 +1991,6 @@ impl GameEngine {
         damage_triggers: Vec<super::triggers::CollectedTrigger>,
         events: Vec<rv1::RuledEvent>,
     ) -> Result<RuledEventBatch, EngineError> {
-        if let DamageBatchContinuation::ManaAbility {
-            actor,
-            source_object_id,
-            ..
-        } = &completion
-        {
-            self.record_attack_mana_damage_results(
-                *actor,
-                *source_object_id,
-                completed,
-                damage_triggers,
-            );
-        }
         match completion {
             DamageBatchContinuation::Combat => {
                 self.state.combat_damage_priority_pending = true;
@@ -2077,25 +2001,15 @@ impl GameEngine {
                 OperationResults::default(),
                 events,
             ),
-            DamageBatchContinuation::ManaAbility {
-                resume_resolution, ..
-            } => {
+            DamageBatchContinuation::ManaAbility(resolution) => {
+                self.record_attack_mana_damage_results(
+                    resolution.player,
+                    resolution.source_object_id,
+                    completed,
+                    damage_triggers,
+                );
                 let mut events = events;
-                if let Some(mut resume_resolution) = resume_resolution {
-                    // The parent's answer was suspended while this nested damage choice owned
-                    // input. Resuming it publishes a new offer, even when its visible payload is
-                    // byte-for-byte identical.
-                    resume_resolution.resolution_prompt_id =
-                        crate::state::ResolutionPromptId::UNASSIGNED;
-                    resume_resolution.resolution_prompt_semantics = None;
-                    self.state.pending_resolution = Some(*resume_resolution);
-                    if !self.refresh_suspended_ward_payment(&mut events)? {
-                        events.push(
-                            self.resolution_payment_choice_event()
-                                .expect("suspended resolution payment has a prompt"),
-                        );
-                    }
-                }
+                self.continue_mana_ability_resolution(*resolution, &mut events)?;
                 Ok(finish_with_events(self, events))
             }
         }

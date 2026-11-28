@@ -4329,23 +4329,26 @@ impl GameEngine {
         self.stage_triggers(cost_triggers);
         let mut attack_mana_damage_results = Vec::new();
         let mut attack_mana_damage_triggers = Vec::new();
-        if let Some(damage) = mana_damage {
+        if mana_damage.is_some() || source_riders {
+            // Composite damage and source riders invalidate earlier float undo: the source's
+            // state changes after production, so earlier floating mana can no longer be rewound
+            // independently of it.
             self.state.undoable_mana_abilities.clear();
-            (attack_mana_damage_results, attack_mana_damage_triggers) =
-                self.resolve_mana_ability_damage(damage, &mut batch.events)?;
-        }
-        if source_riders {
-            // The source's state changes after production, so earlier floating mana can no
-            // longer be rewound independently of it.
-            self.state.undoable_mana_abilities.clear();
-            self.resolve_mana_ability_source_riders(
+            let resolution = Self::begin_mana_ability_resolution(
                 player,
                 permanent_id,
                 source_generation,
                 &card_name,
                 ability,
-                &mut batch.events,
-            )?;
+                mana_damage,
+            );
+            if let super::mana_ability_riders::ManaAbilityProgress::Complete {
+                damage: Some((results, triggers)),
+            } = self.continue_mana_ability_resolution(resolution, &mut batch.events)?
+            {
+                attack_mana_damage_results = results;
+                attack_mana_damage_triggers = triggers;
+            }
         }
         if let Some(before_state) = attack_payment_before {
             self.record_attack_mana_ability(super::combat::AttackManaAbilityReceiptInput {

@@ -2097,6 +2097,9 @@ impl GameEngine {
                 crate::state::CounterPlacementCompletion::SagaLore { sagas, .. } => {
                     sagas.first().map(|saga| saga.object_id).unwrap_or_default()
                 }
+                crate::state::CounterPlacementCompletion::ManaAbility(resolution) => {
+                    resolution.source_object_id
+                }
                 _ => 0,
             });
         let application_ids = batch
@@ -3163,6 +3166,10 @@ impl GameEngine {
                 | (
                     CounterPlacementRecipient::Object { .. },
                     crate::state::CounterPlacementCompletion::CounterMove { .. },
+                )
+                | (
+                    CounterPlacementRecipient::Object { .. },
+                    crate::state::CounterPlacementCompletion::ManaAbility(_),
                 ) => {}
                 (CounterPlacementRecipient::EnteringObject { .. }, _) => {
                     return Err(EngineError::Illegal(
@@ -3197,7 +3204,8 @@ impl GameEngine {
                     | crate::state::CounterPlacementCompletion::Explore { .. }
                     | crate::state::CounterPlacementCompletion::DamageBatch { .. }
                     | crate::state::CounterPlacementCompletion::DamageReplacement { .. }
-                    | crate::state::CounterPlacementCompletion::CounterMove { .. },
+                    | crate::state::CounterPlacementCompletion::CounterMove { .. }
+                    | crate::state::CounterPlacementCompletion::ManaAbility(_),
                 ) => {
                     return Err(EngineError::Illegal(
                         "stack-effect counter recipient must be a permanent",
@@ -3251,10 +3259,16 @@ impl GameEngine {
                             after,
                             read_ahead_entry: false,
                         });
-                        if let crate::state::CounterPlacementCompletion::StackEffect {
-                            spell_label,
-                        } = completion
-                        {
+                        let logged_label = match completion {
+                            crate::state::CounterPlacementCompletion::StackEffect {
+                                spell_label,
+                            } => Some(spell_label),
+                            crate::state::CounterPlacementCompletion::ManaAbility(resolution) => {
+                                Some(&resolution.source_label)
+                            }
+                            _ => None,
+                        };
+                        if let Some(spell_label) = logged_label {
                             out.push(ev_log(format!(
                                 "{spell_label} puts {placed} {} counter(s) on {}",
                                 kind.label(),
@@ -4071,6 +4085,24 @@ impl GameEngine {
                     receipts,
                     &mut events,
                 ),
+                Err(error) => {
+                    self.state.pending_replacement_event =
+                        Some(PendingReplacementEvent::Counters(Box::new(batch)));
+                    self.state.pending_resolution = Some(pending);
+                    Err(error)
+                }
+            };
+        }
+        if matches!(
+            completion,
+            crate::state::CounterPlacementCompletion::ManaAbility(_)
+        ) {
+            return match self.finish_mana_ability_counter_choice(
+                &batch.events,
+                &completion,
+                &mut events,
+            ) {
+                Ok(()) => Ok(finish_with_events(self, events)),
                 Err(error) => {
                     self.state.pending_replacement_event =
                         Some(PendingReplacementEvent::Counters(Box::new(batch)));

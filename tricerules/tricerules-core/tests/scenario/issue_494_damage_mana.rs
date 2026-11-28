@@ -93,13 +93,14 @@ fn begin_three_player_ward_talisman_replacement(seed: u64) -> (GameEngine, u32, 
         .as_ref()
         .expect("Talisman damage replacement choice");
     assert_eq!(pending.deciding_player, 0);
-    let ResolutionContinuation::ManaAbilityDamageReplacement {
-        resume_resolution: Some(parent),
-        ..
-    } = &pending.continuation
+    let ResolutionContinuation::ManaAbilityDamageReplacement { resolution } = &pending.continuation
     else {
         panic!("Talisman damage retains the interrupted Ward payment")
     };
+    let parent = resolution
+        .suspended_payment
+        .as_ref()
+        .expect("Talisman damage retains the interrupted Ward payment");
     assert_eq!(parent.deciding_player, 0);
     assert!(parent.continuation.mana_payment().is_some());
     (engine, talisman, island, spell_id)
@@ -334,18 +335,13 @@ fn issue_494_prevention_choice_preserves_source_identity_and_resumes_once() {
         .expect("prevention choice");
     assert_eq!(pending.deciding_player, 0);
     assert_eq!(pending.presentation.source_object_id, source);
-    let ResolutionContinuation::ManaAbilityDamageReplacement {
-        actor,
-        source_object_id,
-        source_zone_change_generation,
-        ..
-    } = &pending.continuation
+    let ResolutionContinuation::ManaAbilityDamageReplacement { resolution } = &pending.continuation
     else {
         panic!("stackless mana-damage continuation")
     };
-    assert_eq!(*actor, 0);
-    assert_eq!(*source_object_id, source);
-    assert_eq!(*source_zone_change_generation, 7);
+    assert_eq!(resolution.player, 0);
+    assert_eq!(resolution.source_object_id, source);
+    assert_eq!(resolution.source_zone_change_generation, 7);
     let choice_id = pending.presentation.candidates[0];
 
     let answer = RuledCommand {
@@ -604,13 +600,14 @@ fn issue_494_replacement_choice_resumes_resolution_time_mana_payment() {
         .pending_resolution
         .as_ref()
         .expect("damage prevention choice");
-    let ResolutionContinuation::ManaAbilityDamageReplacement {
-        resume_resolution: Some(parent),
-        ..
-    } = &pending.continuation
+    let ResolutionContinuation::ManaAbilityDamageReplacement { resolution } = &pending.continuation
     else {
         panic!("damage choice retains the interrupted resolution payment")
     };
+    let parent = resolution
+        .suspended_payment
+        .as_ref()
+        .expect("damage choice retains the interrupted resolution payment");
     assert!(parent.continuation.mana_payment().is_some());
     assert_eq!(parent.deciding_player, original_ward_payer);
     assert_eq!(
@@ -724,10 +721,10 @@ fn issue_494_nested_talisman_ward_controller_departure_keeps_the_live_payers_cho
     assert_eq!(pending.deciding_player, 0);
     assert!(matches!(
         &pending.continuation,
-        ResolutionContinuation::ManaAbilityDamageReplacement {
-            resume_resolution: Some(parent),
-            ..
-        } if parent.deciding_player == 0 && parent.continuation.mana_payment().is_some()
+        ResolutionContinuation::ManaAbilityDamageReplacement { resolution }
+            if resolution.suspended_payment.as_ref().is_some_and(|parent| {
+                parent.deciding_player == 0 && parent.continuation.mana_payment().is_some()
+            })
     ));
     let choice_id = pending.presentation.candidates[0];
     engine

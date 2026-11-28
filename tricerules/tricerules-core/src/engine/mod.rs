@@ -2988,42 +2988,33 @@ impl GameEngine {
             }
             return self.apply_opening_command(player, cmd);
         }
-        let mana_ability_damage_choice_is_pending = self
+        let mana_ability_choice_player = self
             .state
             .pending_resolution
             .as_ref()
-            .is_some_and(|choice| {
-                matches!(
-                    &choice.continuation,
-                    ResolutionContinuation::ManaAbilityDamageReplacement { .. }
-                )
-            });
-        if mana_ability_damage_choice_is_pending
+            .and_then(|choice| choice.continuation.mana_ability_choice_player());
+        let mana_ability_choice_is_pending = mana_ability_choice_player.is_some();
+        if mana_ability_choice_is_pending
             && !matches!(
                 cmd.cmd.as_ref(),
                 Some(Cmd::SubmitResolutionChoice(_) | Cmd::Concede(_))
             )
         {
             return Err(EngineError::Illegal(
-                "resolve mana-ability damage before continuing payment",
+                "finish the mana ability's choice before continuing payment",
             ));
         }
         if let Some(pending) = self.state.pending_spell_cast.as_ref() {
-            let stackless_mana_damage_choice = matches!(
-                cmd.cmd.as_ref(),
-                Some(Cmd::SubmitResolutionChoice(_))
-            ) && self
-                .state
-                .pending_resolution
-                .as_ref()
-                .is_some_and(|choice| {
-                    choice.deciding_player == player
-                        && matches!(
-                            &choice.continuation,
-                            ResolutionContinuation::ManaAbilityDamageReplacement { actor, .. }
-                                if *actor == player
-                        )
-                });
+            let stackless_mana_ability_choice =
+                matches!(cmd.cmd.as_ref(), Some(Cmd::SubmitResolutionChoice(_)))
+                    && self
+                        .state
+                        .pending_resolution
+                        .as_ref()
+                        .is_some_and(|choice| {
+                            choice.deciding_player == player
+                                && mana_ability_choice_player == Some(player)
+                        });
             let allowed = pending.caster == player
                 && (matches!(
                     cmd.cmd.as_ref(),
@@ -3033,7 +3024,7 @@ impl GameEngine {
                             | Cmd::CommitSpellCast(_)
                             | Cmd::CancelSpellCast(_)
                     )
-                ) || stackless_mana_damage_choice);
+                ) || stackless_mana_ability_choice);
             if !allowed {
                 return Err(EngineError::Illegal(
                     "only the caster's mana payment actions are legal while casting",
@@ -3073,7 +3064,7 @@ impl GameEngine {
                     Some(Cmd::ActivateAbility(_) | Cmd::UndoManaAbility(_))
                 ) && self.paying_ability_activation(player)
                 || matches!(cmd.cmd.as_ref(), Some(Cmd::SubmitResolutionChoice(_)))
-                    && mana_ability_damage_choice_is_pending
+                    && mana_ability_choice_is_pending
                     && self
                         .state
                         .pending_resolution

@@ -2740,3 +2740,5 @@ mod issue_536_heroes_for_hire;
 
 #[path = "scenario/issue_538_depletion_lands.rs"]
 mod issue_538_depletion_lands;
+#[path = "scenario/issue_539_mana_rider_replacement_order.rs"]
+mod issue_539_mana_rider_replacement_order;

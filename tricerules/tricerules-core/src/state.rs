@@ -2522,12 +2522,7 @@ pub enum ResolutionContinuation {
     /// CR 605.3b / 405.6c: a mana ability's immediate damage paused for a replacement choice.
     /// This carries event-time source identity without manufacturing a stack item to resume.
     ManaAbilityDamageReplacement {
-        actor: PlayerId,
-        source_object_id: ObjectId,
-        source_zone_change_generation: u64,
-        /// A mana-payment decision interrupted by this replacement choice, restored only after
-        /// the damage event and all applicable replacement choices finish.
-        resume_resolution: Option<Box<PendingResolution>>,
+        resolution: Box<ManaAbilityResolution>,
     },
     AuraReturn {
         stack: Option<ParkedStackResolution>,
@@ -2590,6 +2585,28 @@ pub enum SpecialCastCompletion {
         found: Option<TriggerObjectRef>,
         cohort: Vec<TriggerObjectRef>,
     },
+}
+
+/// CR 605.3b: the unstacked remainder of one mana ability whose mana has already been added.
+/// A mana ability has no stack object to park, so whichever rider needs a player choice (a
+/// CR 616.1 replacement order, a damage prevention choice) carries this value in its own
+/// continuation; resuming runs the remaining riders in printed order and only then restores the
+/// mana-payment decision the choice interrupted.
+#[derive(serde::Serialize, Debug, Clone)]
+pub struct ManaAbilityResolution {
+    pub player: PlayerId,
+    pub source_object_id: ObjectId,
+    /// CR 400.7: the source incarnation that paid the costs. A rider never follows the source
+    /// to a new object.
+    pub source_zone_change_generation: u64,
+    pub source_label: String,
+    /// Riders not yet resolved, in printed order.
+    pub remaining_riders: Vec<tricerules_card_model::primitives::ManaAbilityRider>,
+    /// Painland damage captured before costs were paid, consumed by its `DamageController` rider.
+    pub(crate) damage: Option<crate::engine::damage::DamageSpec>,
+    /// A mana-payment decision interrupted by a rider choice, restored only after every rider
+    /// and every applicable replacement choice finishes.
+    pub suspended_payment: Option<Box<PendingResolution>>,
 }
 
 /// Typed work that remains after a shared counter-placement replacement batch finishes.
@@ -2691,6 +2708,8 @@ pub(crate) enum CounterPlacementCompletion {
         damage_event_index: usize,
         continuation: crate::engine::damage::DamageBatchContinuation,
     },
+    /// A mana ability's counter rider paused for a CR 616.1 replacement-order choice.
+    ManaAbility(Box<ManaAbilityResolution>),
 }
 
 /// Resume owner for counter replacements that modify counters on one or more entering objects.
@@ -2895,6 +2914,32 @@ impl ResolutionContinuation {
             | Self::CombatDamageReplacement { .. }
             | Self::StateBasedActions { .. }
             | Self::PublicZoneSearchFixture { .. } => None,
+        }
+    }
+
+    /// The player whose unstacked mana ability (CR 605.3b) is paused for this choice. Until it is
+    /// answered, the ability has not finished, so no other payment action may interleave.
+    pub(crate) fn mana_ability_choice_player(&self) -> Option<PlayerId> {
+        use crate::engine::damage::DamageBatchContinuation;
+        match self {
+            Self::ManaAbilityDamageReplacement { resolution }
+            | Self::CounterReplacement {
+                completion: CounterPlacementCompletion::ManaAbility(resolution),
+                ..
+            }
+            | Self::CounterReplacement {
+                completion:
+                    CounterPlacementCompletion::DamageBatch {
+                        continuation: DamageBatchContinuation::ManaAbility(resolution),
+                        ..
+                    }
+                    | CounterPlacementCompletion::DamageReplacement {
+                        continuation: DamageBatchContinuation::ManaAbility(resolution),
+                        ..
+                    },
+                ..
+            } => Some(resolution.player),
+            _ => None,
         }
     }
 
