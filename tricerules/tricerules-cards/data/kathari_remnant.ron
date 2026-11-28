@@ -1,0 +1,27 @@
+// Oracle bbf07946-33d0-48fe-85af-022e9b0b834c; source/rulings checked 2026-11-28 against the
+// pinned Scryfall bulk SHA-256 1cee09ee1ac70977c46171f4abf5cdfe170ab43bc32232af9138404e27524ce6.
+// CR 702.9a-b (flying), 602.1/602.2 (activation and printed cost), 701.19a-b (regeneration
+// shield), 702.85a-c (cascade) and 514.2 (cleanup expiry).
+// The pinned 2021-06-18 cascade rulings fix the exile-through-first-cheaper-nonland procedure,
+// that {X} is 0 when cast without paying, and that the exiled cards are face up. Cascade is a
+// spell ability even on a creature (CR 702.85a), so it lives in `spell_keywords` exactly as
+// Shardless Agent and Enlisted Wurm ship it.
+(
+  id: "kathari_remnant",
+  name: "Kathari Remnant",
+  face_id: "kathari_remnant",
+  mana_cost: "{2}{U}{B}",
+  types: ["Creature", "Bird", "Skeleton"],
+  power: 0,
+  toughness: 1,
+  keywords: [Flying],
+  spell_keywords: [Cascade],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Mana("{B}")],
+      effect: [Regenerate(subject: Source)],
+    ),
+  ],
+)

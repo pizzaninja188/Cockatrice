@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "b9d388ca-1a63-4a11-bf33-9f7b87305a52",
+  "spans": [
+    {
+      "face_id": "skeletal_changeling",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/characteristic_defining_abilities/0"
+      ]
+    },
+    {
+      "face_id": "skeletal_changeling",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "CharacteristicDefiningAbility::Changeling",
+      "typed_path": "/faces/0/characteristic_defining_abilities/0"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Regenerate",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Source",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/Regenerate/subject"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q91_batch_a::q91_two_mana_regenerate_creatures_consume_the_shield_and_keep_their_keyword",
+      "covers": "each card keeps its printed static line and survives lethal damage by consuming the shield"
+    },
+    {
+      "test": "scenario q91_batch_a::q91_two_mana_regenerate_refuses_a_pool_without_the_generic",
+      "covers": "a pool lacking the generic component is refused with no state change"
+    },
+    {
+      "test": "scenario q91_batch_a::q91_two_mana_regenerate_canary_hardest_keeps_changeling",
+      "covers": "changeling is every creature type before and after the shield"
+    },
+    {
+      "test": "mechanic_registry::q91_batch_a::q91_two_mana_regenerate_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of skeletal_changeling"
+    },
+    {
+      "test": "mechanic_registry::q91_batch_a::q91_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for skeletal_changeling"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

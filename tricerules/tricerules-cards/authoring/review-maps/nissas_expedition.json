@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "653010bc-45af-427e-a294-e0cc28d31821",
+  "spans": [
+    {
+      "face_id": "nissas_expedition",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "nissas_expedition",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SearchDestination::Battlefield",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q91_batch_a::q91_basic_land_search_canary_hardest_finds_zero",
+      "covers": "actual Nissa's Expedition accepts a zero-card selection with basics available and still shuffles once"
+    },
+    {
+      "test": "scenario q91_batch_a::q91_basic_land_search_cards_apply_their_printed_cost_and_keep_their_keywords",
+      "covers": "each card consumes its printed cost and keeps its printed keyword"
+    },
+    {
+      "test": "scenario q91_batch_a::q91_basic_land_search_cards_have_only_the_printed_surfaces",
+      "covers": "each card has only the printed ability surfaces"
+    },
+    {
+      "test": "mechanic_registry::q91_batch_a::q91_basic_land_search_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of nissas_expedition"
+    },
+    {
+      "test": "mechanic_registry::q91_batch_a::q91_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for nissas_expedition"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

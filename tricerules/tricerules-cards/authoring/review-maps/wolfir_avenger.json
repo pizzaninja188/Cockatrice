@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "83deda94-66e8-4655-9cd5-6d97d809946d",
+  "spans": [
+    {
+      "face_id": "wolfir_avenger",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "wolfir_avenger",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Regenerate",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Source",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/Regenerate/subject"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q91_batch_a::q91_two_mana_regenerate_creatures_consume_the_shield_and_keep_their_keyword",
+      "covers": "actual wolfir_avenger applies its printed cost and keeps its printed characteristics in the family loop"
+    },
+    {
+      "test": "scenario q91_batch_a::q91_two_mana_regenerate_creatures_consume_the_shield_and_keep_their_keyword",
+      "covers": "each card keeps its printed static line and survives lethal damage by consuming the shield"
+    },
+    {
+      "test": "scenario q91_batch_a::q91_two_mana_regenerate_refuses_a_pool_without_the_generic",
+      "covers": "a pool lacking the generic component is refused with no state change"
+    },
+    {
+      "test": "mechanic_registry::q91_batch_a::q91_two_mana_regenerate_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of wolfir_avenger"
+    },
+    {
+      "test": "mechanic_registry::q91_batch_a::q91_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for wolfir_avenger"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,76 @@
+{
+  "format_version": 1,
+  "oracle_id": "e9a3a466-df78-49a0-add3-975b94c5cd09",
+  "spans": [
+    {
+      "face_id": "mire_boa",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/evasions/0"
+      ]
+    },
+    {
+      "face_id": "mire_boa",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Evasion::Landwalk",
+      "typed_path": "/faces/0/evasions/0"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Regenerate",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Source",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/Regenerate/subject"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q91_batch_a::q91_one_mana_regenerate_canary_applies_the_printed_shield",
+      "covers": "actual card pays its exact one-mana regeneration cost and places a shield"
+    },
+    {
+      "test": "scenario q91_batch_a::q91_one_mana_regenerate_creatures_consume_the_shield_and_keep_their_keyword",
+      "covers": "each card keeps its printed static line and survives lethal damage by consuming the shield"
+    },
+    {
+      "test": "scenario q91_batch_a::q91_one_mana_regenerate_requires_the_printed_colored_symbol",
+      "covers": "a wrong-color pool is refused with no state change"
+    },
+    {
+      "test": "scenario q91_batch_a::q91_one_mana_regenerate_shield_expires_at_cleanup",
+      "covers": "an unused shield does not survive the turn"
+    },
+    {
+      "test": "scenario q91_batch_a::q91_mire_boa_has_swampwalk",
+      "covers": "swampwalk refuses the block while the defender controls a Swamp, with the evasion discriminant and a no-Swamp positive control"
+    },
+    {
+      "test": "scenario q91_batch_a::q91_mire_boa_can_be_blocked_without_a_swamp",
+      "covers": "without a Swamp the same block is legal"
+    },
+    {
+      "test": "mechanic_registry::q91_batch_a::q91_one_mana_regenerate_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of mire_boa"
+    },
+    {
+      "test": "mechanic_registry::q91_batch_a::q91_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for mire_boa"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

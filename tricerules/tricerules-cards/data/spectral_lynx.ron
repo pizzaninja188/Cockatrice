@@ -1,0 +1,25 @@
+// Oracle b5187725-9a39-433c-ae09-eccd6111574c; source/rulings checked 2026-11-28 against the
+// pinned Scryfall bulk SHA-256 1cee09ee1ac70977c46171f4abf5cdfe170ab43bc32232af9138404e27524ce6.
+// CR 702.16b-f (protection from green: no targeting, damage, attachment or blocking by green
+// sources), 602.1/602.2 (activation and printed cost), 701.19a-b (regeneration shield) and
+// 514.2 (cleanup expiry).
+// Pinned 2022-12-08 rulings: the ability may be activated with nothing to save; the shield
+// replaces destruction or lethal damage once that turn.
+(
+  id: "spectral_lynx",
+  name: "Spectral Lynx",
+  face_id: "spectral_lynx",
+  mana_cost: "{1}{W}",
+  types: ["Creature", "Cat", "Spirit"],
+  power: 2,
+  toughness: 1,
+  protections: [Color(Green)],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Mana("{B}")],
+      effect: [Regenerate(subject: Source)],
+    ),
+  ],
+)

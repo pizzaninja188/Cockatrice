@@ -1,0 +1,72 @@
+{
+  "format_version": 1,
+  "oracle_id": "b5187725-9a39-433c-ae09-eccd6111574c",
+  "spans": [
+    {
+      "face_id": "spectral_lynx",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/protections"
+      ]
+    },
+    {
+      "face_id": "spectral_lynx",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "ProtectionQuality::Color",
+      "typed_path": "/faces/0/protections"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Regenerate",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Source",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/Regenerate/subject"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q91_batch_a::q91_one_mana_regenerate_creatures_consume_the_shield_and_keep_their_keyword",
+      "covers": "actual spectral_lynx applies its printed cost and keeps its printed characteristics in the family loop"
+    },
+    {
+      "test": "scenario q91_batch_a::q91_one_mana_regenerate_creatures_consume_the_shield_and_keep_their_keyword",
+      "covers": "each card keeps its printed static line and survives lethal damage by consuming the shield"
+    },
+    {
+      "test": "scenario q91_batch_a::q91_one_mana_regenerate_requires_the_printed_colored_symbol",
+      "covers": "a wrong-color pool is refused with no state change"
+    },
+    {
+      "test": "scenario q91_batch_a::q91_one_mana_regenerate_shield_expires_at_cleanup",
+      "covers": "an unused shield does not survive the turn"
+    },
+    {
+      "test": "scenario q91_batch_a::q91_spectral_lynx_has_protection_from_green",
+      "covers": "protection from green refuses a green spell targeting the Lynx"
+    },
+    {
+      "test": "mechanic_registry::q91_batch_a::q91_one_mana_regenerate_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of spectral_lynx"
+    },
+    {
+      "test": "mechanic_registry::q91_batch_a::q91_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for spectral_lynx"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

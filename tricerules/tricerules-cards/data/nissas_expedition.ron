@@ -1,0 +1,22 @@
+// Oracle 653010bc-45af-427e-a294-e0cc28d31821; source/rulings checked 2026-11-28 against the
+// pinned Scryfall bulk SHA-256 1cee09ee1ac70977c46171f4abf5cdfe170ab43bc32232af9138404e27524ce6.
+// CR 702.51a-c (convoke taps creatures to pay generic or a matching color), 601.2h (payment
+// order), 701.23a-b (up to two basic lands), 701.24a (shuffle) and 614.1d/614.12 (the found lands enter
+// tapped).
+// Pinned 2024-01-12 rulings: convoke applies after the total cost is computed, doesn't change
+// the mana cost or mana value, and may tap a creature not controlled since the turn began.
+// Convoke is the shipped `keywords: [Convoke]` spell keyword (Appeal to Eirdu, Arboretum
+// Elemental); the search is the reviewed Circuitous Route shape.
+(
+  id: "nissas_expedition",
+  name: "Nissa's Expedition",
+  face_id: "nissas_expedition",
+  mana_cost: "{4}{G}",
+  types: ["Sorcery"],
+  keywords: [Convoke],
+  spell_effect: [SearchLibrary(
+    count: 2,
+    filter: Some((card_type: Some(BasicLand))),
+    destination: Battlefield(tapped: true),
+  )],
+)

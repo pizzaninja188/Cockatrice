@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "a0abd957-01a0-4aa9-8fc8-0e6840d21606",
+  "spans": [
+    {
+      "face_id": "explosive_vegetation",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "ZoneCardFilter.card_type",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SearchDestination::Battlefield",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q91_batch_a::q91_basic_land_search_canary_finds_two_tapped_lands_and_shuffles",
+      "covers": "actual card finds up to two basic lands into the battlefield tapped"
+    },
+    {
+      "test": "scenario q91_batch_a::q91_basic_land_search_cards_apply_their_printed_cost_and_keep_their_keywords",
+      "covers": "each card consumes its printed cost and keeps its printed keyword"
+    },
+    {
+      "test": "scenario q91_batch_a::q91_basic_land_search_cards_have_only_the_printed_surfaces",
+      "covers": "each card has only the printed ability surfaces"
+    },
+    {
+      "test": "mechanic_registry::q91_batch_a::q91_basic_land_search_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of explosive_vegetation"
+    },
+    {
+      "test": "mechanic_registry::q91_batch_a::q91_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for explosive_vegetation"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

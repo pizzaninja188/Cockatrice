@@ -1,0 +1,24 @@
+// Oracle 83deda94-66e8-4655-9cd5-6d97d809946d; source/rulings checked 2026-11-28 against the
+// pinned Scryfall bulk SHA-256 1cee09ee1ac70977c46171f4abf5cdfe170ab43bc32232af9138404e27524ce6.
+// CR 702.8a (flash: cast any time an instant could be cast), 602.1/602.2 (activation and
+// printed cost), 701.19a-b (regeneration shield) and 514.2 (cleanup expiry). No card-specific
+// ruling. Flash on a creature is the same static keyword the shipped Dueling Rapier and
+// Ambush Viper carry.
+(
+  id: "wolfir_avenger",
+  name: "Wolfir Avenger",
+  face_id: "wolfir_avenger",
+  mana_cost: "{1}{G}{G}",
+  types: ["Creature", "Wolf", "Warrior"],
+  power: 3,
+  toughness: 3,
+  keywords: [Flash],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Mana("{1}{G}")],
+      effect: [Regenerate(subject: Source)],
+    ),
+  ],
+)

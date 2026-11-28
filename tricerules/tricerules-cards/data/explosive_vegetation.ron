@@ -1,0 +1,19 @@
+// Oracle a0abd957-01a0-4aa9-8fc8-0e6840d21606; source/rulings checked 2026-11-28 against the
+// pinned Scryfall bulk SHA-256 1cee09ee1ac70977c46171f4abf5cdfe170ab43bc32232af9138404e27524ce6.
+// CR 701.23a-b (a search with a stated quality may find zero, one or two of them), 701.24a
+// (shuffle afterwards) and 614.1d/614.12 (the found lands enter tapped). No card-specific ruling.
+// Copy of the reviewed Circuitous Route search with only the BasicLand filter: it is the same
+// direct `SearchLibrary(count: 2, destination: Battlefield(tapped: true))` shape, and the
+// engine derives `min: 0` for any filtered search, which is the printed "up to two".
+(
+  id: "explosive_vegetation",
+  name: "Explosive Vegetation",
+  face_id: "explosive_vegetation",
+  mana_cost: "{3}{G}",
+  types: ["Sorcery"],
+  spell_effect: [SearchLibrary(
+    count: 2,
+    filter: Some((card_type: Some(BasicLand))),
+    destination: Battlefield(tapped: true),
+  )],
+)

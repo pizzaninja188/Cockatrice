@@ -1,0 +1,84 @@
+{
+  "format_version": 1,
+  "oracle_id": "bbf07946-33d0-48fe-85af-022e9b0b834c",
+  "spans": [
+    {
+      "face_id": "kathari_remnant",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "kathari_remnant",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "kathari_remnant",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/spell_keywords"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "SpellKeyword::Cascade",
+      "typed_path": "/faces/0/spell_keywords"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Regenerate",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Source",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/Regenerate/subject"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q91_batch_a::q91_kathari_remnant_canary_keeps_flying_and_the_shield",
+      "covers": "actual Kathari Remnant keeps its printed flying through the regeneration shield, which replaces lethal damage"
+    },
+    {
+      "test": "scenario q91_batch_a::q91_one_mana_regenerate_creatures_consume_the_shield_and_keep_their_keyword",
+      "covers": "each card keeps its printed static line and survives lethal damage by consuming the shield"
+    },
+    {
+      "test": "scenario q91_batch_a::q91_one_mana_regenerate_requires_the_printed_colored_symbol",
+      "covers": "a wrong-color pool is refused with no state change"
+    },
+    {
+      "test": "scenario q91_batch_a::q91_one_mana_regenerate_shield_expires_at_cleanup",
+      "covers": "an unused shield does not survive the turn"
+    },
+    {
+      "test": "scenario q91_batch_a::q91_kathari_remnant_cascades_into_a_cheaper_spell",
+      "covers": "the printed cascade spell ability exiles through the first cheaper nonland"
+    },
+    {
+      "test": "mechanic_registry::q91_batch_a::q91_one_mana_regenerate_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of kathari_remnant"
+    },
+    {
+      "test": "mechanic_registry::q91_batch_a::q91_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for kathari_remnant"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

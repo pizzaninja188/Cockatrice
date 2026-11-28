@@ -1,0 +1,28 @@
+// Oracle db4907f3-4071-47c4-9329-96b4813435be; source/rulings checked 2026-11-28 against the
+// pinned Scryfall bulk SHA-256 1cee09ee1ac70977c46171f4abf5cdfe170ab43bc32232af9138404e27524ce6.
+// CR 701.23a-b (up to two, so zero or one is legal), 701.24a (shuffle), 614.1d/614.12 (the found lands
+// enter tapped) and 702.29a (cycling is a hand-zone activated ability that discards this card as
+// a cost). No card-specific ruling.
+// Cycling reuses the reviewed Barren Moor / Censor hand-zone ability byte for byte; the search
+// is the reviewed Circuitous Route shape.
+(
+  id: "migration_path",
+  name: "Migration Path",
+  face_id: "migration_path",
+  mana_cost: "{3}{G}",
+  types: ["Sorcery"],
+  spell_effect: [SearchLibrary(
+    count: 2,
+    filter: Some((card_type: Some(BasicLand))),
+    destination: Battlefield(tapped: true),
+  )],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      source_zone: Hand,
+      costs: [Mana("{2}"), DiscardSelf],
+      effect: [Draw(count: 1)],
+    ),
+  ],
+)

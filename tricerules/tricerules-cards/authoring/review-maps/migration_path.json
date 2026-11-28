@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "db4907f3-4071-47c4-9329-96b4813435be",
+  "spans": [
+    {
+      "face_id": "migration_path",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "migration_path",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "AbilityCost::DiscardSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q91_batch_a::q91_basic_land_search_cards_apply_their_printed_cost_and_keep_their_keywords",
+      "covers": "actual migration_path applies its printed cost and keeps its printed characteristics in the family loop"
+    },
+    {
+      "test": "scenario q91_batch_a::q91_basic_land_search_cards_apply_their_printed_cost_and_keep_their_keywords",
+      "covers": "each card consumes its printed cost and keeps its printed keyword"
+    },
+    {
+      "test": "scenario q91_batch_a::q91_basic_land_search_cards_have_only_the_printed_surfaces",
+      "covers": "each card has only the printed ability surfaces"
+    },
+    {
+      "test": "scenario q91_batch_a::q91_migration_path_cycles_from_hand_for_a_card",
+      "covers": "the printed cycling hand ability discards and draws one"
+    },
+    {
+      "test": "mechanic_registry::q91_batch_a::q91_basic_land_search_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of migration_path"
+    },
+    {
+      "test": "mechanic_registry::q91_batch_a::q91_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for migration_path"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
